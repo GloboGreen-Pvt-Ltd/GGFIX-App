@@ -1,6 +1,12 @@
 // Use your computer's IP when running on a physical device so the app can reach your backend.
 // Run: set EXPO_PUBLIC_API_HOST=192.168.1.5  (then npx expo start)
 // Or create .env with EXPO_PUBLIC_API_HOST=192.168.1.5
+//
+// This binary hosts THREE shells — customer, shop (vendored under shop/) and
+// employee (under employee/) — chosen on the sign-in screen. The native
+// permissions and plugins below are therefore the UNION of what the three
+// products need; a plugin only matters for the shell that uses it, but prebuild
+// generates one manifest for all of them.
 const host = process.env.EXPO_PUBLIC_API_HOST || 'localhost';
 const masterPort = process.env.EXPO_PUBLIC_MASTER_PORT || '8091';
 const masterBase =
@@ -8,7 +14,7 @@ const masterBase =
 
 export default {
   expo: {
-    name: 'GGFIX - Customer',
+    name: 'GGFIX',
     slug: 'ggfixcustomer',
     // EAS account/organization that owns the project (from your Expo dashboard).
     // Verify this matches expo.dev → your account. Change if different.
@@ -26,6 +32,12 @@ export default {
       infoPlist: {
         NSLocationWhenInUseUsageDescription:
           'We use your location to show pickup-enabled repair shops nearby and to set your default delivery address.',
+        // iOS has no shared Downloads folder, so a saved statement (shop shell →
+        // Cash Book) lands in the app's own Documents directory. These two keys
+        // are what make that directory show up in the Files app — without them
+        // the file is saved somewhere the owner cannot reach.
+        UIFileSharingEnabled: true,
+        LSSupportsOpeningDocumentsInPlace: true,
         NSAppTransportSecurity: {
           NSAllowsArbitraryLoads: true,
         },
@@ -34,10 +46,30 @@ export default {
     android: {
       package: 'com.ggfix.customerapp',
       adaptiveIcon: { foregroundImage: './assets/logo.png', backgroundColor: '#202124' },
-      permissions: ['ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION'],
+      // Union across the three shells. The expo-camera / expo-contacts plugins
+      // below inject CAMERA and READ_CONTACTS too, but they are listed here so
+      // the manifest's permission set is readable in one place.
+      //   *_LOCATION      — nearby shops (customer) + attendance geofence (employee)
+      //   READ_CONTACTS   — shop shell, Cash Book → Add Customer → "from Contacts"
+      //   POST_NOTIFICATIONS — "Download complete" receipt in the shade (Android 13+)
+      //   CAMERA          — employee shell, ticket QR scanning
+      permissions: [
+        'ACCESS_FINE_LOCATION',
+        'ACCESS_COARSE_LOCATION',
+        'READ_CONTACTS',
+        'POST_NOTIFICATIONS',
+        'CAMERA',
+      ],
     },
     plugins: [
+      // Keychain/Keystore-backed storage for the auth token (see src/auth/session.js).
+      'expo-secure-store',
       ['expo-local-authentication', { faceIDPermission: 'Use Face ID to unlock GGFIX.' }],
+      // Live camera for scanning ticket QR slips (employee shell, Home header).
+      ['expo-camera', { cameraPermission: 'We use your camera to scan ticket QR slips and open the job.' }],
+      // Android 11+ package visibility for the WhatsApp / SMS receipt share in
+      // the shop shell. See plugins/withAndroidQueries.js.
+      './plugins/withAndroidQueries',
       // Cleartext HTTP for the plain-http backend. The bare android.usesCleartextTraffic
       // key is ignored by Expo prebuild — it must be set via expo-build-properties.
       [
@@ -58,6 +90,13 @@ export default {
         {
           locationAlwaysAndWhenInUsePermission:
             'We use your location to show pickup-enabled repair shops nearby.',
+        },
+      ],
+      [
+        'expo-contacts',
+        {
+          contactsPermission:
+            'We use your contacts so you can pick a customer or supplier from your phone book instead of typing the number.',
         },
       ],
     ],

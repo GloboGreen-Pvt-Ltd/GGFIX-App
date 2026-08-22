@@ -33,3 +33,9 @@ yarn-error.*
 .vscode/
 .idea/
 dist-verifyV/
+
+# gradle caches from the nested native module (modules/ggfix-downloads)
+.gradle/
+
+# editor/backup junk carried in by the office->mirror sync
+eas.json.bak
