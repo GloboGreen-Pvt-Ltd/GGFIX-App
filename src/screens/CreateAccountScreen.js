@@ -65,15 +65,17 @@ export default function CreateAccountScreen({ navigation, onLogin }) {
       </View>
 
       <Text style={s.fieldLabel}>Mobile number</Text>
+      {/* No 🇮🇳 +91 chip: the backend stores and matches a bare 10-digit mobile,
+          so the prefix was decoration — and the sign-in screen this links back
+          to doesn't show one either. */}
       <View style={s.fieldRow}>
-        <View style={s.ccChip}><Text style={s.ccText}>🇮🇳 +91</Text></View>
         <Input
           placeholder="10-digit mobile"
           value={mobile}
           onChangeText={(v) => setMobile(v.replace(/[^0-9]/g, '').slice(0, 10))}
           keyboardType="phone-pad"
           maxLength={10}
-          className="flex-1 bg-transparent border-0 ml-2"
+          className="flex-1 bg-transparent border-0"
           style={s.fieldInput}
         />
       </View>

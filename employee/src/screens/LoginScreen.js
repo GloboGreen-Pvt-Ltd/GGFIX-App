@@ -37,7 +37,6 @@ import { rf, rlh, rs } from '../utils/responsive';
 
 const OTP_LENGTH = 6;
 const RESEND_SECONDS = 30;
-const DIAL_CODE = '+91';
 const MOBILE_DIGITS = 10;
 
 const NAVY = '#00008B';
@@ -206,10 +205,6 @@ function MobileStep({ mobile, setMobile, loading, error, onSubmit }) {
       <Text style={styles.sub}>Welcome to our app !</Text>
 
       <View style={styles.inputRow}>
-        <View style={styles.dialCard}>
-          <IndiaFlag />
-          <Text style={styles.dialText}>{DIAL_CODE}</Text>
-        </View>
         <View style={styles.numberCard}>
           <TextInput
             value={mobile}
@@ -252,7 +247,7 @@ function OtpStep({
       </Pressable>
 
       <Text style={styles.h1Center}>Verify Phone</Text>
-      <Text style={styles.subCenter}>Code is sent to {DIAL_CODE} {mobile}</Text>
+      <Text style={styles.subCenter}>Code is sent to {mobile}</Text>
 
       {/* The visible boxes are display-only; one transparent input sits on top
           of the whole row so backspace, paste and SMS autofill all behave like
@@ -327,22 +322,6 @@ function PrimaryButton({ label, loading, onPress }) {
   );
 }
 
-/**
- * Drawn rather than the 🇮🇳 emoji: regional-indicator flags fall back to two
- * boxed letters on some Android builds, which reads as a rendering bug.
- */
-function IndiaFlag() {
-  return (
-    <View style={styles.flag}>
-      <View style={[styles.flagStripe, { backgroundColor: '#FF9933' }]} />
-      <View style={[styles.flagStripe, { backgroundColor: '#FFFFFF' }]}>
-        <View style={styles.chakra} />
-      </View>
-      <View style={[styles.flagStripe, { backgroundColor: '#138808' }]} />
-    </View>
-  );
-}
-
 function ErrorBox({ msg }) {
   if (!msg) return null;
   return (
@@ -364,23 +343,6 @@ const styles = StyleSheet.create({
   subCenter: { fontSize: rf(13.5), lineHeight: rlh(20), color: MUTED, textAlign: 'center', marginTop: rs(8) },
 
   inputRow: { flexDirection: 'row', alignItems: 'center', marginTop: rs(28) },
-  dialCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: rs(54),
-    paddingHorizontal: rs(12),
-    borderRadius: rs(12),
-    borderWidth: 1,
-    borderColor: BORDER,
-    backgroundColor: '#FFFFFF',
-    marginRight: rs(10),
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
-  },
-  dialText: { fontSize: rf(15), fontWeight: '700', color: TEXT, marginLeft: rs(7) },
   numberCard: {
     flex: 1,
     height: rs(54),
@@ -397,10 +359,6 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   numberInput: { fontSize: rf(15.5), fontWeight: '600', color: TEXT, padding: 0 },
-
-  flag: { height: rs(16), width: rs(22), borderRadius: rs(3), overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: BORDER },
-  flagStripe: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  chakra: { height: rs(4), width: rs(4), borderRadius: rs(2), backgroundColor: '#000080' },
 
   backBtn: { alignSelf: 'flex-start', height: rs(36), width: rs(36), alignItems: 'center', justifyContent: 'center', marginBottom: rs(8), marginLeft: -rs(8) },
 

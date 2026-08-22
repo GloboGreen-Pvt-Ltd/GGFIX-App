@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { AtSign, ChevronRight, X } from 'lucide-react-native';
+import { AtSign, ChevronRight, Smartphone, X } from 'lucide-react-native';
 import { requestOtp } from '../api/auth';
 import { Button, Input } from '../components/rnr';
 import { AuthShell, ErrorBox, authStyles as s, MUTED } from './authUi';
@@ -47,8 +47,10 @@ export default function ForgotPasswordScreen({ navigation, route }) {
 
       <Text style={s.fieldLabel}>Email or mobile number</Text>
       <View style={s.fieldRow}>
+        {/* A phone identifier gets a handset glyph, not a 🇮🇳 +91 chip: the
+            backend matches a bare 10-digit mobile, so the prefix was decoration. */}
         {isPhone ? (
-          <View style={s.ccChip}><Text style={s.ccText}>🇮🇳 +91</Text></View>
+          <Smartphone size={18} color={MUTED} />
         ) : (
           <AtSign size={18} color={MUTED} />
         )}
