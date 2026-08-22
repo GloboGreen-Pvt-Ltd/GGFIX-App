@@ -1,16 +1,14 @@
 import './global.css';
-import React, { useEffect } from 'react';
+import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { Provider } from 'react-redux';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { GluestackUIProvider } from '@gluestack-ui/themed';
 import { config } from '@gluestack-ui/config';
 import { store } from './src/store';
 import RootNavigator from './src/navigation/RootNavigator';
 import colors from './src/theme/colors';
-import { attachDownloadNotifications } from './shop/src/lib/downloads';
 
 const navTheme = {
   ...DefaultTheme,
@@ -27,29 +25,15 @@ const navTheme = {
 };
 
 export default function App() {
-  // Download receipts in the notification shade: the banner has to be allowed
-  // through while the app is foregrounded (which is when a download finishes),
-  // and a tap on one has to open the saved file. Both are app-wide concerns —
-  // and the handler must be installed before the shop shell can mount — so they
-  // are wired once here rather than by the screen that saves the file.
-  useEffect(() => attachDownloadNotifications(), []);
-
   return (
     <Provider store={store}>
       <GluestackUIProvider config={config}>
-        {/* KeyboardProvider must sit above the navigation tree so every screen's
-            KeyboardAwareScrollView can read the native keyboard (IME) insets.
-            On Expo SDK 54 this is what makes keyboard avoidance consistent under
-            Android edge-to-edge, where windowSoftInputMode="adjustResize" alone
-            is unreliable device-to-device. Required by the vendored shop shell. */}
-        <KeyboardProvider>
-          <SafeAreaProvider>
-            <StatusBar style="dark" />
-            <NavigationContainer theme={navTheme}>
-              <RootNavigator />
-            </NavigationContainer>
-          </SafeAreaProvider>
-        </KeyboardProvider>
+        <SafeAreaProvider>
+          <StatusBar style="dark" />
+          <NavigationContainer theme={navTheme}>
+            <RootNavigator />
+          </NavigationContainer>
+        </SafeAreaProvider>
       </GluestackUIProvider>
     </Provider>
   );

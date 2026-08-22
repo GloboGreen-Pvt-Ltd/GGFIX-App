@@ -3,11 +3,6 @@ module.exports = {
   content: [
     './App.{js,jsx,ts,tsx}',
     './src/**/*.{js,jsx,ts,tsx}',
-    // The shop and employee shells are vendored into this binary and style with
-    // className strings too — without these globs their classes are never
-    // generated and every one of their screens renders unstyled.
-    './shop/src/**/*.{js,jsx,ts,tsx}',
-    './employee/src/**/*.{js,jsx,ts,tsx}',
   ],
   presets: [require('nativewind/preset')],
   theme: {
@@ -50,61 +45,6 @@ module.exports = {
           800: '#9A3412',
           900: '#7C2D12',
         },
-        /* ── Tokens added for the vendored shells ────────────────────────────
-         * Tailwind resolves ONE config for the whole binary, so a token name
-         * means the same thing in every shell. These three are ADDITIVE — the
-         * customer app uses none of them, so adding them cannot restyle it.
-         *
-         * Two conflicts were resolved by renaming classes in the vendored trees
-         * instead of by overloading a token here:
-         *   • employee `primary` is navy, customer/shop `primary` is teal — the
-         *     employee tree now says `bg-navy` / `text-navy` / `border-navy`.
-         *   • employee `secondary` is royal blue — now `bg-royal` / `text-royal`.
-         *   • shop `secondary` resolved to the SAME hex as its `primary`
-         *     (#004C40), so the shop tree just says `primary` now. Deliberately
-         *     NOT defined here: the customer app has 21 `-secondary` classes
-         *     that are inert today, and defining the token would make them paint.
-         */
-        // Attention — shop shell's pending/warning amber. Takes DARK text
-        // (white on it is 2.1:1); kept separate from `accent` because this app's
-        // accent role already means something else.
-        attention: {
-          DEFAULT: '#F59E0B',
-          light: '#FCD34D',
-          dark: '#B45309',
-          soft: '#FEF3C7',
-          50: '#FFFBEB',
-          100: '#FEF3C7',
-          200: '#FDE68A',
-          300: '#FCD34D',
-          500: '#F59E0B',
-          600: '#D97706',
-          700: '#B45309',
-          800: '#92400E',
-        },
-        // Navy — the employee shell's brand colour (its own app's `primary`).
-        navy: {
-          DEFAULT: '#00008B',
-          light: '#1E1EAC',
-          dark: '#00006B',
-          50: '#EEF2FF',
-          100: '#E0E7FF',
-          200: '#C7D2FE',
-          300: '#A5B4FC',
-          400: '#818CF8',
-          500: '#6366F1',
-          600: '#4F46E5',
-          700: '#4338CA',
-          800: '#3730A3',
-          900: '#312E81',
-        },
-        // Royal — the employee shell's secondary blue.
-        royal: {
-          DEFAULT: '#2563EB',
-          light: '#3B82F6',
-          dark: '#1D4ED8',
-        },
-
         // Surfaces
         background: '#FFFFFF',
         card: '#FFFFFF',
