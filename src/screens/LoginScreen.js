@@ -233,7 +233,7 @@ function MobileStep({ mobile, setMobile, loading, error, onSubmit, onCreateAccou
       <Image source={require('../../assets/logo.png')} style={styles.logo} resizeMode="cover" />
 
       <Text style={styles.h1}>Login with{'\n'}mobile number</Text>
-      <Text style={styles.sub}>Welcome back to GGFix !</Text>
+      <Text style={styles.sub}>Welcome to GGFIX Customer App</Text>
 
       <View style={styles.numberCard}>
         <TextInput
@@ -255,9 +255,9 @@ function MobileStep({ mobile, setMobile, loading, error, onSubmit, onCreateAccou
       <PrimaryButton label="LOGIN" loading={loading} onPress={onSubmit} />
 
       <View style={styles.signupRow}>
-        <Text style={styles.signupMuted}>New to GGFix? </Text>
+        <Text style={styles.signupMuted}>New customer? </Text>
         <Pressable onPress={onCreateAccount} hitSlop={8}>
-          <Text style={styles.signupLink}>Create account</Text>
+          <Text style={styles.signupLink}>Create Your account</Text>
         </Pressable>
       </View>
 
@@ -311,13 +311,6 @@ function OtpStep({
           style={styles.otpHiddenInput}
         />
       </Pressable>
-
-      {__DEV__ ? (
-        // Dev-only hint. Advertising the default OTP in production hands
-        // attackers the second half of a credential (mobile + a guessable
-        // static OTP = account takeover).
-        <Text style={styles.devHint}>Default dev OTP: 123456.</Text>
-      ) : null}
 
       {note ? <Text style={styles.note}>{note}</Text> : null}
       <ErrorBox msg={error} />
@@ -425,7 +418,6 @@ const styles = StyleSheet.create({
   otpCharEmpty: { fontSize: rf(20), fontWeight: '700', color: tokens.borderStrong },
   otpHiddenInput: { ...StyleSheet.absoluteFillObject, opacity: 0, color: 'transparent' },
 
-  devHint: { fontSize: rf(11), color: MUTED, marginTop: rs(10), textAlign: 'center' },
   note: { fontSize: rf(12.5), color: GREEN, marginTop: rs(10), textAlign: 'center' },
 
   cta: { height: rs(56), borderRadius: rs(10), marginTop: rs(26), paddingVertical: 0 },

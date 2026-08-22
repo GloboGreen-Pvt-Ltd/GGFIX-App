@@ -18,9 +18,35 @@ export async function register(shopName, shopSlug, email, password, name) {
   return data;
 }
 
-export async function customerRegister({ fullName, email, mobile, password }) {
+/**
+ * Sign-up step 1: issue an OTP for a mobile that has NO account yet.
+ *
+ * Deliberately not `requestOtp` below — that one is the sign-in/reset issuer and
+ * 400s for an unknown number, which is the exact opposite of what sign-up needs.
+ * This endpoint is the mirror image: it 409s when the number IS already taken,
+ * which is how the Create Account screen detects a duplicate.
+ */
+export async function requestSignupOtp(mobile) {
+  return await authApi.post('/auth/customer/signup/otp/send', { body: { mobile } });
+}
+
+/**
+ * Sign-up step 2: check the code without spending it, so the user can be moved
+ * on to the name field while `customerRegister` still re-verifies (and consumes)
+ * the same code when the account is finally created.
+ */
+export async function verifySignupOtp(mobile, otp) {
+  return await authApi.post('/auth/customer/signup/otp/verify', { body: { mobile, otp } });
+}
+
+/**
+ * Sign-up step 3. Pass the verified `otp` — there is no password: customers sign
+ * in with a code, so the account is created without one (a later "forgot
+ * password" can set one if it is ever needed).
+ */
+export async function customerRegister({ fullName, email, mobile, otp, password }) {
   const data = await authApi.post('/auth/customer-register', {
-    body: { fullName, email, mobile, password },
+    body: { fullName, email, mobile, otp, password },
   });
   const session = {
     accessToken: data.accessToken,

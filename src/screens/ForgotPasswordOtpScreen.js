@@ -55,7 +55,7 @@ export default function ForgotPasswordOtpScreen({ navigation, route }) {
       <Text style={s.h1}>Verify code</Text>
       <Text style={s.sub}>
         {isMobile
-          ? `Enter the OTP for ${target || 'your mobile number'}. The default code is 123456.`
+          ? `Enter the OTP for ${target || 'your mobile number'}.`
           : `Enter the 6-digit code we sent to ${target || 'your email'}.`}
       </Text>
 
