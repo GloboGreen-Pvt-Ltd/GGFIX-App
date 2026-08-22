@@ -8,7 +8,7 @@ const masterBase =
 
 export default {
   expo: {
-    name: 'GGFIX - Customer',
+    name: 'GGFIX Customer',
     slug: 'ggfixcustomer',
     // EAS account/organization that owns the project (from your Expo dashboard).
     // Verify this matches expo.dev → your account. Change if different.
