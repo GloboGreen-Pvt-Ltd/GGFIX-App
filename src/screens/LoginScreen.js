@@ -1,0 +1,450 @@
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ArrowLeft, ArrowRight } from 'lucide-react-native';
+import { customerLogin, requestOtp } from '../api/auth';
+import { AUTH_BASE } from '../api/config';
+import { Button } from '../components/rnr';
+import { tokens } from '../theme/colors';
+import { rf, rlh, rs } from '../utils/responsive';
+
+/**
+ * Customer sign-in: mobile number → OTP. Both steps live in this one screen
+ * (rather than two navigator routes) because the customer auth stack mounts a
+ * single "Login" screen — keeping the step in local state avoids touching the
+ * navigator and keeps the entered number in scope for the resend.
+ *
+ * Wire-level flow, both endpoints already exist in auth-service:
+ *   1. POST /auth/customer/otp/send { mobile }  — customer_users. 400s with
+ *      "No account found…" when the mobile isn't registered, so it doubles as
+ *      the existence check before we show the code step.
+ *   2. POST /auth/customer-login    { mobile, otp }
+ *
+ * NOTE this is the CUSTOMER issuer, not the shop/employee one. `/auth/otp/send`
+ * reads the `users` table and would 400 for every customer; customers live in
+ * `customer_users` and have their own OTP column. Two issuers, two audiences.
+ *
+ * OTP is SIX digits. There is no SMS gateway yet, so a mobile identifier always
+ * resolves to the account's static customer_users.otp_code (123456 by default).
+ *
+ * No dial-code chip: the field takes a bare 10-digit Indian mobile, which is
+ * exactly what the backend stores and matches on, so a +91 prefix was decoration
+ * that cost a third of the input row's width.
+ */
+
+const OTP_LENGTH = 6;
+const RESEND_SECONDS = 30;
+const MOBILE_DIGITS = 10;
+
+const GREEN = tokens.primary;
+const TEXT = tokens.text;
+const MUTED = tokens.textMuted;
+const SUBTLE = tokens.textSubtle;
+const BORDER = tokens.border;
+const DANGER = tokens.danger;
+// Dark amber: the plain #F59E0B warning token is 2.4:1 on white, too weak for a
+// text link. The customer theme has no `attentionDark`, so it is literal here.
+const AMBER_DARK = '#B45309';
+
+// Sign-in sits on pure white rather than the app's #F6F7F9 wash: the brand logo
+// PNG has an opaque white background, so any tinted wash draws a visible square
+// around it.
+const PAGE_BG = '#FFFFFF';
+// Fixed, deliberately NOT rs(), so the logo's corner radius is identical on
+// every device instead of drifting with the width scale.
+const LOGO_RADIUS = 10;
+
+export default function LoginScreen({ onLogin, navigation }) {
+  const insets = useSafeAreaInsets();
+  const [step, setStep] = useState('MOBILE'); // MOBILE | OTP
+  const [mobile, setMobile] = useState('');
+  const [otp, setOtp] = useState('');
+  const [seconds, setSeconds] = useState(0);
+  const [note, setNote] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const otpRef = useRef(null);
+  // Guards the auto-submit that fires when the 6th digit lands, so a slow
+  // request can't be double-sent by another keystroke (or by paste + tap).
+  const verifyingRef = useRef(false);
+
+  // Resend countdown.
+  useEffect(() => {
+    if (seconds <= 0) return undefined;
+    const t = setTimeout(() => setSeconds((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [seconds]);
+
+  /**
+   * Only surface internal host/URL topology (AUTH_BASE, tried URL) in dev
+   * builds — leaking the backend IP/port map to end users aids attackers and
+   * adds nothing for them. Production shows a generic, non-revealing message.
+   */
+  const describeError = (e, fallback) => {
+    const msg = e?.message || fallback;
+    if (__DEV__) {
+      const isLocalhost = /localhost|127\.0\.0\.1/.test(String(msg));
+      if (!isLocalhost) return msg;
+      const urlMatch = String(msg).match(/URL:\s*(\S+)/i);
+      const triedUrl = urlMatch ? urlMatch[1] : '(unknown)';
+      return (
+        `Can't reach server (trying localhost). Tried: ${triedUrl}. ` +
+        `Current AUTH_BASE: ${AUTH_BASE}. Restart Expo with EXPO_PUBLIC_API_HOST=YOUR_PC_IP.`
+      );
+    }
+    const status = e?.status;
+    if (!status || status === 0) return "Can't reach the server. Check your connection and try again.";
+    return msg;
+  };
+
+  const sendOtp = async ({ resend = false } = {}) => {
+    setError(null);
+    setNote(null);
+    if (mobile.length !== MOBILE_DIGITS) {
+      setError(`Enter your ${MOBILE_DIGITS}-digit mobile number`);
+      return;
+    }
+    try {
+      setLoading(true);
+      try {
+        await requestOtp(mobile);
+      } catch (e) {
+        // A 400 is the issuer saying the number isn't a customer. Reword it:
+        // the server's copy talks about "email or mobile", but this form only
+        // takes a mobile, and the useful next step is signing up.
+        if (e?.status !== 400) throw e;
+        const notFound = new Error(
+          'No customer account for that mobile number. Tap "Create account" to sign up.',
+        );
+        notFound.status = 400;
+        throw notFound;
+      }
+      setSeconds(RESEND_SECONDS);
+      if (resend) setNote('A new code has been sent.');
+      else setStep('OTP');
+    } catch (e) {
+      setError(describeError(e, 'Could not send the code.'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verify = async (code) => {
+    const entered = (code ?? otp).trim();
+    setError(null);
+    setNote(null);
+    if (entered.length !== OTP_LENGTH) {
+      setError(`Enter the ${OTP_LENGTH}-digit code`);
+      return;
+    }
+    if (verifyingRef.current) return;
+    verifyingRef.current = true;
+    try {
+      setLoading(true);
+      const data = await customerLogin({ mobile, otp: entered });
+      onLogin(data);
+    } catch (e) {
+      setError(describeError(e, 'Authentication failed'));
+      // Wrong code → wipe the boxes and re-focus so the retry is one action.
+      // A network/server failure keeps the digits: they were probably right and
+      // re-typing six of them to retry a dropped request is pure friction.
+      if (e?.status === 401) {
+        setOtp('');
+        otpRef.current?.focus();
+      }
+    } finally {
+      verifyingRef.current = false;
+      setLoading(false);
+    }
+  };
+
+  const onOtpChange = (v) => {
+    const digits = v.replace(/[^0-9]/g, '').slice(0, OTP_LENGTH);
+    setOtp(digits);
+    if (digits.length === OTP_LENGTH) verify(digits);
+  };
+
+  const backToMobile = () => {
+    setStep('MOBILE');
+    setOtp('');
+    setError(null);
+    setNote(null);
+  };
+
+  return (
+    <KeyboardAvoidingView
+      style={styles.page}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <StatusBar barStyle="dark-content" backgroundColor={PAGE_BG} />
+      <ScrollView
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingTop: insets.top + rs(24), paddingBottom: insets.bottom + rs(28) },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {step === 'MOBILE' ? (
+          <MobileStep
+            mobile={mobile}
+            setMobile={setMobile}
+            loading={loading}
+            error={error}
+            onSubmit={sendOtp}
+            onCreateAccount={() => navigation?.navigate('CreateAccount')}
+          />
+        ) : (
+          <OtpStep
+            mobile={mobile}
+            otp={otp}
+            otpRef={otpRef}
+            onOtpChange={onOtpChange}
+            onSubmit={() => verify()}
+            onBack={backToMobile}
+            onResend={() => sendOtp({ resend: true })}
+            seconds={seconds}
+            loading={loading}
+            error={error}
+            note={note}
+          />
+        )}
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+/* ------------------------------------------------------------------ step 1 */
+
+function MobileStep({ mobile, setMobile, loading, error, onSubmit, onCreateAccount }) {
+  return (
+    <View>
+      <Image source={require('../../assets/logo.png')} style={styles.logo} resizeMode="cover" />
+
+      <Text style={styles.h1}>Login with{'\n'}mobile number</Text>
+      <Text style={styles.sub}>Welcome to GGFIX Customer App</Text>
+
+      <View style={styles.numberCard}>
+        <TextInput
+          value={mobile}
+          onChangeText={(v) => setMobile(v.replace(/[^0-9]/g, '').slice(0, MOBILE_DIGITS))}
+          placeholder="9876543210"
+          placeholderTextColor={SUBTLE}
+          keyboardType="number-pad"
+          maxLength={MOBILE_DIGITS}
+          autoFocus
+          returnKeyType="done"
+          onSubmitEditing={onSubmit}
+          style={styles.numberInput}
+        />
+      </View>
+
+      <ErrorBox msg={error} />
+
+      <PrimaryButton label="LOGIN" loading={loading} onPress={onSubmit} />
+
+      <View style={styles.signupRow}>
+        <Text style={styles.signupMuted}>New customer? </Text>
+        <Pressable onPress={onCreateAccount} hitSlop={8}>
+          <Text style={styles.signupLink}>Create Your account</Text>
+        </Pressable>
+      </View>
+
+      <Text style={styles.footnote}>
+        GGFix — book repairs, buy and sell your devices.
+      </Text>
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ step 2 */
+
+function OtpStep({
+  mobile, otp, otpRef, onOtpChange, onSubmit, onBack, onResend, seconds, loading, error, note,
+}) {
+  const boxes = Array.from({ length: OTP_LENGTH });
+  const canResend = seconds <= 0 && !loading;
+
+  return (
+    <View>
+      <Pressable onPress={onBack} hitSlop={12} style={styles.backBtn}>
+        <ArrowLeft size={rs(20)} color={TEXT} />
+      </Pressable>
+
+      <Text style={styles.h1Center}>Verify Phone</Text>
+      <Text style={styles.subCenter}>Code is sent to {mobile}</Text>
+
+      {/* The visible boxes are display-only; one transparent input sits on top
+          of the whole row so backspace, paste and SMS autofill all behave like
+          a normal single field instead of six that fight over focus. */}
+      <Pressable onPress={() => otpRef.current?.focus()} style={styles.otpRow}>
+        {boxes.map((_, i) => {
+          const char = otp[i] || '';
+          const active = otp.length === i;
+          return (
+            <View key={i} style={[styles.otpBox, active && styles.otpBoxActive]}>
+              <Text style={char ? styles.otpChar : styles.otpCharEmpty}>{char || '0'}</Text>
+            </View>
+          );
+        })}
+        <TextInput
+          ref={otpRef}
+          value={otp}
+          onChangeText={onOtpChange}
+          keyboardType="number-pad"
+          maxLength={OTP_LENGTH}
+          autoFocus
+          caretHidden
+          textContentType="oneTimeCode"
+          autoComplete="sms-otp"
+          style={styles.otpHiddenInput}
+        />
+      </Pressable>
+
+      {note ? <Text style={styles.note}>{note}</Text> : null}
+      <ErrorBox msg={error} />
+
+      <PrimaryButton label="VERIFY" loading={loading} onPress={onSubmit} />
+
+      <View style={styles.resendRow}>
+        <Text style={styles.resendMuted}>Not yet code? </Text>
+        <Pressable onPress={onResend} disabled={!canResend} hitSlop={8}>
+          <Text style={[styles.resendLink, !canResend && styles.resendLinkOff]}>
+            {seconds > 0 ? `Resend in ${seconds}s` : 'Resend Now'}
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------- parts */
+
+function PrimaryButton({ label, loading, onPress }) {
+  return (
+    <Button
+      onPress={onPress}
+      loading={loading}
+      fullWidth
+      elevated={false}
+      // twMerge drops Button's own `rounded-2xl`/`py-3.5`/`bg-primary` in favour
+      // of these, so the CTA keeps the design's squarer 10px corners at a fixed
+      // 56px height. The hex must stay literal here — Tailwind's JIT only
+      // compiles arbitrary values it can see as source text, so a constant
+      // would emit no class.
+      className="rounded-[10px] py-0 bg-[#004C40]"
+      style={styles.cta}
+    >
+      <View style={styles.ctaInner}>
+        <Text style={styles.ctaText}>{label}</Text>
+        <ArrowRight size={rs(18)} color="#FFFFFF" strokeWidth={2.5} />
+      </View>
+    </Button>
+  );
+}
+
+function ErrorBox({ msg }) {
+  if (!msg) return null;
+  return (
+    <View style={styles.errorBox}>
+      <Text style={styles.errorText}>{msg}</Text>
+    </View>
+  );
+}
+
+const cardSurface = {
+  borderRadius: rs(12),
+  borderWidth: 1,
+  borderColor: BORDER,
+  backgroundColor: tokens.card,
+  shadowColor: '#0B1F14',
+  shadowOpacity: 0.06,
+  shadowRadius: 8,
+  shadowOffset: { width: 0, height: 3 },
+  elevation: 2,
+};
+
+const styles = StyleSheet.create({
+  page: { flex: 1, backgroundColor: PAGE_BG },
+  scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: rs(24) },
+
+  logo: {
+    height: rs(100),
+    width: rs(100),
+    borderRadius: LOGO_RADIUS,
+    marginBottom: rs(22),
+    alignSelf: 'center',
+  },
+
+  h1: { fontSize: rf(28), lineHeight: rlh(36), fontWeight: '800', color: TEXT, letterSpacing: -0.4 },
+  h1Center: { fontSize: rf(26), lineHeight: rlh(32), fontWeight: '800', color: TEXT, textAlign: 'center' },
+  sub: { fontSize: rf(13.5), lineHeight: rlh(20), color: MUTED, marginTop: rs(8) },
+  subCenter: { fontSize: rf(13.5), lineHeight: rlh(20), color: MUTED, textAlign: 'center', marginTop: rs(8) },
+
+  // Full-width, no dial-code card beside it — see the header note.
+  numberCard: {
+    ...cardSurface,
+    height: rs(54),
+    justifyContent: 'center',
+    paddingHorizontal: rs(14),
+    marginTop: rs(28),
+  },
+  numberInput: { fontSize: rf(15.5), fontWeight: '600', color: TEXT, padding: 0 },
+
+  backBtn: { alignSelf: 'flex-start', height: rs(36), width: rs(36), alignItems: 'center', justifyContent: 'center', marginBottom: rs(8), marginLeft: -rs(8) },
+
+  otpRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: rs(26) },
+  otpBox: {
+    ...cardSurface,
+    flex: 1,
+    height: rs(56),
+    marginHorizontal: rs(4),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  otpBoxActive: { borderColor: GREEN, borderWidth: 1.5 },
+  otpChar: { fontSize: rf(20), fontWeight: '700', color: TEXT },
+  otpCharEmpty: { fontSize: rf(20), fontWeight: '700', color: tokens.borderStrong },
+  otpHiddenInput: { ...StyleSheet.absoluteFillObject, opacity: 0, color: 'transparent' },
+
+  note: { fontSize: rf(12.5), color: GREEN, marginTop: rs(10), textAlign: 'center' },
+
+  cta: { height: rs(56), borderRadius: rs(10), marginTop: rs(26), paddingVertical: 0 },
+  ctaInner: { flexDirection: 'row', alignItems: 'center' },
+  // White, because the CTA fill is dark (#004C40, luminance 0.055): white on it
+  // is 10:1, the dark text token only 1.7:1.
+  ctaText: { color: '#FFFFFF', fontSize: rf(14.5), fontWeight: '500', letterSpacing: 1.6, marginRight: rs(10) },
+
+  resendRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: rs(30) },
+  resendMuted: { fontSize: rf(12.5), color: MUTED },
+  resendLink: { fontSize: rf(12.5), fontWeight: '700', color: AMBER_DARK },
+  resendLinkOff: { color: MUTED, fontWeight: '600' },
+
+  signupRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: rs(24) },
+  signupMuted: { fontSize: rf(13), color: MUTED },
+  signupLink: { fontSize: rf(13), fontWeight: '800', color: GREEN },
+
+  footnote: { fontSize: rf(11), lineHeight: rlh(16), color: MUTED, textAlign: 'center', marginTop: rs(18) },
+
+  errorBox: {
+    marginTop: rs(14),
+    borderRadius: rs(12),
+    borderWidth: 1,
+    borderColor: 'rgba(220,38,38,0.3)',
+    backgroundColor: 'rgba(220,38,38,0.08)',
+    paddingHorizontal: rs(12),
+    paddingVertical: rs(9),
+  },
+  errorText: { fontSize: rf(12), lineHeight: rlh(17), color: DANGER },
+});
