@@ -65,6 +65,8 @@ export default {
             'We use your location to show pickup-enabled repair shops nearby.',
         },
       ],
+      'expo-font',
+      'expo-asset',
       'expo-sharing',
       'expo-status-bar',
     ],
