@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Linking, Modal, Pressable, RefreshControl, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
@@ -16,6 +16,7 @@ import {
   Repeat,
   ShoppingBag,
   ShoppingCart,
+  ListOrdered,
   Tag,
   Truck,
   Smartphone,
@@ -40,45 +41,84 @@ import {
 } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { EmptyState, Loader } from '../../components/rnr';
-import { getDeviceCategories, getBanners } from '../../api/masterData';
+import { getDeviceCategories, getBanners, getCategoryMenuImages, categoryMenuKey } from '../../api/masterData';
 import { listNearbyShops } from '../../api/shops';
 import { listAddresses } from '../../api/customer';
 import { listMyOrders } from '../../api/orders';
+import { setBootProgress, finishBoot, isBootDone } from '../../boot/bootProgress';
 import { getUnreadCount } from '../../api/notifications';
 import { listChats, getCart } from '../../api/marketplace';
 import { selectSession } from '../../store/authSlice';
 import { useCustomerLocation } from '../../hooks/useCustomerLocation';
-import { tokens } from '../../theme/colors';
+import { tokens as baseTokens } from '../../theme/colors';
+import { BRAND } from '../../theme/brand';
+import { tintFor } from '../../theme/categoryTints';
 import { rf, rlh } from '../../utils/responsive';
 import { isShopOpen } from '../../utils/shopHours';
 import { useCurrentDevice, deviceName, deviceTitle, roughEstimate } from '../../utils/currentDevice';
+
+// Home colours: the brand palette mapped onto the token names this screen
+// uses (other screens keep the shared tokens).
+const tokens = {
+  ...baseTokens,
+  primary: BRAND.green,
+  primarySoft: '#EAF8EC',
+  text: BRAND.ink,
+  textMuted: '#6B6B6B',
+  textSubtle: '#8E8E8E',
+  card: '#FFFFFF',
+  border: '#E6E6E6',
+  surfaceMuted: BRAND.line,
+  background: BRAND.bg,
+  warning: BRAND.yellow,
+  danger: BRAND.red,
+  accent: BRAND.yellow,
+};
+// Green for text on light backgrounds (#09AD2A shaded for legibility).
+const GREEN_TEXT = '#078F23';
 
 // Icon fallback keyed by the admin-derived category CODE ("Mobile" -> MOBILE).
 // Each tint colour also drives the circular tile background on the per-service
 // Repair / Sell / Buy category rails so the home grid feels lively the way
 // Swiggy / Zomato category rails do.
 const CODE_META = {
-  MOBILE:        { icon: Smartphone, color: tokens.primary,  tint: '#DCFCE7' },
-  SMARTPHONE:    { icon: Smartphone, color: tokens.primary,  tint: '#DCFCE7' },
-  LAPTOP:        { icon: Laptop,     color: '#6D28D9',       tint: '#EDE9FE' },
-  TABLET:        { icon: Tablet,     color: '#0369A1',       tint: '#E0F2FE' },
-  SMARTWATCH:    { icon: Watch,      color: '#B45309',       tint: '#FEF3C7' },
-  SMARTWATCHES:  { icon: Watch,      color: '#B45309',       tint: '#FEF3C7' },
-  WATCH:         { icon: Watch,      color: '#B45309',       tint: '#FEF3C7' },
-  AUDIO:         { icon: Headphones, color: '#BE185D',       tint: '#FCE7F3' },
-  AUDIO_DEVICES: { icon: Headphones, color: '#BE185D',       tint: '#FCE7F3' },
-  SPEAKER:       { icon: Volume2,    color: '#0E9384',       tint: '#D1FAE5' },
-  SPEAKERS:      { icon: Volume2,    color: '#0E9384',       tint: '#D1FAE5' },
+  MOBILE:        { icon: Smartphone, color: tokens.primary, tint: tintFor('MOBILE') },
+  SMARTPHONE:    { icon: Smartphone, color: tokens.primary, tint: tintFor('SMARTPHONE') },
+  LAPTOP:        { icon: Laptop,     color: tokens.primary, tint: tintFor('LAPTOP') },
+  TABLET:        { icon: Tablet,     color: tokens.primary, tint: tintFor('TABLET') },
+  SMARTWATCH:    { icon: Watch,      color: tokens.primary, tint: tintFor('SMARTWATCH') },
+  SMARTWATCHES:  { icon: Watch,      color: tokens.primary, tint: tintFor('SMARTWATCHES') },
+  WATCH:         { icon: Watch,      color: tokens.primary, tint: tintFor('WATCH') },
+  AUDIO:         { icon: Headphones, color: tokens.primary, tint: tintFor('AUDIO') },
+  AUDIO_DEVICES: { icon: Headphones, color: tokens.primary, tint: tintFor('AUDIO_DEVICES') },
+  SPEAKER:       { icon: Volume2,    color: tokens.primary, tint: tintFor('SPEAKER') },
+  SPEAKERS:      { icon: Volume2,    color: tokens.primary, tint: tintFor('SPEAKERS') },
 };
-const DEFAULT_META = { icon: Smartphone, color: tokens.primary, tint: '#DCFCE7' };
+const DEFAULT_META = { icon: Smartphone, color: tokens.primary, tint: tintFor('') };
+
+// Sell-specific category art for the Home "Sell" rail, overriding whatever
+// image the admin has set on the shared category row (that image is also
+// used by the Repair/Buy rails, so it isn't always right for Sell).
+const SELL_IMAGES = {
+  MOBILE: 'https://media.ggfix.in/buy&sell-categories-image/Sell-Phone.png',
+  SMARTPHONE: 'https://media.ggfix.in/buy&sell-categories-image/Sell-Phone.png',
+  LAPTOP: 'https://media.ggfix.in/buy&sell-categories-image/Sell-Laptop.png',
+  SMARTWATCH: 'https://media.ggfix.in/buy&sell-categories-image/Sell-smartWatch.png',
+  SMARTWATCHES: 'https://media.ggfix.in/buy&sell-categories-image/Sell-smartWatch.png',
+  TABLET: 'https://media.ggfix.in/buy&sell-categories-image/Sell-Tablet.png',
+  AUDIO: 'https://media.ggfix.in/buy&sell-categories-image/Sell-AudioDevice.png',
+  AUDIO_DEVICE: 'https://media.ggfix.in/buy&sell-categories-image/Sell-AudioDevice.png',
+  AUDIO_DEVICES: 'https://media.ggfix.in/buy&sell-categories-image/Sell-AudioDevice.png',
+};
 
 // My Orders quick-access tiles — each jumps straight to that tab of the My
 // Orders screen (which reads `initialTab`). Moved here from the Profile screen.
 const ORDERS_GRID = [
-  { label: 'Service', icon: Wrench,      tab: 'Service', color: '#004C40', bg: '#DCFCE7' },
-  { label: 'Pickup',  icon: Truck,       tab: 'Pickup',  color: '#7C3AED', bg: '#F5F3FF' },
-  { label: 'Buy',     icon: ShoppingBag, tab: 'Buy',     color: '#2563EB', bg: '#EFF6FF' },
-  { label: 'Sell',    icon: Tag,         tab: 'Sell',    color: '#C2410C', bg: '#FFEDD5' },
+  { label: 'Service', icon: Wrench,      tab: 'Service', color: BRAND.green, bg: '#EAF8EC' },
+  { label: 'Pickup',  icon: Truck,       tab: 'Pickup',  color: BRAND.yellow, bg: '#FEF6DA' },
+  { label: 'Buy',     icon: ShoppingBag, tab: 'Buy',     color: BRAND.ink,   bg: BRAND.line },
+  { label: 'Sell',    icon: Tag,         tab: 'Sell',    color: BRAND.red,   bg: '#FEECEC' },
+  { label: 'Enquiry', icon: MessageCircle, tab: 'Enquiry', color: GREEN_TEXT, bg: '#EAF8EC' },
 ];
 
 // Preferred display order for category tiles (backend returns them
@@ -129,8 +169,8 @@ const HERO_SLIDES = [
     title1: 'Fast. Trusted.',
     title2: 'Tech Solutions',
     cta: 'Explore Now',
-    bg: ['#E9FBF0', '#C7F5D9'],
-    accent: tokens.primary,
+    bg: ['#EAF8EC', '#CDEFD5'],
+    accent: GREEN_TEXT,
     route: 'Repair',
   },
   {
@@ -139,8 +179,8 @@ const HERO_SLIDES = [
     title1: 'Up to 30% Off',
     title2: 'Screen Repairs',
     cta: 'Book Now',
-    bg: ['#E8F1FE', '#C7DEFD'],
-    accent: '#2563EB',
+    bg: ['#FEECEC', '#FBD3D3'],
+    accent: BRAND.red,
     route: 'Repair',
   },
   {
@@ -149,8 +189,8 @@ const HERO_SLIDES = [
     title1: 'Sell & Earn',
     title2: 'Best Resale Value',
     cta: 'Sell Now',
-    bg: ['#FFF3E6', '#FEDCB6'],
-    accent: tokens.accent,
+    bg: ['#FEF6DA', '#FBE6A2'],
+    accent: BRAND.ink,
     route: 'Sell',
   },
   {
@@ -159,8 +199,8 @@ const HERO_SLIDES = [
     title1: 'Free Pickup',
     title2: 'At Your Doorstep',
     cta: 'Book Pickup',
-    bg: ['#F1ECFE', '#DDD0FB'],
-    accent: '#7C3AED',
+    bg: ['#F8F8F8', '#EDEDED'],
+    accent: GREEN_TEXT,
     route: 'RepairSelectDevice',
     params: { flow: 'REPAIR' },
   },
@@ -183,7 +223,7 @@ const PROMO_BANNERS = [
     title: 'Up to 30% OFF',
     sub: 'on Screen Repairs',
     cta: 'Book Now',
-    bg: ['#E9FBF0', '#CFF6DE'],
+    bg: ['#EAF8EC', '#CDEFD5'],
     accent: tokens.primary,
     titleColor: tokens.text,
     icon: Smartphone,
@@ -194,9 +234,9 @@ const PROMO_BANNERS = [
     title: 'Exchange & Save',
     sub: 'Best value on old devices',
     cta: 'Get Offer',
-    bg: ['#E8F1FE', '#CFE0FD'],
-    accent: '#2563EB',
-    titleColor: '#1D4ED8',
+    bg: ['#FEF6DA', '#FBE6A2'],
+    accent: BRAND.ink,
+    titleColor: tokens.text,
     icon: Repeat,
     route: 'Sell',
   },
@@ -205,9 +245,9 @@ const PROMO_BANNERS = [
     title: 'Free Pickup',
     sub: 'Doorstep in 15–30 min',
     cta: 'Try Now',
-    bg: ['#F1ECFE', '#DFD3FB'],
-    accent: '#7C3AED',
-    titleColor: '#6D28D9',
+    bg: ['#FEECEC', '#FBD3D3'],
+    accent: BRAND.red,
+    titleColor: tokens.text,
     icon: Truck,
     route: 'RepairSelectDevice',
     params: { flow: 'REPAIR' },
@@ -240,6 +280,16 @@ export default function HomeScreen({ navigation }) {
   const [gpsMode, setGpsMode] = useState(false);
   const locPickedRef = useRef(false);
   const [categories, setCategories] = useState([]);
+  // Per-row tile art from the admin's Category Menu (key -> image URL).
+  const [menuArt, setMenuArt] = useState({ REPAIR: {}, SELL: {}, BUY: {} });
+  const [menuArtLoaded, setMenuArtLoaded] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    Promise.all(['REPAIR', 'SELL', 'BUY'].map((t) => getCategoryMenuImages(t, { includeInactive: true })))
+      .then(([REPAIR, SELL, BUY]) => { if (alive) setMenuArt({ REPAIR, SELL, BUY }); })
+      .finally(() => { if (alive) setMenuArtLoaded(true); });
+    return () => { alive = false; };
+  }, []);
   const [banners, setBanners] = useState([]);
   const [ongoing, setOngoing] = useState(null);
   const [unread, setUnread] = useState(0);
@@ -288,6 +338,33 @@ export default function HomeScreen({ navigation }) {
   }, [lat, lng]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // First launch: the launch screen stays up until Home's data is in and its
+  // banners / category artwork are downloaded, so Home appears complete
+  // instead of images popping in one by one. Capped so a slow image can't
+  // hold the app back (bootProgress also has an overall cap).
+  useEffect(() => {
+    if (isBootDone()) return;
+    if (loading) { setBootProgress(0.55, 'Loading your home…'); return; }
+    if (!menuArtLoaded) { setBootProgress(0.65, 'Loading your home…'); return; }
+    const web = (list) => [...new Set(list.filter((u) => typeof u === 'string' && /^https?:\/\//.test(u)))];
+    // What's on screen first (hero banner, Repair + Sell rails) gates the
+    // launch screen; everything further down downloads in the background.
+    const urls = web([imgUri(banners[0] || {}), ...Object.values(menuArt.REPAIR || {}), ...Object.values(menuArt.SELL || {})]);
+    const later = web([...banners.slice(1).map(imgUri), ...categories.map(imgUri), ...Object.values(menuArt.BUY || {})])
+      .filter((u) => !urls.includes(u));
+    let doneCount = 0;
+    setBootProgress(0.7, 'Loading images…');
+    const all = Promise.all(urls.map((u) => Promise.resolve(Image.prefetch(u)).catch(() => false).then(() => {
+      doneCount += 1;
+      setBootProgress(0.7 + 0.27 * (doneCount / urls.length), 'Loading images…');
+    })));
+    const cap = new Promise((resolve) => setTimeout(resolve, 8000));
+    Promise.race([all, cap]).then(() => {
+      finishBoot();
+      later.forEach((u) => { Promise.resolve(Image.prefetch(u)).catch(() => {}); });
+    });
+  }, [loading, menuArtLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onRefresh = () => { setRefreshing(true); load(); };
 
@@ -358,7 +435,10 @@ export default function HomeScreen({ navigation }) {
   const pickSell = (c) => navigation.navigate('SellSelectDevice', { flow: 'SELL', ...catParams(c) });
   const pickBuy = (c) => navigation.navigate('BuyCategory', { categoryId: c.id, categoryName: c.name });
 
-  const openSearch = () => navigation.navigate('Repair');
+  // Search bar actions: text search, voice search, device barcode scan, QR scan.
+  const openSearch = () => navigation.navigate('Search');
+  const openVoice = () => navigation.navigate('Search', { voice: true });
+  const openScanDevice = () => navigation.navigate('Scan', { mode: 'product' });
 
   return (
     <View className="flex-1" style={{ backgroundColor: tokens.background }}>
@@ -393,18 +473,19 @@ export default function HomeScreen({ navigation }) {
             </View>
           </Pressable>
           {/* Right-side actions: search, cart, notifications — outlined circles. */}
-          <IconCircle icon={Search} onPress={openSearch} />
           <IconCircle
             icon={ShoppingCart}
             onPress={() => navigation.navigate('MyCart')}
             badge={cartCount}
             badgeColor={tokens.text}
+            label="My Cart"
           />
           <IconCircle
             icon={Bell}
             onPress={() => navigation.navigate('Notifications')}
             badge={unread}
             badgeColor={tokens.danger}
+            label="Notifications"
             last
           />
         </View>
@@ -413,16 +494,21 @@ export default function HomeScreen({ navigation }) {
         <View className="px-4 pb-3 pt-1" style={centered}>
           <Pressable
             onPress={openSearch}
-            className="flex-row items-center rounded-2xl px-4 active:opacity-80"
-            style={{ backgroundColor: tokens.surfaceMuted, borderWidth: 1, borderColor: tokens.border, height: 50 }}
+            accessibilityRole="search"
+            accessibilityLabel="Search for products, repair, or brands"
+            className="flex-row items-center pl-4 pr-2 active:opacity-80"
+            style={{
+              backgroundColor: tokens.card, borderWidth: 1, borderColor: tokens.border, height: 54, borderRadius: 27,
+              shadowColor: BRAND.ink, shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1,
+            }}
           >
-            <Search size={19} color={tokens.textSubtle} />
+            <Search size={20} color={tokens.text} />
             <Text className="text-text-muted ml-2.5 flex-1" style={{ fontSize: rf(13) }} numberOfLines={1}>
               Search for products, repair, or brands...
             </Text>
-            <Camera size={19} color={tokens.textMuted} style={{ marginLeft: 6 }} />
-            <Mic size={19} color={tokens.textMuted} style={{ marginLeft: 12 }} />
-            <QrCode size={19} color={tokens.primary} style={{ marginLeft: 12 }} />
+            {/* Each icon is its own tap target (the bar itself opens text search). */}
+            <BarIcon icon={Camera} label="Search product by camera" onPress={openScanDevice} />
+            <BarIcon icon={Mic} label="Voice search" onPress={openVoice} />
           </Pressable>
         </View>
       </SafeAreaView>
@@ -430,7 +516,7 @@ export default function HomeScreen({ navigation }) {
       <ScrollView
         className="flex-1"
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={tokens.primary} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#09AD2A" colors={['#09AD2A']} />}
         contentContainerStyle={{ paddingBottom: 32 }}
       >
         <View style={centered}>
@@ -442,82 +528,93 @@ export default function HomeScreen({ navigation }) {
               (model + RAM/storage). "Sell Now" opens the Sell flow for a real
               shop quote; the ₹ figure here is only a rough teaser estimate. */}
           {currentDevice.ready && (deviceName(currentDevice) || currentDevice.storageGb || currentDevice.image) ? (
-            <View style={{ paddingHorizontal: 14, marginTop: 14 }}>
+            <View style={{ paddingHorizontal: 16, marginTop: 12 }}>
               <Pressable
                 onPress={() => navigation.navigate('SellSelectDevice', { flow: 'SELL' })}
                 className="active:opacity-90 flex-row items-center"
-                style={{ backgroundColor: tokens.card, borderRadius: 16, borderWidth: 1, borderColor: tokens.border, padding: 10 }}
+                style={{
+                  backgroundColor: '#FFFFFF', borderRadius: 20, borderWidth: 1, borderColor: tokens.border,
+                  paddingVertical: 8, paddingLeft: 10, paddingRight: 10, overflow: 'hidden',
+                  shadowColor: BRAND.ink, shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1,
+                }}
               >
                 {currentDevice.image ? (
-                  <Image
+                  <Image resizeMethod="resize"
                     source={{ uri: currentDevice.image }}
-                    style={{ height: 54, width: 54, borderRadius: 12, backgroundColor: tokens.primarySoft, marginRight: 12 }}
+                    style={{ height: 64, width: 64, marginRight: 12 }}
                     resizeMode="contain"
                   />
                 ) : (
                   <View
                     style={{
-                      height: 54, width: 54, borderRadius: 12,
+                      height: 60, width: 60, borderRadius: 16,
                       backgroundColor: tokens.primarySoft,
                       alignItems: 'center', justifyContent: 'center', marginRight: 12,
                     }}
                   >
-                    <Smartphone size={26} color={tokens.primary} />
+                    <Smartphone size={28} color={tokens.primary} />
                   </View>
                 )}
                 <View style={{ flex: 1, paddingRight: 8 }}>
-                  <Text style={{ color: tokens.primary, fontWeight: '800', fontSize: rf(11) }}>Sell This Device</Text>
-                  <Text style={{ color: tokens.text, fontWeight: '800', fontSize: rf(13), marginTop: 1 }} numberOfLines={1}>
+                  <Text style={{ color: GREEN_TEXT, fontWeight: '800', fontSize: rf(12) }}>Sell This Device</Text>
+                  <Text style={{ color: tokens.text, fontWeight: '800', fontSize: rf(13.5), marginTop: 2 }} numberOfLines={1}>
                     {deviceTitle(currentDevice)}
                   </Text>
-                  <Text style={{ color: tokens.textMuted, fontSize: rf(11.5), marginTop: 1 }} numberOfLines={1}>
-                    Get up to <Text style={{ color: tokens.primary, fontWeight: '800' }}>₹{roughEstimate(currentDevice).toLocaleString('en-IN')}</Text>
+                  <Text style={{ color: tokens.textMuted, fontSize: rf(12), marginTop: 2 }} numberOfLines={1}>
+                    Get up to <Text style={{ color: GREEN_TEXT, fontWeight: '800' }}>₹{roughEstimate(currentDevice).toLocaleString('en-IN')}</Text>
                   </Text>
                 </View>
-                <View className="rounded-full" style={{ backgroundColor: tokens.primary, paddingHorizontal: 14, paddingVertical: 9 }}>
-                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: rf(12) }}>Sell Now</Text>
+                <View className="flex-row items-center rounded-full" style={{ backgroundColor: tokens.primary, paddingHorizontal: 14, paddingVertical: 10 }}>
+                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: rf(12.5), marginRight: 5 }}>Sell Now</Text>
+                  <ArrowRight size={14} color="#fff" />
                 </View>
               </Pressable>
             </View>
           ) : null}
 
-          {/* My Orders quick-access — one tile per order type, before the
-              category rails. Each jumps to that tab of the My Orders screen. */}
+          {/* Quick Access — one tile per order type, before the category
+              rails. Service / Pickup open Repair Orders; Buy / Sell open My Orders. */}
           <SectionHeader
-            title="My Orders"
-            action="View all"
-            onAction={() => navigation.navigate('MyOrders', { initialTab: 'Service' })}
+            title="Quick Access"
           />
-          <View className="flex-row" style={{ paddingHorizontal: 14, columnGap: 9 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, columnGap: 8 }}>
             {ORDERS_GRID.map((it) => {
               const Icon = it.icon;
               return (
                 <Pressable
                   key={it.tab}
-                  onPress={() => navigation.navigate('MyOrders', { initialTab: it.tab })}
+                  onPress={() => navigation.navigate(['Buy', 'Sell'].includes(it.tab) ? 'MyOrders' : 'RepairOrders', { initialTab: it.tab })}
                   className="active:opacity-90"
                   style={{
-                    flex: 1, alignItems: 'center',
+                    width: 100, flexDirection: 'row', alignItems: 'center',
                     backgroundColor: tokens.card, borderRadius: 16,
-                    borderWidth: 1, borderColor: tokens.border, paddingVertical: 12,
+                    borderWidth: 1, borderColor: tokens.border,
+                    paddingVertical: 10, paddingLeft: 6, paddingRight: 4,
+                    shadowColor: BRAND.ink, shadowOpacity: 0.03, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1,
                   }}
                 >
                   <View
                     style={{
-                      height: 40, width: 40, borderRadius: 14,
+                      height: 28, width: 28, borderRadius: 9,
                       backgroundColor: it.bg,
-                      alignItems: 'center', justifyContent: 'center', marginBottom: 6,
+                      alignItems: 'center', justifyContent: 'center', marginRight: 5,
                     }}
                   >
-                    <Icon size={19} color={it.color} />
+                    <Icon size={16} color={it.color} />
                   </View>
-                  <Text style={{ color: tokens.text, fontWeight: '700', fontSize: rf(11) }} numberOfLines={1}>
+                  <Text
+                    style={{ flex: 1, color: tokens.text, fontWeight: '700', fontSize: rf(10) }}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.85}
+                  >
                     {it.label}
                   </Text>
+                  {contentW >= 440 ? <ChevronRight size={12} color={tokens.textMuted} /> : null}
                 </Pressable>
               );
             })}
-          </View>
+          </ScrollView>
 
           {/* Shop by category, split by service. Each rail lists every
               published category and drops the customer into that service's
@@ -531,123 +628,31 @@ export default function HomeScreen({ navigation }) {
               <CategoryRail
                 title="Repair"
                 categories={categories}
+                contentW={contentW}
                 onPick={pickRepair}
                 onSeeAll={() => navigation.navigate('Repair')}
+                menuImages={menuArt.REPAIR}
               />
               <CategoryRail
                 title="Sell"
                 categories={categories}
+                contentW={contentW}
                 onPick={pickSell}
                 onSeeAll={() => navigation.navigate('Sell')}
+                menuImages={menuArt.SELL}
+                imageOverrides={SELL_IMAGES}
               />
               <CategoryRail
                 title="Buy"
                 categories={categories}
+                contentW={contentW}
                 onPick={pickBuy}
                 onSeeAll={() => navigation.navigate('Buy')}
+                menuImages={menuArt.BUY}
               />
             </>
           )}
 
-          {/* Service Enquiry — full-width support card with a "Chat Now" pill. */}
-          <View style={{ paddingHorizontal: 16, marginTop: 16 }}>
-            <Pressable
-              onPress={() => navigation.navigate(ENQUIRY_TILE.route)}
-              className="active:opacity-90 flex-row items-center"
-              style={{
-                borderRadius: 16,
-                padding: 12,
-                backgroundColor: tokens.card,
-                borderWidth: 1,
-                borderColor: tokens.border,
-              }}
-            >
-              <View
-                className="h-11 w-11 rounded-full items-center justify-center mr-3"
-                style={{ backgroundColor: ENQUIRY_TILE.tint }}
-              >
-                <ENQUIRY_TILE.icon size={20} color={ENQUIRY_TILE.accent} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: tokens.text, fontWeight: '800', fontSize: rf(15) }} numberOfLines={1}>
-                  {ENQUIRY_TILE.title}
-                </Text>
-                <Text style={{ color: tokens.textMuted, fontSize: rf(11.5), marginTop: 2 }} numberOfLines={2}>
-                  {ENQUIRY_TILE.sub}
-                </Text>
-              </View>
-              <View
-                className="flex-row items-center rounded-full ml-2"
-                style={{ backgroundColor: tokens.primarySoft, paddingHorizontal: 12, paddingVertical: 8 }}
-              >
-                <Text style={{ color: tokens.primary, fontWeight: '800', fontSize: rf(12), marginRight: 4 }}>
-                  Chat Now
-                </Text>
-                <ArrowRight size={14} color={tokens.primary} />
-              </View>
-            </Pressable>
-          </View>
-
-          {/* Ongoing booking — promoted card so a repeat customer hits "their"
-              booking without scrolling. */}
-          {ongoing ? (
-            <View className="px-4 mt-4">
-              <Pressable
-                onPress={() => {
-                  const ticketRef = ongoing.payload?.ticketId;
-                  if (ticketRef) {
-                    navigation.navigate('ServiceTicketDetails', { ticketId: ticketRef, fromOrders: true });
-                    return;
-                  }
-                  const bookingRef = ongoing.payload?.bookingId || ongoing.referenceId;
-                  if (bookingRef) navigation.navigate('RepairOrderDetails', { bookingId: bookingRef });
-                  else navigation.navigate('MyOrders');
-                }}
-                className="rounded-2xl p-3 active:opacity-90 flex-row items-center"
-                style={{ backgroundColor: tokens.card, borderWidth: 1, borderColor: tokens.border }}
-              >
-                {(() => {
-                  const p = ongoing.payload || {};
-                  const thumb = p.deviceImageUrl || p.deviceImage || p.imageUrl || p.masterImageUrl || ongoing.imageUrl || null;
-                  return thumb ? (
-                    <Image
-                      source={{ uri: thumb }}
-                      className="mr-3"
-                      style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: tokens.primarySoft }}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View
-                      className="h-12 w-12 rounded-xl items-center justify-center mr-3"
-                      style={{ backgroundColor: tokens.primarySoft }}
-                    >
-                      <Smartphone size={22} color={tokens.primary} />
-                    </View>
-                  );
-                })()}
-                <View className="flex-1 pr-2">
-                  <Text className="font-extrabold mb-0.5" style={{ color: tokens.primary, letterSpacing: 1, fontSize: rf(10) }}>
-                    ONGOING
-                  </Text>
-                  <Text className="font-extrabold text-text" style={{ fontSize: rf(13) }} numberOfLines={1}>
-                    {ongoing.payload?.title || `Booking #${ongoing.orderNumber || ''}`}
-                  </Text>
-                  <Text className="text-text-muted mt-0.5" style={{ fontSize: rf(11) }} numberOfLines={1}>
-                    {ongoing.payload?.deviceName || ongoing.orderType}
-                    {ongoing.createdAt ? ` · ${new Date(ongoing.createdAt).toLocaleDateString()}` : ''}
-                  </Text>
-                </View>
-                <View
-                  className="rounded-full px-2.5 py-1"
-                  style={{ backgroundColor: tokens.primarySoft }}
-                >
-                  <Text className="font-extrabold" style={{ color: tokens.primary, fontSize: rf(10) }}>
-                    {(ongoing.status || 'ACTIVE').replace(/_/g, ' ')}
-                  </Text>
-                </View>
-              </Pressable>
-            </View>
-          ) : null}
 
           {/* Nearby shops — photo-led card with a green shop badge, rating row
               and quick chat / call round buttons. */}
@@ -673,60 +678,54 @@ export default function HomeScreen({ navigation }) {
             </>
           ) : null}
 
-          {/* Promo strip — horizontally scrolling offer cards (no heading, to
-              mirror the reference bottom-of-feed offer rail). */}
+          {/* Promo strip — two half-width offer cards side by side (like the
+              reference); any further offers scroll in from the right. */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 2 }}
-            style={{ marginTop: 18 }}
+            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 2, columnGap: 8 }}
+            style={{ marginTop: 14 }}
             decelerationRate="fast"
           >
             {PROMO_BANNERS.map((p) => {
               const Icon = p.icon;
-              const cardW = Math.round(contentW * 0.78);
+              const cardW = Math.floor((contentW - 32 - 8) / 2);
               return (
                 <Pressable
                   key={p.key}
                   onPress={() => navigation.navigate(p.route, p.params)}
-                  style={{ width: cardW, marginHorizontal: 4 }}
+                  style={{ width: cardW }}
                   className="active:opacity-90"
                 >
                   <LinearGradient
                     colors={p.bg}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
-                    style={{
-                      borderRadius: 18,
-                      padding: 16,
-                      minHeight: 116,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      overflow: 'hidden',
-                    }}
+                    style={{ borderRadius: 18, padding: 12, height: 104, overflow: 'hidden', justifyContent: 'space-between' }}
                   >
-                    <View style={{ flex: 1, paddingRight: 8 }}>
-                      <Text style={{ color: p.titleColor, fontWeight: '900', fontSize: rf(18) }} numberOfLines={1}>
+                    <View
+                      pointerEvents="none"
+                      className="items-center justify-center"
+                      style={{ position: 'absolute', right: -14, bottom: -14, height: 78, width: 78, borderRadius: 39, backgroundColor: 'rgba(255,255,255,0.55)' }}
+                    >
+                      <Icon size={28} color={p.accent} style={{ marginRight: 8, marginBottom: 8 }} />
+                    </View>
+                    <View style={{ paddingRight: 4 }}>
+                      <Text style={{ color: p.titleColor, fontWeight: '900', fontSize: rf(14.5) }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
                         {p.title}
                       </Text>
-                      <Text style={{ color: tokens.textMuted, fontSize: rf(12), marginTop: 2 }} numberOfLines={1}>
+                      <Text style={{ color: tokens.textMuted, fontSize: rf(10.5), marginTop: 1 }} numberOfLines={1}>
                         {p.sub}
                       </Text>
-                      <View
-                        className="flex-row items-center rounded-full mt-3"
-                        style={{ alignSelf: 'flex-start', backgroundColor: p.accent, paddingHorizontal: 13, paddingVertical: 7 }}
-                      >
-                        <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: rf(12), marginRight: 4 }}>
-                          {p.cta}
-                        </Text>
-                        <ArrowRight size={14} color="#FFFFFF" />
-                      </View>
                     </View>
                     <View
-                      className="items-center justify-center"
-                      style={{ height: 62, width: 62, borderRadius: 31, backgroundColor: 'rgba(255,255,255,0.55)' }}
+                      className="flex-row items-center rounded-full"
+                      style={{ alignSelf: 'flex-start', backgroundColor: p.accent, paddingHorizontal: 11, paddingVertical: 6 }}
                     >
-                      <Icon size={30} color={p.accent} />
+                      <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: rf(11), marginRight: 4 }}>
+                        {p.cta}
+                      </Text>
+                      <ArrowRight size={12} color="#FFFFFF" />
                     </View>
                   </LinearGradient>
                 </Pressable>
@@ -734,41 +733,47 @@ export default function HomeScreen({ navigation }) {
             })}
           </ScrollView>
 
-          {/* Trust strip — four reassurance badges in one bordered card. */}
-          <View style={{ paddingHorizontal: 16, marginTop: 18 }}>
+          {/* Trust strip — four reassurance badges in one soft card, icon
+              beside a two-line label. */}
+          <View style={{ paddingHorizontal: 16, marginTop: 14 }}>
             <View
               className="flex-row items-stretch"
               style={{
-                backgroundColor: tokens.card,
+                backgroundColor: '#FFFFFF',
                 borderWidth: 1,
                 borderColor: tokens.border,
-                borderRadius: 16,
-                paddingVertical: 12,
+                borderRadius: 18,
+                paddingVertical: 10,
+                paddingHorizontal: 2,
               }}
             >
               {TRUST_BADGES.map((b, i) => {
                 const Icon = b.icon;
                 return (
                   <View key={b.key} className="flex-1 flex-row items-stretch">
-                    <View className="flex-1 items-center justify-center px-1">
-                      <Icon size={20} color={tokens.primary} />
-                      <Text
-                        className="text-center mt-1.5"
-                        style={{ color: tokens.text, fontSize: rf(9.5), fontWeight: '700', lineHeight: rf(12) }}
-                        numberOfLines={1}
-                      >
-                        {b.l1}
-                      </Text>
-                      <Text
-                        className="text-center"
-                        style={{ color: tokens.textMuted, fontSize: rf(9.5), lineHeight: rf(12) }}
-                        numberOfLines={1}
-                      >
-                        {b.l2}
-                      </Text>
+                    <View className="flex-1 flex-row items-center" style={{ paddingHorizontal: 3 }}>
+                      <Icon size={16} color={tokens.primary} style={{ marginRight: 3 }} />
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text
+                          style={{ color: tokens.text, fontSize: rf(8.5), fontWeight: '700', lineHeight: rf(11) }}
+                          numberOfLines={1}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.8}
+                        >
+                          {b.l1}
+                        </Text>
+                        <Text
+                          style={{ color: tokens.textMuted, fontSize: rf(8), lineHeight: rf(11) }}
+                          numberOfLines={1}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.8}
+                        >
+                          {b.l2}
+                        </Text>
+                      </View>
                     </View>
                     {i < TRUST_BADGES.length - 1 ? (
-                      <View style={{ width: 1, backgroundColor: tokens.border, marginVertical: 4 }} />
+                      <View style={{ width: 1, backgroundColor: tokens.border, marginVertical: 3 }} />
                     ) : null}
                   </View>
                 );
@@ -796,20 +801,41 @@ export default function HomeScreen({ navigation }) {
   );
 }
 
-// Outlined circular header action button with an optional count badge.
-function IconCircle({ icon: Icon, onPress, badge = 0, badgeColor, last }) {
+// Search-bar icon button (camera / mic / QR) with a comfortable touch target.
+function BarIcon({ icon: Icon, label, onPress }) {
   return (
     <Pressable
       onPress={onPress}
-      className="h-10 w-10 rounded-full items-center justify-center active:opacity-80"
+      hitSlop={6}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      className="items-center justify-center rounded-full active:opacity-60"
+      style={{ height: 38, width: 38, marginLeft: 2 }}
+    >
+      <Icon size={20} color={tokens.text} />
+    </Pressable>
+  );
+}
+
+// Outlined circular header action button with an optional count badge.
+function IconCircle({ icon: Icon, onPress, badge = 0, badgeColor, last, label }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={4}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      className="rounded-full items-center justify-center active:opacity-80"
       style={{
+        height: 38,
+        width: 38,
         backgroundColor: tokens.card,
         borderWidth: 1,
         borderColor: tokens.border,
-        marginRight: last ? 0 : 8,
+        marginRight: last ? 0 : 6,
       }}
     >
-      <Icon size={19} color={tokens.text} strokeWidth={2} />
+      <Icon size={18} color={tokens.text} strokeWidth={2} />
       {badge > 0 ? (
         <View
           className="absolute -top-1 -right-1 rounded-full min-w-[17px] h-[17px] px-1 items-center justify-center"
@@ -845,7 +871,7 @@ function NearbyShopCard({ shop, onPress, onChat, onCall }) {
       }}
     >
       {thumb ? (
-        <Image
+        <Image resizeMethod="resize"
           source={{ uri: thumb }}
           style={{ width: 62, height: 62, borderRadius: 12, backgroundColor: tokens.surfaceMuted }}
           resizeMode="cover"
@@ -871,8 +897,8 @@ function NearbyShopCard({ shop, onPress, onChat, onCall }) {
           <Text className="font-extrabold text-text mr-2" numberOfLines={1} style={{ flexShrink: 1, fontSize: rf(14.5) }}>
             {shop.name}
           </Text>
-          <View className="rounded-full px-1.5 py-0.5" style={{ backgroundColor: open ? tokens.primarySoft : '#FEE2E2' }}>
-            <Text className="font-extrabold" style={{ color: open ? tokens.primary : '#B91C1C', letterSpacing: 0.4, fontSize: rf(8.5) }}>
+          <View className="rounded-full px-1.5 py-0.5" style={{ backgroundColor: open ? tokens.primarySoft : '#FEECEC' }}>
+            <Text className="font-extrabold" style={{ color: open ? GREEN_TEXT : BRAND.red, letterSpacing: 0.4, fontSize: rf(8.5) }}>
               {open ? 'OPEN' : 'CLOSED'}
             </Text>
           </View>
@@ -959,7 +985,7 @@ function LocationSheet({
               <Navigation size={18} color={tokens.primary} />
             </View>
             <View className="flex-1">
-              <Text className="font-extrabold" style={{ color: tokens.primary, fontSize: rf(14) }}>
+              <Text className="font-extrabold" style={{ color: GREEN_TEXT, fontSize: rf(14) }}>
                 Use current location
               </Text>
               <Text className="text-text-muted mt-0.5" style={{ fontSize: rf(11.5) }} numberOfLines={1}>
@@ -1007,7 +1033,7 @@ function LocationSheet({
                           </Text>
                           {a.isDefault ? (
                             <View className="rounded-full px-1.5 py-0.5" style={{ backgroundColor: tokens.primarySoft }}>
-                              <Text className="font-extrabold" style={{ color: tokens.primary, fontSize: rf(8.5) }}>
+                              <Text className="font-extrabold" style={{ color: GREEN_TEXT, fontSize: rf(8.5) }}>
                                 DEFAULT
                               </Text>
                             </View>
@@ -1033,7 +1059,7 @@ function LocationSheet({
             >
               <Plus size={18} color={tokens.primary} />
             </View>
-            <Text className="font-extrabold" style={{ color: tokens.primary, fontSize: rf(14) }}>
+            <Text className="font-extrabold" style={{ color: GREEN_TEXT, fontSize: rf(14) }}>
               Add new address
             </Text>
           </Pressable>
@@ -1064,14 +1090,23 @@ const BANNER_RATIO = 2076 / 757;
 // built-in gradient slides when the banner feed is empty or unreachable.
 function HeroBanner({ navigation, contentW, banners = [] }) {
   const [idx, setIdx] = useState(0);
+  const [failed, setFailed] = useState({});
   const onScroll = (e) => {
     const w = e.nativeEvent.layoutMeasurement.width || contentW || 1;
     const i = Math.round(e.nativeEvent.contentOffset.x / w);
     if (i !== idx) setIdx(i);
   };
 
-  const useApi = banners.length > 0;
-  const dotCount = useApi ? banners.length : HERO_SLIDES.length;
+  // Rows without artwork (the feed has `Slider-0` rows with a null image) are
+  // skipped — never drawn with the placeholder hero-banner.png.
+  const slides = banners.filter((b) => imgUri(b) && !failed[b.id]);
+  // Explicit pixel size from the screen width so every slide is exactly one
+  // banner tall on every device (px-4 = 16px each side).
+  const bannerW = contentW - 32;
+  const bannerH = Math.round(bannerW / BANNER_RATIO);
+
+  const useApi = slides.length > 0;
+  const dotCount = useApi ? slides.length : HERO_SLIDES.length;
 
   return (
     <View className="mt-3">
@@ -1082,28 +1117,30 @@ function HeroBanner({ navigation, contentW, banners = [] }) {
         onScroll={onScroll}
         scrollEventThrottle={16}
         decelerationRate="fast"
+        style={useApi ? { flexGrow: 0, height: bannerH } : undefined}
       >
         {useApi
-          ? banners.map((b) => {
+          ? slides.map((b) => {
               const uri = imgUri(b);
               const [route, params] = bannerRoute(b);
               return (
-                <View key={b.id} style={{ width: contentW }} className="px-4">
+                <View key={b.id} style={{ width: contentW, height: bannerH }} className="px-4">
                   <Pressable
                     onPress={() => navigation.navigate(route, params)}
                     className="active:opacity-95"
                     accessibilityRole="imagebutton"
                     accessibilityLabel={b.title || 'Promotional banner'}
                   >
-                    <Image
-                      source={uri ? { uri } : HERO_BANNER_IMAGE}
+                    <Image resizeMethod="resize"
+                      source={{ uri }}
                       style={{
-                        width: '100%',
-                        aspectRatio: BANNER_RATIO,
+                        width: bannerW,
+                        height: bannerH,
                         borderRadius: 18,
                         backgroundColor: tokens.surfaceMuted,
                       }}
                       resizeMode="cover"
+                      onError={() => setFailed((f) => ({ ...f, [b.id]: true }))}
                     />
                   </Pressable>
                 </View>
@@ -1163,7 +1200,7 @@ function HeroBanner({ navigation, contentW, banners = [] }) {
                         <ArrowRight size={15} color="#FFFFFF" />
                       </View>
                     </View>
-                    <Image source={HERO_BANNER_IMAGE} style={{ flex: 1, height: 138 }} resizeMode="contain" />
+                    <Image resizeMethod="resize" source={HERO_BANNER_IMAGE} style={{ flex: 1, height: 138 }} resizeMode="contain" />
                   </LinearGradient>
                 </Pressable>
               </View>
@@ -1193,43 +1230,62 @@ function HeroBanner({ navigation, contentW, banners = [] }) {
 // "See all" action over a horizontal strip of circular category tiles. Tapping
 // a tile calls `onPick(category)` which routes into that service's flow. The
 // tile visuals mirror the old discovery rail (admin image, else a coded icon).
-function CategoryRail({ title, categories, onPick, onSeeAll }) {
+function CategoryRail({ title, categories, contentW, onPick, onSeeAll, imageOverrides, menuImages }) {
+  // Five tiles fit one row edge to edge (like the reference); any extra
+  // categories keep the same tile size and scroll.
+  const itemW = Math.floor(((contentW || 360) - 24) / 5);
+  const ring = Math.min(66, itemW - 10);
+  const disc = ring - 6;
+  // Failed loads (uri -> count): one quiet retry, then the category icon
+  // instead of an empty disc.
+  const [failed, setFailed] = useState({});
+  const onImageError = (uri, e) => {
+    // Dev builds only — shows in the Expo terminal (not as an on-screen warning).
+    if (__DEV__) console.log('[home image failed]', uri, e?.nativeEvent?.error || '');
+    setFailed((f) => ({ ...f, [uri]: (f[uri] || 0) + 1 }));
+  };
   return (
     <>
       <SectionHeader title={title} action="See all" onAction={onSeeAll} />
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        scrollEnabled={categories.length > 5}
         contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 2, paddingBottom: 4 }}
       >
         {categories.map((c) => {
-          const meta = CODE_META[(c.code || '').toUpperCase()] || DEFAULT_META;
+          const code = (c.code || '').toUpperCase();
+          const meta = CODE_META[code] || DEFAULT_META;
           const Icon = meta.icon;
-          const uri = imgUri(c);
+          // Row-specific admin art first, then the old per-row override, then
+          // the shared category image.
+          const art = menuImages && (menuImages[categoryMenuKey(c.name)] || menuImages[categoryMenuKey(c.code)]);
+          const uri = art || (imageOverrides && imageOverrides[code]) || imgUri(c);
           return (
             <Pressable
               key={c.id}
               onPress={() => onPick(c)}
               className="items-center active:opacity-80"
-              style={{ width: 78, marginHorizontal: 4 }}
+              style={{ width: itemW }}
             >
               <View
                 className="rounded-full items-center justify-center"
                 style={{
-                  width: 66,
-                  height: 66,
+                  width: ring,
+                  height: ring,
+                  borderRadius: ring / 2,
                   // This View draws only the ring + border. The circular CLIP is
                   // done by the inner View below — NOT here. On Android a single
                   // View that combines borderWidth + borderRadius + overflow
                   // 'hidden' fails to clip its <Image> child, so the square image
                   // corners showed through the circle. Keeping the border here and
                   // the clip on a borderless inner View is the reliable fix.
-                  backgroundColor: uri ? tokens.card : meta.tint,
+                  backgroundColor: meta.tint,
                   borderWidth: 1,
                   borderColor: tokens.border,
                 }}
               >
-                {uri ? (
+                {uri && (failed[uri] || 0) < 2 ? (
                   // Borderless clip disc, sized 2px smaller than the ring. An
                   // exact half-size borderRadius (30 of 60) is a guaranteed circle
                   // on both platforms — unlike an oversized 999 value on Android.
@@ -1238,26 +1294,36 @@ function CategoryRail({ title, categories, onPick, onSeeAll }) {
                   // a uniform row instead of getting their edges cut off.
                   <View
                     style={{
-                      width: 60,
-                      height: 60,
-                      borderRadius: 30,
+                      width: disc,
+                      height: disc,
+                      borderRadius: disc / 2,
                       overflow: 'hidden',
-                      backgroundColor: tokens.card,
                       alignItems: 'center',
                       justifyContent: 'center',
-                      padding: 5,
+                      padding: 4,
                     }}
                   >
-                    <Image source={{ uri }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+                    <Image
+                      key={`${uri}#${failed[uri] || 0}`}
+                      resizeMethod="resize"
+                      source={{ uri }}
+                      // Fixed pixel size (not %) so Android knows the target
+                      // size up front and decodes the image down to it.
+                      style={{ width: disc - 8, height: disc - 8 }}
+                      resizeMode="contain"
+                      onError={(e) => onImageError(uri, e)}
+                    />
                   </View>
                 ) : (
                   <Icon size={26} color={meta.color} />
                 )}
               </View>
               <Text
-                className="font-bold text-text text-center mt-2"
-                style={{ fontSize: rf(11) }}
+                className="font-bold text-text text-center mt-1.5"
+                style={{ fontSize: rf(10.5), paddingHorizontal: 1 }}
                 numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
               >
                 {c.name}
               </Text>
@@ -1282,7 +1348,7 @@ function SectionHeader({ title, action, onAction }) {
         <Pressable onPress={onAction} className="active:opacity-70 flex-row items-center">
           <Text
             className="font-extrabold mr-0.5"
-            style={{ color: tokens.primary, fontSize: rf(12) }}
+            style={{ color: GREEN_TEXT, fontSize: rf(12) }}
           >
             {action}
           </Text>

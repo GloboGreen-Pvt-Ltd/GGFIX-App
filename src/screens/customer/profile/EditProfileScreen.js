@@ -5,7 +5,6 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { useDispatch } from 'react-redux';
 import { Camera, Pencil, Save, User, Phone, Smartphone, Mail } from 'lucide-react-native';
-import { tokens } from '../../../theme/colors';
 import { Avatar, Input, Loader } from '../../../components/rnr';
 import { notify } from '../../../components/confirm';
 import { getProfile, updateProfile } from '../../../api/customer';
@@ -14,9 +13,14 @@ import { setSession } from '../../../store/authSlice';
 import { getSession, saveSession } from '../../../auth/session';
 import { rf } from '../../../utils/responsive';
 
-const GREEN = '#004C40';
-const GREEN_DARK = '#004C40';
-const CHIP_BG = '#DCFCE7';
+// Brand palette: green #09AD2A, green text #078F23, ink #1E1E1E, neutrals.
+const GREEN = '#09AD2A';
+const GREEN_DARK = '#078F23';
+const CHIP_BG = '#EAF8EC';
+const INK = '#1E1E1E';
+const MUTED = '#6B6B6B';
+const LINE = '#E6E6E6';
+const PAGE_BG = '#F8F8F8';
 
 // Left-icon labelled fields, driven from a table so the row layout stays
 // identical across all four inputs (icon chip · label · input).
@@ -116,11 +120,11 @@ export default function EditProfileScreen({ navigation }) {
 
   if (loadError) {
     return (
-      <View style={{ flex: 1, backgroundColor: tokens.background, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-        <Text style={{ fontSize: rf(15.5), fontWeight: '800', color: tokens.text, textAlign: 'center' }}>
+      <View style={{ flex: 1, backgroundColor: PAGE_BG, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <Text style={{ fontSize: rf(15.5), fontWeight: '800', color: INK, textAlign: 'center' }}>
           Couldn't load your profile
         </Text>
-        <Text style={{ fontSize: rf(13), color: tokens.textMuted, textAlign: 'center', marginTop: 6 }}>
+        <Text style={{ fontSize: rf(13), color: MUTED, textAlign: 'center', marginTop: 6 }}>
           Check your connection and try again — your details are safe and unchanged.
         </Text>
         <Pressable
@@ -137,38 +141,37 @@ export default function EditProfileScreen({ navigation }) {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: tokens.background }}
+      style={{ flex: 1, backgroundColor: PAGE_BG }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
     >
       <ScrollView
-        contentContainerStyle={{ padding: 16, paddingBottom: 44 }}
+        contentContainerStyle={{ padding: 14, paddingBottom: 36 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         {/* Avatar with camera edit badge */}
-        <View style={{ alignItems: 'center', marginTop: 8, marginBottom: 16 }}>
-          <View style={{ width: 116, height: 116 }}>
-            <View
-              style={{
-                borderRadius: 58, overflow: 'hidden',
-                borderWidth: 3, borderColor: '#fff',
-                shadowColor: '#0F172A', shadowOpacity: 0.12, shadowRadius: 12,
-                shadowOffset: { width: 0, height: 6 }, elevation: 4,
-              }}
-            >
+        <View
+          style={{
+            flexDirection: 'row', alignItems: 'center', marginBottom: 10, padding: 12,
+            backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: LINE,
+            shadowColor: INK, shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1,
+          }}
+        >
+          <View style={{ width: 72, height: 72 }}>
+            <View style={{ borderRadius: 36, overflow: 'hidden', borderWidth: 2, borderColor: CHIP_BG }}>
               {data.profileImageUrl ? (
-                <Image source={{ uri: data.profileImageUrl }} style={{ width: 110, height: 110 }} resizeMode="cover" />
+                <Image source={{ uri: data.profileImageUrl }} style={{ width: 68, height: 68 }} resizeMode="cover" />
               ) : (
-                <Avatar fallback={data.fullName || 'U'} size={110} />
+                <Avatar fallback={data.fullName || 'U'} size={68} />
               )}
             </View>
 
             {uploading ? (
               <View
                 style={{
-                  position: 'absolute', top: 3, left: 3, width: 110, height: 110,
-                  borderRadius: 55, backgroundColor: 'rgba(0,0,0,0.4)',
+                  position: 'absolute', top: 2, left: 2, width: 68, height: 68,
+                  borderRadius: 34, backgroundColor: 'rgba(0,0,0,0.4)',
                   alignItems: 'center', justifyContent: 'center',
                 }}
               >
@@ -181,42 +184,45 @@ export default function EditProfileScreen({ navigation }) {
               disabled={uploading}
               accessibilityLabel="Change profile photo"
               style={{
-                position: 'absolute', right: 2, bottom: 6,
-                height: 38, width: 38, borderRadius: 19,
-                backgroundColor: GREEN, borderWidth: 3, borderColor: '#fff',
+                position: 'absolute', right: -2, bottom: -2,
+                height: 28, width: 28, borderRadius: 14,
+                backgroundColor: GREEN, borderWidth: 2, borderColor: '#fff',
                 alignItems: 'center', justifyContent: 'center',
               }}
             >
-              <Camera size={17} color="#fff" />
+              <Camera size={13} color="#fff" />
             </Pressable>
           </View>
 
-          <Text style={{ fontSize: rf(19), fontWeight: '800', color: tokens.text, marginTop: 12 }} numberOfLines={1}>
-            {data.fullName || 'Your name'}
-          </Text>
-          {data.mobile ? (
-            <Text style={{ fontSize: rf(13), color: tokens.textMuted, marginTop: 2 }}>{data.mobile}</Text>
-          ) : null}
-          <Pressable
-            onPress={pickAvatar}
-            disabled={uploading}
-            hitSlop={8}
-            style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10 }}
-          >
-            <Pencil size={14} color={GREEN} />
-            <Text style={{ fontSize: rf(13.5), fontWeight: '800', color: GREEN, marginLeft: 6 }}>
-              {uploading ? 'Uploading…' : 'Change photo'}
+          <View style={{ flex: 1, minWidth: 0, marginLeft: 12 }}>
+            <Text style={{ fontSize: rf(15.5), fontWeight: '800', color: INK }} numberOfLines={1}>
+              {data.fullName || 'Your name'}
             </Text>
-          </Pressable>
+            {data.mobile ? (
+              <Text style={{ fontSize: rf(12), color: MUTED, marginTop: 1 }}>{data.mobile}</Text>
+            ) : null}
+            <Pressable
+              onPress={pickAvatar}
+              disabled={uploading}
+              hitSlop={8}
+              className="active:opacity-70"
+              style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', marginTop: 7, backgroundColor: CHIP_BG, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 }}
+            >
+              <Pencil size={12} color={GREEN_DARK} />
+              <Text style={{ fontSize: rf(11.5), fontWeight: '800', color: GREEN_DARK, marginLeft: 5 }}>
+                {uploading ? 'Uploading…' : 'Change photo'}
+              </Text>
+            </Pressable>
+          </View>
         </View>
 
         {/* Details card — each row: icon chip · label · input */}
         <View
           style={{
-            backgroundColor: '#fff', borderRadius: 22,
-            borderWidth: 1, borderColor: '#EEF1F4', padding: 16,
-            shadowColor: '#0F172A', shadowOpacity: 0.04, shadowRadius: 12,
-            shadowOffset: { width: 0, height: 4 }, elevation: 2,
+            backgroundColor: '#fff', borderRadius: 16,
+            borderWidth: 1, borderColor: LINE, paddingHorizontal: 12, paddingVertical: 4,
+            shadowColor: INK, shadowOpacity: 0.04, shadowRadius: 8,
+            shadowOffset: { width: 0, height: 2 }, elevation: 1,
           }}
         >
           {FIELDS.map((f, idx) => {
@@ -224,18 +230,18 @@ export default function EditProfileScreen({ navigation }) {
             return (
               <View
                 key={f.key}
-                style={{ flexDirection: 'row', alignItems: 'center', marginBottom: idx < FIELDS.length - 1 ? 18 : 0 }}
+                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 9, borderTopWidth: idx ? 1 : 0, borderTopColor: '#F3F3F3' }}
               >
                 <View
                   style={{
-                    height: 44, width: 44, borderRadius: 14,
+                    height: 34, width: 34, borderRadius: 11,
                     backgroundColor: CHIP_BG, alignItems: 'center', justifyContent: 'center',
                   }}
                 >
-                  <Icon size={20} color={GREEN_DARK} />
+                  <Icon size={16} color={GREEN_DARK} />
                 </View>
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={{ fontSize: rf(13), fontWeight: '800', color: tokens.text, marginBottom: 6 }}>
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={{ fontSize: rf(11), fontWeight: '700', color: MUTED, marginBottom: 4 }}>
                     {f.label}
                   </Text>
                   <Input
@@ -244,6 +250,7 @@ export default function EditProfileScreen({ navigation }) {
                     onChangeText={(v) => setData((d) => ({ ...d, [f.key]: v }))}
                     keyboardType={f.keyboardType}
                     autoCapitalize={f.autoCapitalize}
+                    style={{ fontSize: rf(13.5), color: INK, paddingVertical: 8, paddingHorizontal: 11, borderRadius: 11, backgroundColor: PAGE_BG }}
                   />
                 </View>
               </View>
@@ -251,7 +258,7 @@ export default function EditProfileScreen({ navigation }) {
           })}
         </View>
 
-        <View style={{ height: 22 }} />
+        <View style={{ height: 14 }} />
 
         {/* Save button — green pill with a save icon. */}
         <Pressable
@@ -259,19 +266,19 @@ export default function EditProfileScreen({ navigation }) {
           disabled={busy}
           android_ripple={{ color: GREEN_DARK }}
           style={{
-            backgroundColor: GREEN, borderRadius: 18, paddingVertical: 16,
+            backgroundColor: GREEN, borderRadius: 14, paddingVertical: 13,
             flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
             opacity: busy ? 0.75 : 1,
-            shadowColor: GREEN, shadowOpacity: 0.3, shadowRadius: 14,
-            shadowOffset: { width: 0, height: 8 }, elevation: 5,
+            shadowColor: GREEN, shadowOpacity: 0.22, shadowRadius: 8,
+            shadowOffset: { width: 0, height: 3 }, elevation: 3,
           }}
         >
           {saving ? (
             <ActivityIndicator color="#fff" />
           ) : (
             <>
-              <Save size={18} color="#fff" />
-              <Text style={{ color: '#fff', fontWeight: '800', fontSize: rf(15.5), marginLeft: 8, letterSpacing: 0.2 }}>
+              <Save size={16} color="#fff" />
+              <Text style={{ color: '#fff', fontWeight: '800', fontSize: rf(14), marginLeft: 7, letterSpacing: 0.2 }}>
                 Save Changes
               </Text>
             </>

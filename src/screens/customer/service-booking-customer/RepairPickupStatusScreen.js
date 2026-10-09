@@ -58,7 +58,14 @@ export default function RepairPickupStatusScreen({ navigation, route }) {
 
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
-  if (loading) return <Loader label="Loading pickup status..." />;
+  if (loading) {
+    return (
+      <View style={{ flex: 1 }}>
+        <AppHeader title="Pickup Status" onBack={() => navigation.goBack()} />
+        <Loader label="Loading pickup status..." />
+      </View>
+    );
+  }
 
   const statusUpper = (b?.status || '').toUpperCase();
   const events = b?.events || [];
@@ -80,7 +87,7 @@ export default function RepairPickupStatusScreen({ navigation, route }) {
       <AppHeader title="Pickup Status" subtitle="Live progress" onBack={() => navigation.goBack()} />
       <ScrollView
         contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={tokens.primary} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#09AD2A" colors={['#09AD2A']} />}
       >
         <Card>
           <View className="flex-row items-center">

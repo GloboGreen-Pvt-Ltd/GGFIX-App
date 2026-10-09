@@ -11,7 +11,7 @@ export function ApiPicker({ label, items, loading, error, value, onSelect, place
       {label ? <Text style={styles.label}>{label}</Text> : null}
       <TouchableOpacity style={styles.trigger} onPress={() => setOpen(true)} disabled={loading}>
         {loading ? (
-          <ActivityIndicator size="small" />
+          <ActivityIndicator size="small" color="#09AD2A" />
         ) : (
           <Text style={[styles.triggerText, !selected && styles.placeholder]}>
             {selected ? labelExtractor(selected) : placeholder}

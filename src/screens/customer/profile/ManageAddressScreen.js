@@ -1,76 +1,40 @@
 import React, { useCallback, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import {
-  ArrowLeft, Plus, MapPin, Phone, Pencil, Trash2,
+  Plus, MapPin, Phone, Pencil, Trash2,
   CheckCircle2, Circle, Home, Briefcase, Tag, Bell,
 } from 'lucide-react-native';
 import { Loader, EmptyState } from '../../../components/rnr';
 import { confirm, notify } from '../../../components/confirm';
 import { listAddresses, deleteAddress, setDefaultAddress } from '../../../api/customer';
 import { rf, rlh } from '../../../utils/responsive';
+import PageHeader, { HeaderIconButton } from '../../../components/PageHeader';
+import { BRAND } from '../../../theme/brand';
 
-const GREEN = '#004C40';
-const GREEN_LIGHT = '#00695C';
-const GREEN_DARK = '#003830';
+// Palette: 09AD2A · 1E1E1E · F8F8F8 · F3F3F3 · F3BF23 · F84141.
+const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
+const MINT = '#EAF8EC';
+const LINE = '#E6E6E6';
+const GREEN_LINE = 'rgba(9,173,42,0.45)';
 
 const LABEL_META = {
-  Home:   { icon: Home,      color: GREEN_DARK, bg: '#DCFCE7' },
-  Office: { icon: Briefcase, color: '#7C3AED',  bg: '#F5F3FF' },
-  Other:  { icon: Tag,       color: '#C2410C',  bg: '#FFEDD5' },
+  Home:   { icon: Home,      color: GREEN_TEXT, bg: MINT },
+  Office: { icon: Briefcase, color: BRAND.ink,  bg: '#FEF6DA' },
+  Other:  { icon: Tag,       color: BRAND.red,  bg: '#FEECEC' },
 };
 
 function ScreenHeader({ navigation, count }) {
   return (
-    <SafeAreaView edges={['top']} style={{ backgroundColor: GREEN_DARK }}>
-      <LinearGradient
-        colors={[GREEN_DARK, GREEN, GREEN_LIGHT]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={{
-          paddingTop: 12,
-          paddingBottom: 18,
-          borderBottomLeftRadius: 24,
-          borderBottomRightRadius: 24,
-        }}
-      >
-        <View style={{ paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center' }}>
-          <Pressable
-            onPress={() => navigation.goBack()}
-            style={{
-              height: 36, width: 36, borderRadius: 18,
-              backgroundColor: 'rgba(255,255,255,0.18)',
-              alignItems: 'center', justifyContent: 'center',
-              marginRight: 10,
-            }}
-          >
-            <ArrowLeft size={18} color="#fff" />
-          </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: '#fff', fontSize: rf(12.5), fontWeight: '800', letterSpacing: 0.6 }}>
-              MANAGE ADDRESSES
-            </Text>
-            <Text style={{ color: '#fff', fontSize: rf(19), fontWeight: '800', marginTop: 2, letterSpacing: -0.2 }}>
-              {count ? `${count} saved address${count > 1 ? 'es' : ''}` : 'Your delivery locations'}
-            </Text>
-          </View>
-          <Pressable
-            onPress={() => navigation.navigate('Notifications')}
-            style={{
-              height: 36, width: 36, borderRadius: 18,
-              backgroundColor: 'rgba(255,255,255,0.18)',
-              alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <Bell size={18} color="#fff" />
-          </Pressable>
-        </View>
-      </LinearGradient>
-    </SafeAreaView>
+    <PageHeader
+      title="Manage Addresses"
+      subtitle={count ? `${count} saved address${count > 1 ? 'es' : ''}` : 'Your delivery locations'}
+      onBack={() => navigation.goBack()}
+      right={<HeaderIconButton icon={Bell} label="Notifications" onPress={() => navigation.navigate('Notifications')} />}
+    />
   );
 }
+
 
 function AddressCard({ a, onSetDefault, onEdit, onDelete }) {
   const meta = LABEL_META[a.label] || LABEL_META.Home;
@@ -83,103 +47,74 @@ function AddressCard({ a, onSetDefault, onEdit, onDelete }) {
   const district = a.district || a.city;
   const fullAddr = [a.addressLine, area, a.taluk, district, a.state, a.pincode]
     .filter(Boolean).join(', ');
+  const action = { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 4 };
   return (
     <View
       style={{
-        backgroundColor: '#fff', borderRadius: 18,
-        padding: 14, marginBottom: 12,
-        borderWidth: 1,
-        borderColor: a.isDefault ? '#BBF7D0' : '#F1F5F9',
-        shadowColor: '#0F172A', shadowOpacity: 0.05,
-        shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 2,
+        backgroundColor: '#fff', borderRadius: 14, padding: 11, marginBottom: 9,
+        borderWidth: 1, borderColor: a.isDefault ? GREEN_LINE : LINE,
+        shadowColor: BRAND.ink, shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1,
       }}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <View
-          style={{
-            height: 36, width: 36, borderRadius: 18,
-            backgroundColor: meta.bg,
-            alignItems: 'center', justifyContent: 'center',
-            marginRight: 10,
-          }}
-        >
-          <Icon size={16} color={meta.color} />
+        <View style={{ height: 32, width: 32, borderRadius: 10, backgroundColor: meta.bg, alignItems: 'center', justifyContent: 'center', marginRight: 9 }}>
+          <Icon size={15} color={meta.color} />
         </View>
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: rf(14.5), fontWeight: '800', color: '#0F172A' }}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={{ fontSize: rf(13.5), fontWeight: '800', color: BRAND.ink }} numberOfLines={1}>
             {a.label || 'Home'}
           </Text>
           {a.fullName ? (
-            <Text style={{ fontSize: rf(12), color: '#475569', marginTop: 1 }} numberOfLines={1}>
+            <Text style={{ fontSize: rf(11), color: BRAND.muted, marginTop: 1 }} numberOfLines={1}>
               {a.fullName}
             </Text>
           ) : null}
         </View>
         {a.isDefault ? (
-          <View
-            style={{
-              backgroundColor: '#DCFCE7', borderRadius: 999,
-              paddingHorizontal: 10, paddingVertical: 4,
-              flexDirection: 'row', alignItems: 'center',
-            }}
-          >
-            <CheckCircle2 size={11} color={GREEN_DARK} />
-            <Text style={{ color: GREEN_DARK, fontSize: rf(10), fontWeight: '800', marginLeft: 4, letterSpacing: 0.4 }}>
+          <View style={{ backgroundColor: MINT, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, flexDirection: 'row', alignItems: 'center' }}>
+            <CheckCircle2 size={10} color={GREEN_TEXT} />
+            <Text style={{ color: GREEN_TEXT, fontSize: rf(9), fontWeight: '800', marginLeft: 3, letterSpacing: 0.4 }}>
               DEFAULT
             </Text>
           </View>
         ) : null}
       </View>
 
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 12 }}>
-        <MapPin size={14} color="#64748B" style={{ marginTop: 2 }} />
-        <Text style={{ flex: 1, fontSize: rf(12.5), color: '#475569', marginLeft: 6, lineHeight: rlh(18) }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 8 }}>
+        <MapPin size={13} color={BRAND.red} style={{ marginTop: 1 }} />
+        <Text style={{ flex: 1, fontSize: rf(11.5), color: BRAND.body, marginLeft: 6, lineHeight: rlh(16) }} numberOfLines={3}>
           {fullAddr}
         </Text>
       </View>
       {a.mobile ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
-          <Phone size={13} color="#64748B" />
-          <Text style={{ fontSize: rf(12.5), color: '#475569', marginLeft: 6 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+          <Phone size={12} color={BRAND.muted} />
+          <Text style={{ fontSize: rf(11.5), color: BRAND.body, marginLeft: 6 }}>
             +91 {a.mobile}
           </Text>
         </View>
       ) : null}
 
-      <View
-        style={{
-          flexDirection: 'row', marginTop: 12,
-          paddingTop: 10, borderTopWidth: 1, borderTopColor: '#F1F5F9',
-        }}
-      >
+      <View style={{ flexDirection: 'row', marginTop: 9, paddingTop: 7, borderTopWidth: 1, borderTopColor: BRAND.line }}>
         {!a.isDefault ? (
           <>
-            <Pressable
-              onPress={() => onSetDefault(a.id)}
-              style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 6 }}
-            >
-              <Circle size={14} color={GREEN_DARK} />
-              <Text style={{ marginLeft: 6, fontSize: rf(12.5), fontWeight: '800', color: GREEN_DARK }}>
+            <Pressable onPress={() => onSetDefault(a.id)} className="active:opacity-70" style={action}>
+              <Circle size={13} color={GREEN_TEXT} />
+              <Text style={{ marginLeft: 5, fontSize: rf(11.5), fontWeight: '800', color: GREEN_TEXT }}>
                 Set default
               </Text>
             </Pressable>
-            <View style={{ width: 1, backgroundColor: '#F1F5F9' }} />
+            <View style={{ width: 1, backgroundColor: BRAND.line }} />
           </>
         ) : null}
-        <Pressable
-          onPress={onEdit}
-          style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 6 }}
-        >
-          <Pencil size={13} color="#0F172A" />
-          <Text style={{ marginLeft: 6, fontSize: rf(12.5), fontWeight: '800', color: '#0F172A' }}>Edit</Text>
+        <Pressable onPress={onEdit} className="active:opacity-70" style={action}>
+          <Pencil size={12} color={BRAND.ink} />
+          <Text style={{ marginLeft: 5, fontSize: rf(11.5), fontWeight: '800', color: BRAND.ink }}>Edit</Text>
         </Pressable>
-        <View style={{ width: 1, backgroundColor: '#F1F5F9' }} />
-        <Pressable
-          onPress={() => onDelete(a.id)}
-          style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 6 }}
-        >
-          <Trash2 size={13} color="#EF4444" />
-          <Text style={{ marginLeft: 6, fontSize: rf(12.5), fontWeight: '800', color: '#EF4444' }}>Delete</Text>
+        <View style={{ width: 1, backgroundColor: BRAND.line }} />
+        <Pressable onPress={() => onDelete(a.id)} className="active:opacity-70" style={action}>
+          <Trash2 size={12} color={BRAND.red} />
+          <Text style={{ marginLeft: 5, fontSize: rf(11.5), fontWeight: '800', color: BRAND.red }}>Delete</Text>
         </Pressable>
       </View>
     </View>
@@ -217,7 +152,7 @@ export default function ManageAddressScreen({ navigation }) {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+      <View style={{ flex: 1, backgroundColor: BRAND.bg }}>
         <ScreenHeader navigation={navigation} count={0} />
         <Loader label="Loading addresses..." />
       </View>
@@ -225,40 +160,41 @@ export default function ManageAddressScreen({ navigation }) {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+    <View style={{ flex: 1, backgroundColor: BRAND.bg }}>
       <ScreenHeader navigation={navigation} count={items.length} />
 
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+        contentContainerStyle={{ padding: 12, paddingBottom: 28 }}
         showsVerticalScrollIndicator={false}
       >
         <Pressable
           onPress={() => navigation.navigate('AddressForm', {})}
+          className="active:opacity-85"
           style={{
             flexDirection: 'row', alignItems: 'center',
-            backgroundColor: '#fff', borderRadius: 16,
-            paddingVertical: 14, paddingHorizontal: 14,
-            marginBottom: 16,
-            borderWidth: 1, borderColor: '#BBF7D0',
+            backgroundColor: '#F4FBF5', borderRadius: 14,
+            paddingVertical: 8, paddingHorizontal: 10,
+            marginBottom: 10,
+            borderWidth: 1, borderColor: GREEN_LINE,
             borderStyle: 'dashed',
           }}
         >
           <View
             style={{
-              height: 36, width: 36, borderRadius: 18,
-              backgroundColor: '#DCFCE7',
+              height: 30, width: 30, borderRadius: 15,
+              backgroundColor: MINT,
               alignItems: 'center', justifyContent: 'center',
-              marginRight: 10,
+              marginRight: 9,
             }}
           >
-            <Plus size={18} color={GREEN_DARK} />
+            <Plus size={16} color={GREEN_TEXT} strokeWidth={2.5} />
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: rf(14), fontWeight: '800', color: GREEN_DARK }}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={{ fontSize: rf(13), fontWeight: '800', color: GREEN_TEXT }} numberOfLines={1}>
               Add a new address
             </Text>
-            <Text style={{ fontSize: rf(11.5), color: '#64748B', marginTop: 2 }}>
+            <Text style={{ fontSize: rf(10.5), color: BRAND.muted, marginTop: 1 }} numberOfLines={1}>
               Save home, office, or any other location
             </Text>
           </View>
@@ -266,7 +202,9 @@ export default function ManageAddressScreen({ navigation }) {
 
         {items.length === 0 ? (
           <EmptyState
-            icon={<MapPin size={28} color={GREEN} />}
+            icon={<MapPin size={28} color={BRAND.green} />}
+            accent={BRAND.green}
+            accentSoft={MINT}
             title="No addresses yet"
             description="Add one to get started with pickup and delivery."
           />

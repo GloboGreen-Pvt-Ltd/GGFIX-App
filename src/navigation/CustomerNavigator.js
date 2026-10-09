@@ -5,12 +5,14 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Home as HomeIcon, Tag, ShoppingBag, Wrench, User } from 'lucide-react-native';
 import colors from '../theme/colors';
-import BackButton from '../components/BackButton';
+import PageHeader from '../components/PageHeader';
+import { HEADER_SUBTITLES } from './headerSubtitles';
 import { rf } from '../utils/responsive';
 
-const TAB_GREEN = '#004C40';
-const TAB_GREEN_DARK = '#004C40';
-const TAB_GREEN_SOFT = '#DCFCE7';
+// Brand palette: #078F23 active icon/label (#09AD2A shaded for legibility), #EAF8EC pill.
+const TAB_GREEN_DARK = '#078F23';
+const TAB_GREEN_SOFT = '#EAF8EC';
+const TAB_INACTIVE = '#8E8E8E';
 
 // Tab root screens
 import HomeScreen from '../screens/customer/HomeScreen';
@@ -74,6 +76,9 @@ import SellAddressScreen from '../screens/customer/sell/SellAddressScreen';
 import SellCompleteScreen from '../screens/customer/sell/SellCompleteScreen';
 import SellOrderDetailsScreen from '../screens/customer/sell/SellOrderDetailsScreen';
 import SellSuccessScreen from '../screens/customer/sell/SellSuccessScreen';
+import BuyOrderSuccessScreen from '../screens/customer/buy/BuyOrderSuccessScreen';
+import SearchScreen from '../screens/customer/search/SearchScreen';
+import ScanScreen from '../screens/customer/search/ScanScreen';
 import SellQuotationScreen from '../screens/customer/sell/SellQuotationScreen';
 import SellSelectShopScreen from '../screens/customer/sell/SellSelectShopScreen';
 
@@ -141,8 +146,8 @@ function CustomTabBar({ state, navigation }) {
           flexDirection: 'row', alignItems: 'center',
           backgroundColor: '#FFFFFF', borderRadius: 30,
           paddingHorizontal: TAB_HPAD, height: 62,
-          borderWidth: 1, borderColor: 'rgba(15, 23, 42, 0.06)',
-          shadowColor: '#0F172A', shadowOpacity: 0.12, shadowRadius: 16,
+          borderWidth: 1, borderColor: 'rgba(30, 30, 30, 0.06)',
+          shadowColor: '#1E1E1E', shadowOpacity: 0.12, shadowRadius: 16,
           shadowOffset: { width: 0, height: 8 }, elevation: 12,
         }}
       >
@@ -154,7 +159,7 @@ function CustomTabBar({ state, navigation }) {
               position: 'absolute', top: 8, left: 0,
               width: slot - TAB_PILL_INSET * 2, height: 46, borderRadius: 18,
               backgroundColor: TAB_GREEN_SOFT,
-              borderWidth: 1, borderColor: 'rgba(22, 163, 74, 0.14)',
+              borderWidth: 1, borderColor: 'rgba(9, 173, 42, 0.18)',
               transform: [{ translateX }],
             }}
           />
@@ -179,11 +184,11 @@ function CustomTabBar({ state, navigation }) {
               onLongPress={onLongPress}
               style={{ width: slot, height: 46, alignItems: 'center', justifyContent: 'center' }}
             >
-              <Icon size={21} color={focused ? TAB_GREEN_DARK : '#94A3B8'} strokeWidth={2} />
+              <Icon size={21} color={focused ? TAB_GREEN_DARK : TAB_INACTIVE} strokeWidth={2} />
               <Text
                 numberOfLines={1}
                 allowFontScaling={false}
-                style={{ fontSize: rf(10.5), marginTop: 3, color: focused ? TAB_GREEN_DARK : '#94A3B8', fontWeight: focused ? '800' : '600' }}
+                style={{ fontSize: rf(10.5), marginTop: 3, color: focused ? TAB_GREEN_DARK : TAB_INACTIVE, fontWeight: focused ? '800' : '600' }}
               >
                 {label}
               </Text>
@@ -220,19 +225,22 @@ function CustomerTabs({ onLogout }) {
 export default function CustomerNavigator({ session, onLogout }) {
   return (
     <Stack.Navigator
-      screenOptions={({ navigation }) => ({
-        headerStyle: { backgroundColor: colors.headerBg, height: 52 },
-        headerShadowVisible: false,
-        headerTintColor: colors.headerText,
-        headerTitleStyle: { fontSize: rf(15), fontWeight: '700', color: colors.headerText },
-        headerTitleAlign: 'center',
+      screenOptions={{
+        // Every stack page gets the same header: back · title + subtitle · action.
+        // Screens can set `subtitle`, `headerRight` and `headerBackAction`
+        // (replaces goBack, e.g. "always go Home") through their options;
+        // `headerSideWidth` widens both side slots for a text action (e.g. Skip).
+        header: ({ navigation, route, options, back }) => (
+          <PageHeader
+            title={options.title ?? route.name}
+            subtitle={options.subtitle ?? HEADER_SUBTITLES[route.name]}
+            onBack={options.headerBackAction || (back ? () => navigation.goBack() : undefined)}
+            right={options.headerRight ? options.headerRight({ canGoBack: !!back }) : null}
+            sideWidth={options.headerSideWidth}
+          />
+        ),
         contentStyle: { backgroundColor: colors.background },
-        headerLeft: () => {
-          if (!navigation.canGoBack()) return null;
-          return <BackButton onPress={() => navigation.goBack()} />;
-        },
-        headerBackVisible: false,
-      })}
+      }}
     >
       <Stack.Screen name="CustomerTabs" options={{ headerShown: false }}>
         {(props) => <CustomerTabs {...props} session={session} onLogout={onLogout} />}
@@ -257,7 +265,9 @@ export default function CustomerNavigator({ session, onLogout }) {
       {/* MyOrders renders its own AppHeader (title + subtitle + back) — hide
           the stack header to avoid the duplicate "My Orders" bar above it. */}
       <Stack.Screen name="MyOrders" component={MyOrdersScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="MyCart" component={MyCartScreen} options={{ headerShown: false }} />
+      {/* Same screen, repair bookings only (Service / Pickup / Enquiry). */}
+      <Stack.Screen name="RepairOrders" component={MyOrdersScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="MyCart" component={MyCartScreen} options={{ title: 'My Cart' }} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ headerShown: false }} />
 
       {/* Device wizard */}
@@ -281,8 +291,8 @@ export default function CustomerNavigator({ session, onLogout }) {
       <Stack.Screen name="RepairOrderDetails" component={RepairOrderDetailsScreen} options={{ title: 'View Details' }} />
       <Stack.Screen name="ServiceTicketDetails" component={ServiceTicketDetailsScreen} options={{ title: 'View Details' }} />
       <Stack.Screen name="RepairOrderHistory" component={RepairOrderHistoryScreen} options={{ title: 'Service History' }} />
-      <Stack.Screen name="RepairPickupStatus" component={RepairPickupStatusScreen} options={{ title: 'Pickup Status' }} />
-      <Stack.Screen name="RepairEstimate" component={RepairEstimateScreen} options={{ title: 'Repair Estimate' }} />
+      <Stack.Screen name="RepairPickupStatus" component={RepairPickupStatusScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="RepairEstimate" component={RepairEstimateScreen} options={{ headerShown: false }} />
       <Stack.Screen name="ServiceReceipt" component={ServiceReceiptScreen} options={{ title: 'Receipt' }} />
       <Stack.Screen name="InvoiceReceipt" component={InvoiceReceiptScreen} options={{ title: 'Invoice Receipt' }} />
       <Stack.Screen name="ShopChat" component={ShopChatScreen} options={{ headerShown: false }} />
@@ -294,13 +304,16 @@ export default function CustomerNavigator({ session, onLogout }) {
       <Stack.Screen name="SellScreening" component={SellScreeningScreen} options={{ title: 'Screening Question' }} />
       <Stack.Screen name="SellScreenCondition" component={SellScreenConditionScreen} options={{ title: 'Screen' }} />
       <Stack.Screen name="SellFunctional" component={SellFunctionalScreen} options={{ title: 'Functional' }} />
-      <Stack.Screen name="SellDeviceConfig" component={SellDeviceConfigScreen} options={{ title: 'Device Configuration' }} />
+      <Stack.Screen name="SellDeviceConfig" component={SellDeviceConfigScreen} options={{ headerShown: false }} />
       <Stack.Screen name="SellAccessoriesWarranty" component={SellAccessoriesWarrantyScreen} options={{ title: 'Accessoires & Warranty' }} />
       <Stack.Screen name="SellImages" component={SellImagesScreen} options={{ title: 'Sell Device Images' }} />
       <Stack.Screen name="SellAddress" component={SellAddressScreen} options={{ title: 'Select Address' }} />
       <Stack.Screen name="SellComplete" component={SellCompleteScreen} options={{ title: 'Complete Order' }} />
       <Stack.Screen name="SellOrderDetails" component={SellOrderDetailsScreen} options={{ title: 'Sell Device Details' }} />
       <Stack.Screen name="SellSuccess" component={SellSuccessScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="BuyOrderSuccess" component={BuyOrderSuccessScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Search" component={SearchScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Scan" component={ScanScreen} options={{ headerShown: false }} />
       <Stack.Screen name="SellQuotation" component={SellQuotationScreen} options={{ title: 'View Quotation Report' }} />
       <Stack.Screen name="SellSelectShop" component={SellSelectShopScreen} options={{ title: 'Select Sell Shop' }} />
 

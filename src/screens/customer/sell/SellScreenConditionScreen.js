@@ -2,10 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Smartphone, Hand, TabletSmartphone, Frame, BatteryMedium, Camera, Plug, ClipboardCheck, Check } from 'lucide-react-native';
 import colors from '../../../theme/colors';
 import { Card, PrimaryButton, Loader } from '../../../components/ui';
 import { getConditionGroups, getConditionOptions } from '../../../api/masterData';
 import { rf, rlh } from '../../../utils/responsive';
+import { BRAND, BRAND_FLOW } from '../../../theme/brand';
+import { FLOW, cardShadow, FlowCta, FlowDecor, FlowHeader, useHideStackHeader } from '../service-booking-customer/FlowChrome';
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
@@ -14,10 +17,10 @@ const styles = StyleSheet.create({
   optTile: { width: '31.33%', marginHorizontal: '1%', marginBottom: 6, paddingVertical: 7, paddingHorizontal: 4, borderWidth: 1, borderColor: colors.border, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', minHeight: 44 },
   optTileActive: { borderColor: '#004C40', borderWidth: 2 },
   optLabel: { fontSize: rf(10), lineHeight: rlh(13), color: colors.text, textAlign: 'center', fontWeight: '600' },
-  editBanner: { backgroundColor: '#FEF3C7', borderColor: '#FCD34D', borderWidth: 1, borderRadius: 10, padding: 10, marginBottom: 4, flexDirection: 'row', alignItems: 'center' },
-  editBannerTitle: { fontSize: rf(10), fontWeight: '800', color: '#92400E', letterSpacing: 0.5 },
-  editBannerText: { fontSize: rf(12), color: colors.text, fontWeight: '600', marginTop: 2 },
-  bottom: { padding: 12, backgroundColor: '#fff', borderTopColor: colors.border, borderTopWidth: 1 },
+  editBanner: { backgroundColor: BRAND.yellowSoft, borderColor: BRAND.yellowLine, borderWidth: 1, borderRadius: 12, padding: 10, marginBottom: 4, flexDirection: 'row', alignItems: 'center' },
+  editBannerTitle: { fontSize: rf(10), fontWeight: '800', color: BRAND.ink, letterSpacing: 0.5 },
+  editBannerText: { fontSize: rf(12), color: BRAND.ink, fontWeight: '600', marginTop: 2 },
+  bottom: { padding: 12, backgroundColor: '#fff', borderTopColor: BRAND.line, borderTopWidth: 1 },
 });
 
 const FALLBACK_GROUPS = [
@@ -41,6 +44,7 @@ const sortGroups = (arr) => [...arr].sort((a, b) => orderRank(a) - orderRank(b))
 export default function SellScreenConditionScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const params = route.params || {};
+  useHideStackHeader(navigation);
   const { editSellOrderId, editHints } = params;
   const isEditing = !!editSellOrderId;
   const [groups, setGroups] = useState([]);
@@ -111,12 +115,37 @@ export default function SellScreenConditionScreen({ navigation, route }) {
 
   if (loading) return <Loader />;
 
+  // ---- presentation-only values ----
+  const groupIcon = (g) => {
+    const n = `${g.name || ''} ${g.code || ''}`.toLowerCase();
+    if (n.includes('touch')) return Hand;
+    if (n.includes('screen') || n.includes('display')) return Smartphone;
+    if (n.includes('back') || n.includes('body')) return TabletSmartphone;
+    if (n.includes('side') || n.includes('center') || n.includes('frame')) return Frame;
+    if (n.includes('battery') || n.includes('power')) return BatteryMedium;
+    if (n.includes('camera')) return Camera;
+    if (n.includes('charg') || n.includes('connect')) return Plug;
+    return ClipboardCheck;
+  };
+  // Column count per group from its longest option label, so short options
+  // sit side by side and long ones get a full-width row (never truncated).
+  const colsFor = (opts) => {
+    const longest = opts.reduce((m, o) => Math.max(m, String(o.label || '').length), 0);
+    if (opts.length <= 1) return 1;
+    if (longest <= 14 || (opts.length === 3 && longest <= 20)) return 3;
+    if (longest <= 24) return 2;
+    return 1;
+  };
+  const continueDisabled = groups.some((g) => !selected[g.id]);
+
   return (
-    <View style={styles.container}>
-      <ScrollView contentContainerStyle={{ padding: 12 }}>
+    <View style={{ flex: 1, backgroundColor: BRAND.bg }}>
+      <FlowDecor palette={BRAND_FLOW} />
+      <FlowHeader title="Screen" navigation={navigation} />
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 4, paddingBottom: 20 }}>
         {isEditing ? (
           <View style={styles.editBanner}>
-            <Ionicons name="create-outline" size={16} color="#92400E" />
+            <Ionicons name="create-outline" size={16} color={BRAND.ink} />
             <View style={{ flex: 1, marginLeft: 8 }}>
               <Text style={styles.editBannerTitle}>EDITING ORDER</Text>
               <Text style={styles.editBannerText}>Your previous condition picks are pre-selected.</Text>
@@ -125,25 +154,52 @@ export default function SellScreenConditionScreen({ navigation, route }) {
         ) : null}
         {groups.map((g) => {
           const opts = (optsByGroup[g.id]?.length ? optsByGroup[g.id] : (g.options || []).map((o, i) => ({ id: `${g.id}-${i}`, label: o })));
+          const GIcon = groupIcon(g);
+          const cols = colsFor(opts);
           return (
-            <Card key={g.id} style={{ padding: 10, marginVertical: 4 }}>
-              <Text style={styles.groupTitle}>{g.name}</Text>
-              <View style={styles.row}>
+            <View key={g.id} style={{ backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#E6E6E6', padding: 11, marginTop: 8, ...cardShadow }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 7 }}>
+                <View style={{ height: 30, width: 30, borderRadius: 10, backgroundColor: BRAND.greenSoft, alignItems: 'center', justifyContent: 'center', marginRight: 9 }}>
+                  <GIcon size={15} color={BRAND.green} />
+                </View>
+                <Text style={{ flex: 1, fontSize: rf(13.5), fontWeight: '800', color: BRAND.ink }}>{g.name}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -3 }}>
                 {opts.map((o) => {
                   const active = selected[g.id]?.id === o.id;
                   return (
-                    <TouchableOpacity key={o.id} style={[styles.optTile, active && styles.optTileActive]} onPress={() => setSelected({ ...selected, [g.id]: { id: o.id, label: o.label, groupCode: g.code, groupName: g.name } })}>
-                      <Text style={styles.optLabel}>{o.label}</Text>
-                    </TouchableOpacity>
+                    <View key={o.id} style={{ width: `${100 / cols}%`, padding: 3 }}>
+                      <TouchableOpacity
+                        activeOpacity={0.85}
+                        onPress={() => setSelected({ ...selected, [g.id]: { id: o.id, label: o.label, groupCode: g.code, groupName: g.name } })}
+                        style={{
+                          flexDirection: 'row', alignItems: 'center', minHeight: 40, borderRadius: 12,
+                          paddingVertical: 7, paddingHorizontal: cols === 3 ? 7 : 10,
+                          backgroundColor: active ? BRAND.greenSoft : BRAND.bg,
+                          borderWidth: active ? 1.5 : 1, borderColor: active ? BRAND.green : BRAND.line,
+                        }}
+                      >
+                        {active ? (
+                          <View style={{ height: 18, width: 18, borderRadius: 9, backgroundColor: BRAND.green, alignItems: 'center', justifyContent: 'center' }}>
+                            <Check size={11} color="#fff" strokeWidth={3} />
+                          </View>
+                        ) : (
+                          <View style={{ height: 18, width: 18, borderRadius: 9, borderWidth: 2, borderColor: BRAND.ring }} />
+                        )}
+                        <Text style={{ flex: 1, marginLeft: cols === 3 ? 6 : 8, fontSize: rf(cols === 3 ? 11.5 : 12.5), lineHeight: rlh(cols === 3 ? 14 : 16), fontWeight: active ? '700' : '600', color: active ? BRAND.ink : BRAND.body }}>
+                          {o.label}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   );
                 })}
               </View>
-            </Card>
+            </View>
           );
         })}
       </ScrollView>
-      <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 12) + 8 }]}>
-        <PrimaryButton title="Continue →" disabled={groups.some((g) => !selected[g.id])} onPress={() => navigation.navigate('SellFunctional', { ...params, conditions: Object.values(selected).map((s) => ({ groupCode: s.groupCode, optionId: s.id, optionLabel: s.label, groupName: s.groupName })) })} />
+      <View style={[styles.bottom, { paddingHorizontal: 12, paddingBottom: Math.max(insets.bottom, 10) + 6, shadowColor: BRAND.ink, shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: -4 }, elevation: 12 }]}>
+        <FlowCta palette={BRAND_FLOW} title="Continue" disabled={continueDisabled} onPress={() => navigation.navigate('SellFunctional', { ...params, conditions: Object.values(selected).map((s) => ({ groupCode: s.groupCode, optionId: s.id, optionLabel: s.label, groupName: s.groupName })) })} />
       </View>
     </View>
   );

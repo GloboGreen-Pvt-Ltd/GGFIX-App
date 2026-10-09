@@ -1,25 +1,28 @@
 import React, { useCallback, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import {
-  Bell, PackageCheck, Tag, ShieldCheck, CheckCircle2, ArrowLeft,
+  Bell, PackageCheck, Tag, ShieldCheck, CheckCircle2,
 } from 'lucide-react-native';
 import { EmptyState, Badge, Loader } from '../../../components/rnr';
 import { listNotifications, markNotificationRead, markAllNotificationsRead } from '../../../api/notifications';
 import { rf, rlh } from '../../../utils/responsive';
+import PageHeader from '../../../components/PageHeader';
+import { BRAND } from '../../../theme/brand';
 
-const GREEN = '#004C40';
-const GREEN_LIGHT = '#00695C';
-const GREEN_DARK = '#003830';
+// Brand palette (09AD2A · 1E1E1E · F8F8F8 · F3F3F3 · F3BF23 · F84141).
+const GREEN = BRAND.green;
+const GREEN_DARK = '#078F23'; // green text on white (#09AD2A shaded)
+const MINT = '#EAF8EC';
+const LINE = '#E6E6E6';
+const MUTED = '#6B6B6B';
 
 const FILTERS = ['All', 'Orders', 'Offers', 'System'];
 
 const META_BY_TYPE = {
-  orders: { icon: PackageCheck, color: GREEN_DARK, bg: '#DCFCE7' },
-  offers: { icon: Tag,          color: '#C2410C',  bg: '#FFEDD5' },
-  system: { icon: ShieldCheck,  color: '#7C3AED',  bg: '#F5F3FF' },
+  orders: { icon: PackageCheck, color: GREEN_DARK,   bg: MINT },
+  offers: { icon: Tag,          color: BRAND.yellow, bg: '#FEF6DA' },
+  system: { icon: ShieldCheck,  color: BRAND.ink,    bg: BRAND.line },
 };
 
 const ago = (v) => {
@@ -36,65 +39,27 @@ const ago = (v) => {
 
 function NotifHeader({ navigation, unreadCount }) {
   return (
-    <SafeAreaView edges={['top']} style={{ backgroundColor: GREEN_DARK }}>
-      <LinearGradient
-        colors={[GREEN_DARK, GREEN, GREEN_LIGHT]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={{
-          paddingTop: 12,
-          paddingBottom: 18,
-          borderBottomLeftRadius: 24,
-          borderBottomRightRadius: 24,
-        }}
-      >
-        <View style={{ paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center' }}>
-          <Pressable
-            onPress={() => navigation.goBack()}
-            style={{
-              height: 36, width: 36, borderRadius: 18,
-              backgroundColor: 'rgba(255,255,255,0.18)',
-              alignItems: 'center', justifyContent: 'center',
-              marginRight: 10,
-            }}
-          >
-            <ArrowLeft size={18} color="#fff" />
-          </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: '#fff', fontSize: rf(12.5), fontWeight: '800', letterSpacing: 0.6 }}>
-              NOTIFICATIONS
-            </Text>
-            <Text style={{ color: '#fff', fontSize: rf(19), fontWeight: '800', marginTop: 2, letterSpacing: -0.2 }}>
-              {unreadCount ? `${unreadCount} unread update${unreadCount > 1 ? 's' : ''}` : 'Stay in the loop'}
-            </Text>
-          </View>
-          <View
-            style={{
-              height: 36, width: 36, borderRadius: 18,
-              backgroundColor: 'rgba(255,255,255,0.18)',
-              alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <Bell size={18} color="#fff" />
-          </View>
-        </View>
-      </LinearGradient>
-    </SafeAreaView>
+    <PageHeader
+      title="Notifications"
+      subtitle={unreadCount ? `${unreadCount} unread update${unreadCount > 1 ? 's' : ''}` : 'Stay in the loop'}
+      onBack={() => navigation.goBack()}
+    />
   );
 }
 
+
 function FilterPill({ label, active, onPress }) {
   return (
-    <Pressable onPress={onPress}>
+    <Pressable onPress={onPress} className="active:opacity-80" accessibilityRole="button" accessibilityState={{ selected: active }}>
       <View
         style={{
-          paddingHorizontal: 14, paddingVertical: 8,
-          borderRadius: 999, marginRight: 8,
+          paddingHorizontal: 13, paddingVertical: 7,
+          borderRadius: 999, marginRight: 7,
           backgroundColor: active ? GREEN : '#fff',
-          borderWidth: 1, borderColor: active ? GREEN : '#E5E7EB',
+          borderWidth: 1, borderColor: active ? GREEN : LINE,
         }}
       >
-        <Text style={{ fontSize: rf(12), fontWeight: '800', color: active ? '#fff' : '#0F172A' }}>
+        <Text style={{ fontSize: rf(12), fontWeight: '800', color: active ? '#fff' : BRAND.ink }}>
           {label}
         </Text>
       </View>
@@ -137,7 +102,7 @@ export default function NotificationsScreen({ navigation }) {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+      <View style={{ flex: 1, backgroundColor: BRAND.bg }}>
         <NotifHeader navigation={navigation} unreadCount={0} />
         <Loader label="Loading notifications..." />
       </View>
@@ -150,18 +115,18 @@ export default function NotificationsScreen({ navigation }) {
   });
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+    <View style={{ flex: 1, backgroundColor: BRAND.bg }}>
       <NotifHeader navigation={navigation} unreadCount={unreadCount} />
 
       <View
         style={{
-          backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F1F5F9',
+          backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: LINE,
         }}
       >
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 14, paddingVertical: 12 }}
+          contentContainerStyle={{ paddingHorizontal: 14, paddingVertical: 10 }}
         >
           {FILTERS.map((f) => (
             <FilterPill key={f} label={f} active={filter === f} onPress={() => setFilter(f)} />
@@ -172,13 +137,15 @@ export default function NotificationsScreen({ navigation }) {
       {visible.length === 0 ? (
         <EmptyState
           icon={<Bell size={28} color={GREEN} />}
+          accent={GREEN}
+          accentSoft={MINT}
           title="You're all caught up"
           description="We'll ping you when something new happens with your bookings."
         />
       ) : (
         <ScrollView
-          contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={GREEN} />}
+          contentContainerStyle={{ padding: 14, paddingBottom: 32 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#09AD2A" colors={['#09AD2A']} />}
         >
           <View
             style={{
@@ -186,11 +153,11 @@ export default function NotificationsScreen({ navigation }) {
               marginBottom: 10, paddingHorizontal: 2,
             }}
           >
-            <Text style={{ fontSize: rf(12), color: '#64748B', fontWeight: '600' }}>
+            <Text style={{ fontSize: rf(12), color: MUTED, fontWeight: '600' }}>
               {visible.length} notification{visible.length > 1 ? 's' : ''}
             </Text>
             {unreadCount > 0 ? (
-              <Pressable onPress={onMarkAll} style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Pressable onPress={onMarkAll} className="active:opacity-70" style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <CheckCircle2 size={14} color={GREEN_DARK} />
                 <Text style={{ fontSize: rf(12), fontWeight: '800', color: GREEN_DARK, marginLeft: 4 }}>
                   Mark all read
@@ -203,40 +170,40 @@ export default function NotificationsScreen({ navigation }) {
             const meta = META_BY_TYPE[n.type] || META_BY_TYPE.orders;
             const Icon = meta.icon;
             return (
-              <Pressable key={n.id} onPress={() => onOpen(n)}>
+              <Pressable key={n.id} onPress={() => onOpen(n)} className="active:opacity-90">
                 <View
                   style={{
-                    backgroundColor: '#fff', borderRadius: 16,
-                    padding: 12, marginBottom: 10,
+                    backgroundColor: !n.read ? '#F7FCF8' : '#fff', borderRadius: 14,
+                    padding: 11, marginBottom: 9,
                     borderWidth: 1,
-                    borderColor: !n.read ? '#BBF7D0' : '#F1F5F9',
-                    shadowColor: '#0F172A', shadowOpacity: 0.04,
-                    shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 2,
+                    borderColor: !n.read ? 'rgba(9,173,42,0.45)' : LINE,
+                    shadowColor: BRAND.ink, shadowOpacity: 0.04,
+                    shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1,
                   }}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
                     <View
                       style={{
-                        height: 40, width: 40, borderRadius: 20,
+                        height: 36, width: 36, borderRadius: 18,
                         backgroundColor: meta.bg,
                         alignItems: 'center', justifyContent: 'center',
-                        marginRight: 12,
+                        marginRight: 10,
                       }}
                     >
-                      <Icon size={18} color={meta.color} />
+                      <Icon size={17} color={meta.color} />
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <Text
                           numberOfLines={1}
-                          style={{ flex: 1, fontSize: rf(13.5), fontWeight: '800', color: '#0F172A' }}
+                          style={{ flex: 1, fontSize: rf(13.5), fontWeight: '800', color: BRAND.ink }}
                         >
                           {n.title}
                         </Text>
                         {!n.read ? (
                           <View
                             style={{
-                              backgroundColor: '#DCFCE7', borderRadius: 999,
+                              backgroundColor: MINT, borderRadius: 999,
                               paddingHorizontal: 8, paddingVertical: 2,
                               marginLeft: 6,
                             }}
@@ -248,11 +215,11 @@ export default function NotificationsScreen({ navigation }) {
                         ) : null}
                       </View>
                       {n.body ? (
-                        <Text style={{ fontSize: rf(12), color: '#64748B', marginTop: 4, lineHeight: rlh(18) }}>
+                        <Text style={{ fontSize: rf(12), color: MUTED, marginTop: 3, lineHeight: rlh(17) }}>
                           {n.body}
                         </Text>
                       ) : null}
-                      <Text style={{ fontSize: rf(10.5), color: '#94A3B8', marginTop: 6 }}>
+                      <Text style={{ fontSize: rf(10.5), color: 'rgba(30,30,30,0.45)', marginTop: 5 }}>
                         {ago(n.createdAt)}
                       </Text>
                     </View>

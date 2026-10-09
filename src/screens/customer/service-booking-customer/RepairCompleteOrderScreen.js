@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Image, ScrollView, Text, View } from 'react-native';
-import { Smartphone, MapPin, Store, Calendar, Wrench, ShieldCheck, Tag, Truck, Phone, Camera, Video } from 'lucide-react-native';
+import { Smartphone, MapPin, Store, Calendar, Wrench, ShieldCheck, Tag, Truck, Phone, Camera, Video, ChevronRight, User, Home } from 'lucide-react-native';
 import { notify } from '../../../components/confirm';
 import {
   Card,
@@ -13,10 +13,31 @@ import {
   useBottomBarInset,
 } from '../../../components/rnr';
 import { createRepairBooking } from '../../../api/orders';
+import { TYPED_DEVICE_TAG, typedDeviceLine } from '../../../utils/typedDevice';
 import { listAddresses } from '../../../api/customer';
 import { getShop } from '../../../api/shops';
 import { uploadMedia } from '../../../api/masterData';
 import { rf } from '../../../utils/responsive';
+import { FLOW as BASE_FLOW, FlowCta, FlowDecor, FlowHeader, useHideStackHeader } from './FlowChrome';
+import { BRAND, BRAND_FLOW } from '../../../theme/brand';
+
+// Brand palette in the FLOW shape (09AD2A · 1E1E1E · F8F8F8 · F3F3F3 · F3BF23 · F84141).
+const FLOW = {
+  ...BASE_FLOW,
+  primary: BRAND.green,
+  deep: '#078F23', // green text / icons (#09AD2A shaded)
+  ink: BRAND.ink,
+  muted: '#6B6B6B',
+  mint: '#EAF8EC',
+  softMint: '#F4FBF5',
+  tint: '#F4FBF5',
+  border: '#E6E6E6',
+  bg: BRAND.bg,
+};
+const GREEN_LINE = 'rgba(9,173,42,0.45)';
+const YELLOW_SOFT = '#FEF6DA';
+const RED_SOFT = '#FEECEC';
+const cardShadow = { shadowColor: BRAND.ink, shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1 };
 
 function formatTime(t) {
   if (!t) return '';
@@ -26,6 +47,7 @@ function formatTime(t) {
 export default function RepairCompleteOrderScreen({ navigation, route }) {
   const bottomSpace = useBottomBarInset(96);
   const p = route.params || {};
+  useHideStackHeader(navigation);
   const [shop, setShop] = useState(null);
   const [addr, setAddr] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -61,6 +83,11 @@ export default function RepairCompleteOrderScreen({ navigation, route }) {
       const allSvcs = p.services || [];
       const realSvcs = allSvcs.filter((s) => !s.custom);
       const customSvcs = allSvcs.filter((s) => s.custom);
+      // An "Other" device (typed brand / model) has no catalogue ids, so its
+      // typed names ride along as labels and lead the free-text issueSummary,
+      // which is what the shop reads. Catalogue devices send exactly as before.
+      const d = p.device || {};
+      const typedDevice = typedDeviceLine(d);
       const payload = {
         shopId: p.shopId,
         brandId: p.device?.brandId,
@@ -68,8 +95,15 @@ export default function RepairCompleteOrderScreen({ navigation, route }) {
         ramOptionId: p.device?.ramOptionId,
         storageOptionId: p.device?.storageOptionId,
         color: p.device?.color,
+        ...(d.customModel ? {
+          brandName: d.brandName,
+          modelName: d.modelName,
+          ramLabel: d.ramLabel,
+          storageLabel: d.storageLabel,
+        } : {}),
         serviceMode: 'PICKUP',
         issueSummary: [
+          typedDevice ? `${TYPED_DEVICE_TAG}${typedDevice}` : null,
           realSvcs.map((s) => s.name).join(', '),
           ...customSvcs.map((s) => `Other${s.categoryName ? ` (${s.categoryName})` : ''}: ${s.name}`),
           p.device?.dead ? "Device reported dead / won't power on" : null,
@@ -99,155 +133,197 @@ export default function RepairCompleteOrderScreen({ navigation, route }) {
   const discount = Math.floor(servicesTotal * 0.15);
   const total = Math.max(servicesTotal + pickupFee - discount, 0);
 
+  // ---- presentation helpers (visual only) ----
+  const CardShell = ({ children, style }) => (
+    <View style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: FLOW.border, borderRadius: 16, padding: 11, marginBottom: 10, ...cardShadow, ...style }}>
+      {children}
+    </View>
+  );
+  const Tile = ({ Icon, tint = FLOW.mint, color = FLOW.deep, size = 34, fill }) => (
+    <View style={{ height: size, width: size, borderRadius: size / 2, backgroundColor: tint, alignItems: 'center', justifyContent: 'center', marginRight: 9 }}>
+      <Icon size={Math.round(size * 0.46)} color={color} fill={fill || 'transparent'} />
+    </View>
+  );
+  // Decorative chevron (these summary cards had no tap action before).
+  const Chev = () => (
+    <View pointerEvents="none" style={{ height: 26, width: 26, borderRadius: 13, backgroundColor: FLOW.mint, alignItems: 'center', justifyContent: 'center', marginLeft: 8 }}>
+      <ChevronRight size={15} color={FLOW.deep} />
+    </View>
+  );
+  const Line = ({ Icon, children, bold }) => (
+    <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 6 }}>
+      <Icon size={14} color={FLOW.muted} style={{ marginTop: 1 }} />
+      <Text style={{ flex: 1, marginLeft: 7, fontSize: rf(12), lineHeight: rf(17), color: bold ? FLOW.ink : BRAND.body, fontWeight: bold ? '700' : '400' }}>{children}</Text>
+    </View>
+  );
+  const addrRest = addr ? [addr.locality, addr.city, addr.state, addr.pincode].filter(Boolean).join(', ') : '';
+  const media = p.media || {};
+  const photoSlots = [
+    { key: 'front', label: 'Front', asset: media.front },
+    { key: 'back', label: 'Back', asset: media.back },
+    ...(media.video?.uri ? [{ key: 'video', label: 'Video', asset: media.video, isVideo: true }] : []),
+  ];
+
   return (
-    <View className="flex-1 bg-background">
-      <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: bottomSpace }}>
-        <View className="mb-3">
-          <Card className="rounded-2xl">
-            <View className="flex-row items-center">
-              <View className="h-14 w-14 rounded-2xl bg-primary/10 items-center justify-center mr-3 overflow-hidden">
-                {dev.imageUrl ? (
-                  <Image source={{ uri: dev.imageUrl }} style={{ width: 56, height: 56 }} resizeMode="cover" />
-                ) : (
-                  <Smartphone size={26} color="#00008B" />
-                )}
-              </View>
-              <View className="flex-1">
-                <Text className="text-text-muted uppercase tracking-widest" style={{ fontSize: rf(11) }}>Your Device</Text>
-                <Text className="font-extrabold text-text mt-0.5" style={{ fontSize: rf(15) }}>{dev.modelName || 'Device'}</Text>
-                {dev.color ? <Text className="text-text-muted mt-0.5" style={{ fontSize: rf(12) }}>Color: {dev.color}</Text> : null}
-              </View>
-            </View>
-          </Card>
-        </View>
-
-        <Card className="mb-3 rounded-2xl">
-          <View className="flex-row items-center mb-2">
-            <Wrench size={16} color="#00008B" />
-            <CardTitle className="ml-2">Repair Services</CardTitle>
+    <View style={{ flex: 1, backgroundColor: FLOW.bg }}>
+      <FlowDecor palette={BRAND_FLOW} />
+      <FlowHeader title="Complete Order" navigation={navigation} />
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: bottomSpace }}>
+        {/* Your device */}
+        <CardShell style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={{ height: 56, width: 56, borderRadius: 14, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: BRAND.line, alignItems: 'center', justifyContent: 'center', marginRight: 11, overflow: 'hidden' }}>
+            {dev.imageUrl ? (
+              <Image source={{ uri: dev.imageUrl }} style={{ width: 50, height: 52 }} resizeMode="contain" />
+            ) : (
+              <Smartphone size={24} color={FLOW.deep} />
+            )}
           </View>
-          {services.map((s, idx) => (
-            <View key={s.id || idx} className="flex-row items-center justify-between py-1.5">
-              <View className="flex-row items-center flex-1 pr-2">
-                <View className="h-1.5 w-1.5 rounded-full bg-primary mr-2" />
-                <Text className="text-text flex-1" style={{ fontSize: rf(13) }} numberOfLines={1}>{s.name}</Text>
-              </View>
-              {s.price != null ? (
-                <Text className="font-bold text-text" style={{ fontSize: rf(13) }}>₹{s.price}</Text>
-              ) : null}
-            </View>
-          ))}
-        </Card>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={{ fontSize: rf(9.5), color: FLOW.deep, letterSpacing: 1.2, fontWeight: '800' }}>YOUR DEVICE</Text>
+            <Text style={{ fontSize: rf(15.5), fontWeight: '800', color: FLOW.ink, marginTop: 1 }} numberOfLines={2}>{dev.modelName || 'Device'}</Text>
+            {dev.color ? <Text style={{ fontSize: rf(11.5), color: FLOW.muted, marginTop: 2 }}>Color: {dev.color}</Text> : null}
+          </View>
+          <Chev />
+        </CardShell>
 
-        {/* Device photos captured during review */}
-        {p.media && (p.media.front?.uri || p.media.back?.uri || p.media.video?.uri) ? (
-          <Card className="mb-3 rounded-2xl">
-            <View className="flex-row items-center mb-2">
-              <Camera size={16} color="#F59E0B" />
-              <CardTitle className="ml-2">Device Photos</CardTitle>
-            </View>
-            <View className="flex-row -mx-1">
-              {[
-                { key: 'front', label: 'Front', asset: p.media.front },
-                { key: 'back', label: 'Back', asset: p.media.back },
-                { key: 'video', label: 'Video', asset: p.media.video, isVideo: true },
-              ].map((m) => {
-                if (!m.asset?.uri) return null;
-                return (
-                  <View key={m.key} style={{ width: '33.333%' }} className="px-1">
-                    <View className="rounded-xl overflow-hidden border border-border" style={{ height: 96, backgroundColor: '#F8FAFC' }}>
-                      {m.isVideo ? (
-                        <View className="flex-1 bg-text/90 items-center justify-center">
-                          <Video size={22} color="#fff" />
-                          <Text className="text-white font-bold mt-0.5" style={{ fontSize: rf(9) }}>VIDEO</Text>
-                        </View>
-                      ) : (
-                        <Image source={{ uri: m.asset.uri }} style={{ flex: 1 }} resizeMode="cover" />
-                      )}
-                    </View>
-                    <Text className="font-bold text-text-muted text-center mt-1" style={{ fontSize: rf(10) }}>{m.label}</Text>
+        {/* Repair services */}
+        <CardShell>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Tile Icon={Wrench} />
+            <Text style={{ flex: 1, fontSize: rf(14.5), fontWeight: '800', color: FLOW.ink }}>Repair Services</Text>
+            <Chev />
+          </View>
+          <View style={{ paddingLeft: 43, marginTop: 2 }}>
+            {services.map((s, idx) => (
+              <View key={s.id || idx} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 3 }}>
+                <View style={{ height: 6, width: 6, borderRadius: 3, backgroundColor: BRAND.green, marginRight: 8 }} />
+                <Text style={{ flex: 1, fontSize: rf(12.5), color: FLOW.ink }} numberOfLines={2}>{s.name}</Text>
+                {s.price != null ? (
+                  <Text style={{ fontSize: rf(12.5), fontWeight: '800', color: FLOW.deep, marginLeft: 8 }}>₹{s.price}</Text>
+                ) : null}
+              </View>
+            ))}
+          </View>
+        </CardShell>
+
+        {/* Device photos — the captured images from Review (display only). */}
+        <CardShell>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Tile Icon={Camera} tint={YELLOW_SOFT} color={BRAND.yellow} />
+            <Text style={{ flex: 1, fontSize: rf(14.5), fontWeight: '800', color: FLOW.ink }}>Device Photos</Text>
+            <Chev />
+          </View>
+          <View style={{ flexDirection: 'row', marginTop: 9, marginHorizontal: -3 }}>
+            {photoSlots.map((m) => (
+              <View key={m.key} style={{ flex: 1, maxWidth: '50%', paddingHorizontal: 3 }}>
+                <View style={{ borderRadius: 13, borderWidth: 1, borderColor: FLOW.border, backgroundColor: BRAND.bg, padding: 3 }}>
+                  <View style={{ height: 76, borderRadius: 10, overflow: 'hidden', backgroundColor: BRAND.ink, alignItems: 'center', justifyContent: 'center' }}>
+                    {m.asset?.uri && !m.isVideo ? (
+                      <Image source={{ uri: m.asset.uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                    ) : (
+                      <>
+                        <View pointerEvents="none" style={{ position: 'absolute', top: 8, left: 8, right: 8, bottom: 8, borderRadius: 9, borderWidth: 1, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.35)' }} />
+                        {m.isVideo ? <Video size={24} color="#fff" /> : <Camera size={24} color="rgba(255,255,255,0.85)" />}
+                      </>
+                    )}
                   </View>
-                );
-              })}
-            </View>
-          </Card>
-        ) : null}
-
-        <Card className="mb-3 rounded-2xl">
-          <View className="flex-row items-center mb-2">
-            <MapPin size={16} color="#004C40" />
-            <CardTitle className="ml-2">Pickup Address</CardTitle>
-          </View>
-          {addr ? (
-            <>
-              <Text className="font-bold text-text" style={{ fontSize: rf(13) }}>{addr.fullName} · {addr.mobile}</Text>
-              <Text className="text-text-muted mt-1 leading-5" style={{ fontSize: rf(12) }}>
-                {[addr.addressLine, addr.locality, addr.city, addr.state, addr.pincode].filter(Boolean).join(', ')}
-              </Text>
-            </>
-          ) : (
-            <Text className="text-text-muted" style={{ fontSize: rf(12) }}>No address selected</Text>
-          )}
-        </Card>
-
-        <Card className="mb-3 rounded-2xl">
-          <View className="flex-row items-center mb-2">
-            <Store size={16} color="#2563EB" />
-            <CardTitle className="ml-2">Shop & Schedule</CardTitle>
-          </View>
-          {shop ? (
-            <>
-              <Text className="font-bold text-text" style={{ fontSize: rf(13) }}>{shop.name}</Text>
-              <Text className="text-text-muted mt-1" style={{ fontSize: rf(12) }}>{shop.address}</Text>
-              {(shop.mobile || shop.phone) ? (
-                <View className="flex-row items-center mt-1">
-                  <Phone size={12} color="#64748B" />
-                  <Text className="text-text-muted ml-1" style={{ fontSize: rf(12) }}>{shop.mobile || shop.phone}</Text>
+                  <Text style={{ fontSize: rf(11.5), fontWeight: '700', color: BRAND.body, textAlign: 'center', marginTop: 4, marginBottom: 1 }}>{m.label}</Text>
                 </View>
-              ) : null}
-            </>
-          ) : null}
-          <View className="flex-row items-center bg-secondary/5 border border-secondary/15 rounded-xl mt-3 px-3 py-2">
-            <Calendar size={14} color="#2563EB" />
-            <Text className="font-bold text-secondary ml-2" style={{ fontSize: rf(12) }}>
-              {p.pickupDate} · {formatTime(p.pickupSlotStart)} - {formatTime(p.pickupSlotEnd)}
-            </Text>
+              </View>
+            ))}
           </View>
-        </Card>
+        </CardShell>
 
-        <Card className="mb-3 rounded-2xl">
-          <View className="flex-row items-center mb-2">
-            <Tag size={16} color="#F59E0B" />
-            <CardTitle className="ml-2">Payment Summary</CardTitle>
+        {/* Pickup address */}
+        <CardShell>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Tile Icon={MapPin} tint={RED_SOFT} color={BRAND.red} />
+            <Text style={{ flex: 1, fontSize: rf(14.5), fontWeight: '800', color: FLOW.ink }}>Pickup Address</Text>
+            <Chev />
+          </View>
+          <View style={{ paddingLeft: 43 }}>
+            {addr ? (
+              <>
+                <Line Icon={User} bold>{addr.fullName} · {addr.mobile}</Line>
+                {addr.addressLine ? <Line Icon={Home}>{addr.addressLine}</Line> : null}
+                {addrRest ? <Line Icon={MapPin}>{addrRest}</Line> : null}
+              </>
+            ) : (
+              <Text style={{ fontSize: rf(12), color: FLOW.muted, marginTop: 5 }}>No address selected</Text>
+            )}
+          </View>
+        </CardShell>
+
+        {/* Shop & schedule */}
+        <CardShell>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Tile Icon={Store} />
+            <Text style={{ flex: 1, fontSize: rf(14.5), fontWeight: '800', color: FLOW.ink }}>Shop & Schedule</Text>
+            <Chev />
+          </View>
+          <View style={{ backgroundColor: BRAND.bg, borderWidth: 1, borderColor: FLOW.border, borderRadius: 13, padding: 10, marginTop: 9 }}>
+            {shop ? (
+              <>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Store size={15} color={FLOW.deep} />
+                  <Text style={{ flex: 1, marginLeft: 7, fontSize: rf(13), fontWeight: '800', color: FLOW.ink }} numberOfLines={2}>{shop.name}</Text>
+                </View>
+                {shop.address ? <Line Icon={MapPin}>{shop.address}</Line> : null}
+                {(shop.mobile || shop.phone) ? <Line Icon={Phone}>{shop.mobile || shop.phone}</Line> : null}
+                <View style={{ height: 1, backgroundColor: FLOW.border, marginTop: 9, marginBottom: 8 }} />
+              </>
+            ) : null}
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: FLOW.mint, borderRadius: 11, paddingVertical: 8, paddingHorizontal: 10 }}>
+              <Calendar size={17} color={FLOW.deep} />
+              <View style={{ marginLeft: 9, flex: 1, minWidth: 0 }}>
+                <Text style={{ fontSize: rf(10.5), color: FLOW.muted }}>Scheduled Date & Time</Text>
+                <Text style={{ fontSize: rf(13.5), fontWeight: '800', color: FLOW.deep, marginTop: 1 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+                  {p.pickupDate} · {formatTime(p.pickupSlotStart)} - {formatTime(p.pickupSlotEnd)}
+                </Text>
+              </View>
+            </View>
+          </View>
+        </CardShell>
+
+        {/* Payment summary (kept from the existing screen, restyled) */}
+        <CardShell>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+            <Tile Icon={Tag} tint={YELLOW_SOFT} color={BRAND.yellow} />
+            <Text style={{ flex: 1, fontSize: rf(14.5), fontWeight: '800', color: FLOW.ink }}>Payment Summary</Text>
           </View>
           <PriceRow label="Service charges" value={`₹${servicesTotal}`} />
-          <PriceRow label="Pickup & drop" value={pickupFee ? `₹${pickupFee}` : 'FREE'} valueClassName={pickupFee ? '' : 'text-success font-extrabold'} />
-          <PriceRow label="Coupon FIRSTFIX (15%)" value={`-₹${discount}`} valueClassName="text-success font-bold" />
+          <PriceRow label="Pickup & drop" value={pickupFee ? `₹${pickupFee}` : 'FREE'} valueClassName={pickupFee ? '' : 'font-extrabold'} valueStyle={pickupFee ? null : { color: FLOW.deep }} />
+          <PriceRow label="Coupon FIRSTFIX (15%)" value={`-₹${discount}`} valueClassName="font-bold" valueStyle={{ color: FLOW.deep }} />
           <PriceDivider />
           <PriceRow label="Total payable" value={`₹${total}`} bold />
-          <View className="bg-success/10 rounded-xl mt-2 p-2.5 flex-row items-center">
-            <ShieldCheck size={14} color="#004C40" />
-            <Text className="text-success font-bold ml-2" style={{ fontSize: rf(11) }}>30-day repair warranty included</Text>
+          <View style={{ backgroundColor: FLOW.mint, borderRadius: 11, marginTop: 6, paddingVertical: 8, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center' }}>
+            <ShieldCheck size={15} color={FLOW.deep} />
+            <Text style={{ fontSize: rf(11.5), fontWeight: '700', color: FLOW.deep, marginLeft: 7 }}>30-day repair warranty included</Text>
           </View>
-        </Card>
+        </CardShell>
 
-        <View className="bg-warning/10 border border-warning/30 rounded-2xl p-3 flex-row items-center">
-          <Truck size={16} color="#F59E0B" />
-          <Text className="text-text ml-2 flex-1" style={{ fontSize: rf(11) }}>
+        <View style={{ backgroundColor: YELLOW_SOFT, borderWidth: 1, borderColor: BRAND.yellowLine, borderRadius: 14, padding: 10, flexDirection: 'row', alignItems: 'center' }}>
+          <Truck size={16} color={BRAND.yellow} />
+          <Text style={{ flex: 1, fontSize: rf(11.5), color: FLOW.ink, marginLeft: 8 }}>
             Pay on pickup, after diagnosis, or after repair - your choice.
           </Text>
         </View>
       </ScrollView>
 
-      <BottomActionBar
-        priceCaption="Total"
-        priceValue={`₹${total}`}
-        priceLabel="incl. all charges"
-        title="Confirm Booking"
-        onPress={book}
-        loading={saving}
-      />
+      {/* Sticky total + Confirm Booking — same total, book() and saving loader. */}
+      <BottomActionBar>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={{ minWidth: 88, paddingRight: 12 }}>
+            <Text style={{ fontSize: rf(12), color: FLOW.muted }}>Total</Text>
+            <Text style={{ fontSize: rf(19), fontWeight: '900', color: FLOW.ink, lineHeight: rf(23) }} numberOfLines={1} adjustsFontSizeToFit>{`₹${total}`}</Text>
+            <Text style={{ fontSize: rf(11.5), color: FLOW.muted }}>incl. all charges</Text>
+          </View>
+          <View style={{ width: 1, alignSelf: 'stretch', backgroundColor: FLOW.border, marginRight: 14 }} />
+          <View style={{ flex: 1 }}>
+            <FlowCta title="Confirm Booking" onPress={book} loading={saving} palette={BRAND_FLOW} />
+          </View>
+        </View>
+      </BottomActionBar>
     </View>
   );
 }
-

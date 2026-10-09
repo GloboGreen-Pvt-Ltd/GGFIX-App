@@ -1,11 +1,10 @@
 import React from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { cn } from './cn';
-import { tokens } from '../../theme/colors';
 import { rf } from '../../utils/responsive';
 
 export function Loader({ label, className, inline = false, color }) {
-  const tint = color || tokens.primary;
+  const tint = color || '#09AD2A'; // brand green for every loading spinner
   if (inline) {
     return (
       <View className={cn('flex-row items-center py-2', className)}>

@@ -54,7 +54,14 @@ export default function SellDeviceConfigScreen({ navigation, route }) {
     navigation.navigate('SellAccessoriesWarranty', { ...params, deviceConfig });
   };
 
-  if (loading) return <Loader label="Loading configuration..." />;
+  if (loading) {
+    return (
+      <View style={{ flex: 1 }}>
+        <AppHeader title="Device Configuration" onBack={() => navigation.goBack()} />
+        <Loader label="Loading configuration..." />
+      </View>
+    );
+  }
 
   const allChosen = fields.every((f) => selected[f.id]);
 

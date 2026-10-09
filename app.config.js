@@ -19,7 +19,9 @@ export default {
     userInterfaceStyle: 'automatic',
     jsEngine: 'hermes',
     icon: './assets/logo.png',
-    splash: { image: './assets/logo.png', resizeMode: 'contain', backgroundColor: '#202124' },
+    // Same dark teal as the in-app boot screen (LaunchOverlay), so the native
+    // splash hands over to it without a colour jump.
+    splash: { image: './assets/logo.png', resizeMode: 'contain', backgroundColor: '#004C40' },
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.ggfix.customerapp',
@@ -38,6 +40,9 @@ export default {
     },
     plugins: [
       ['expo-local-authentication', { faceIDPermission: 'Use Face ID to unlock GGFIX.' }],
+      ['expo-audio', { microphonePermission: 'We use your microphone to record voice notes for your repair complaint and chat.' }],
+      ['expo-camera', { cameraPermission: 'GGFIX uses your camera to identify a device from a photo and to scan QR codes and barcodes.', recordAudioAndroid: false }],
+      ['expo-image-picker', { photosPermission: 'GGFIX uses your photos only to identify a device from a picture you choose.', cameraPermission: 'GGFIX uses your camera to identify a device from a photo and to scan QR codes and barcodes.', microphonePermission: false }],
       // Cleartext HTTP for the plain-http backend. The bare android.usesCleartextTraffic
       // key is ignored by Expo prebuild — it must be set via expo-build-properties.
       [
@@ -60,6 +65,10 @@ export default {
             'We use your location to show pickup-enabled repair shops nearby.',
         },
       ],
+      'expo-font',
+      'expo-asset',
+      'expo-sharing',
+      'expo-status-bar',
     ],
     extra: {
       API_HOST: host,

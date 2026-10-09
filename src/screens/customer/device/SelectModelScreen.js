@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Modal, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { Animated, Modal, Platform, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import {
   GestureHandlerRootView,
   PanGestureHandler,
@@ -8,14 +8,24 @@ import {
   State,
 } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Smartphone, Check, Pencil, X, Search, ArrowLeft } from 'lucide-react-native';
+import { Smartphone, Check, Pencil, X, Search, ArrowLeft, ChevronRight, Plus } from 'lucide-react-native';
 import { EmptyState, Loader, ScreenHeader } from '../../../components/rnr';
+import { HeaderIconButton } from '../../../components/PageHeader';
 import DeviceImage from '../../../components/DeviceImage';
 import { getModelsByBrand, getSeriesForCategoryBrand } from '../../../api/masterData';
 import { resolveDeviceImageSource } from '../../../utils/images';
 import { rf } from '../../../utils/responsive';
+import { BRAND } from '../../../theme/brand';
+import OtherNameDialog from './OtherNameDialog';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
+const LINE = '#E6E6E6';
+const MINT = '#EAF8EC';
+const YELLOW_SOFT = '#FEF6DA';
+const GREEN_LINE = 'rgba(9,173,42,0.45)';
+const cardShadow = { shadowColor: BRAND.ink, shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1 };
 
 // Canonical "Select Product" picker used by all flows. Series chips at the top
 // FILTER the full model grid below (Cashify-style). Search is a header icon that
@@ -149,6 +159,16 @@ export default function SelectModelScreen({ navigation, route }) {
     route?.params?.seriesId || editHints?.seriesId || null,
   );
 
+  /**
+   * "Other" — a model that isn't in the catalogue. Repair booking and Sell (as on
+   * Select Brand). Carries modelId: null with the typed modelName. A typed
+   * brand has no list at all, so the dialog opens straight away.
+   */
+  const allowOther = flow === 'REPAIR' || flow === 'SELL';
+  const customBrand = !!route?.params?.customBrand;
+  const [otherOpen, setOtherOpen] = useState(customBrand && allowOther);
+  const [otherName, setOtherName] = useState('');
+
   const { width: screenWidth } = useWindowDimensions();
   const { cardWidth } = gridMetrics(screenWidth);
   const imgBox = cardWidth - 16;   // image box / tap area (nearly the full card width)
@@ -156,6 +176,7 @@ export default function SelectModelScreen({ navigation, route }) {
 
   useEffect(() => {
     let cancelled = false;
+    if (!brandId) { setLoading(false); return undefined; }
     (async () => {
       try {
         const [modelList, seriesList] = await Promise.all([
@@ -246,95 +267,180 @@ export default function SelectModelScreen({ navigation, route }) {
     navigation.navigate('SelectVariant', baseParams);
   };
 
+  const closeOther = () => {
+    setOtherOpen(false);
+    setOtherName('');
+    // A typed brand has no list to fall back to, so cancelling returns to the
+    // brand picker rather than an empty screen.
+    if (customBrand && navigation.canGoBack()) navigation.goBack();
+  };
+  const onPickOther = () => {
+    const name = otherName.trim();
+    if (!name) return;
+    setOtherOpen(false);
+    setOtherName('');
+    setSearchOpen(false);
+    setQ('');
+    navigation.navigate('SelectVariant', {
+      ...(route?.params || {}),
+      flow, categoryId, categoryCode, categoryName, deviceTypeId, deviceTypeName,
+      brandId, brandName,
+      modelId: null, modelName: name, customModel: true, modelImageUrl: undefined,
+      ramOptionId: undefined, storageOptionId: undefined, color: undefined,
+      editSellOrderId, editHints,
+    });
+  };
+  const otherDialog = (
+    <OtherNameDialog
+      visible={otherOpen}
+      title="Other model"
+      description={`${brandName ? `Brand: ${brandName}. ` : ''}Type the model as printed on the device. It is saved on this ${flow === 'SELL' ? 'sell order' : 'booking'} only — it is not added to the catalogue.`}
+      label="MODEL NAME"
+      placeholder="e.g. Blaze 2 Pro"
+      value={otherName}
+      onChangeText={setOtherName}
+      onCancel={closeOther}
+      onSubmit={onPickOther}
+    />
+  );
+  const otherCard = allowOther ? (
+    <Pressable
+      onPress={() => setOtherOpen(true)}
+      className="active:opacity-80"
+      accessibilityRole="button"
+      accessibilityLabel="Other, type the model"
+      style={{
+        flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, marginBottom: 14,
+        borderRadius: 14, backgroundColor: '#FFFFFF', borderWidth: 1, borderStyle: 'dashed', borderColor: GREEN_LINE,
+      }}
+    >
+      <View style={{ height: 36, width: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: MINT, marginRight: 10 }}>
+        <Plus size={18} color={GREEN_TEXT} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={{ fontSize: rf(13), fontWeight: '800', color: GREEN_TEXT }} numberOfLines={1}>Other — type the model</Text>
+        <Text style={{ fontSize: rf(11), color: BRAND.muted, marginTop: 1 }} numberOfLines={1}>For a device that isn’t in the list</Text>
+      </View>
+      <ChevronRight size={15} color={GREEN_TEXT} />
+    </Pressable>
+  ) : null;
+
   // ── Full-screen search mode ───────────────────────────────────────────────
   if (searchOpen) {
     return (
-      <View className="flex-1 bg-background">
+      <View style={{ flex: 1, backgroundColor: BRAND.bg }}>
         <View
-          className="flex-row items-center px-2 pb-2 bg-card border-b border-border"
-          style={{ paddingTop: insets.top + 8 }}
+          style={{
+            flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingBottom: 8, paddingTop: insets.top + 8,
+            backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: LINE,
+          }}
         >
           <Pressable
             onPress={() => { setSearchOpen(false); setQ(''); }}
-            className="h-10 w-10 items-center justify-center"
+            className="active:opacity-70"
+            style={{ height: 40, width: 40, alignItems: 'center', justifyContent: 'center' }}
             hitSlop={8}
+            accessibilityLabel="Close search"
           >
-            <ArrowLeft size={22} color="#0F172A" />
+            <ArrowLeft size={22} color={BRAND.ink} />
           </Pressable>
-          <View className="flex-1 flex-row items-center rounded-xl px-3" style={{ backgroundColor: '#EEF2F6' }}>
-            <Search size={18} color="#94A3B8" />
+          <View
+            style={{
+              flex: 1, flexDirection: 'row', alignItems: 'center', height: 42, paddingHorizontal: 12,
+              borderRadius: 12, backgroundColor: BRAND.line, borderWidth: 1, borderColor: LINE,
+            }}
+          >
+            <Search size={17} color={BRAND.green} />
             <TextInput
               autoFocus
               value={q}
               onChangeText={setQ}
               placeholder={`Search ${brandName || 'model'}`}
-              placeholderTextColor="#94A3B8"
-              className="flex-1 py-2.5 ml-2 text-text" style={{ fontSize: rf(14) }}
+              placeholderTextColor={BRAND.muted}
+              // Web only: drop the browser focus ring inside the rounded field.
+              style={[{ flex: 1, marginLeft: 8, paddingVertical: 0, fontSize: rf(14), color: BRAND.ink }, Platform.OS === 'web' ? { outlineStyle: 'none' } : null]}
               returnKeyType="search"
             />
             {q ? (
-              <Pressable onPress={() => setQ('')} hitSlop={8}>
-                <X size={18} color="#64748B" />
+              <Pressable onPress={() => setQ('')} hitSlop={8} accessibilityLabel="Clear search">
+                <X size={17} color={BRAND.muted} />
               </Pressable>
             ) : null}
           </View>
         </View>
 
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 12, paddingBottom: 24 }}>
           {searchResults.length === 0 ? (
             <EmptyState
-              icon={q ? <Smartphone size={28} color="#004C40" /> : <Search size={28} color="#004C40" />}
+              icon={q ? <Smartphone size={28} color={BRAND.green} /> : <Search size={28} color={BRAND.green} />}
+              accent={BRAND.green}
+              accentSoft={MINT}
               title={q ? 'No products found' : 'Search products'}
               description={q ? `Nothing matches "${q.trim()}".` : `Type a model name to search ${brandName || 'products'}.`}
             />
-          ) : (
-            searchResults.map((m) => {
-              const hasImg = !!(m.imageUrl || m.imageBase64);
-              return (
-                <Pressable
-                  key={m.id}
-                  onPress={() => onPick(m)}
-                  className="flex-row items-center px-4 py-2.5 border-b border-border active:bg-primary/5"
-                >
-                  <View className="h-14 w-14 rounded-lg overflow-hidden items-center justify-center mr-3">
-                    {hasImg ? (
-                      <DeviceImage url={m.imageUrl} base64={m.imageBase64} style={{ width: 56, height: 56 }} contentFit="contain" />
-                    ) : (
-                      <Smartphone size={26} color="#004C40" />
-                    )}
-                  </View>
-                  <Text className="flex-1 text-text" style={{ fontSize: rf(14) }} numberOfLines={1}>{m.name}</Text>
-                </Pressable>
-              );
-            })
+          ) : null}
+          {searchResults.length === 0 && allowOther && q.trim() ? (
+            <Pressable
+              onPress={() => { setOtherName(q.trim()); setOtherOpen(true); }}
+              className="active:opacity-80"
+              accessibilityRole="button"
+              style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'center', marginTop: 4, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: BRAND.green, backgroundColor: '#FFFFFF' }}
+            >
+              <Plus size={15} color={GREEN_TEXT} />
+              <Text style={{ marginLeft: 6, fontSize: rf(12.5), fontWeight: '700', color: GREEN_TEXT }} numberOfLines={1}>Use "{q.trim()}" as Other model</Text>
+            </Pressable>
+          ) : null}
+          {searchResults.length === 0 ? null : (
+            <View style={{ backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1, borderColor: LINE, overflow: 'hidden', ...cardShadow }}>
+              {searchResults.map((m, i) => {
+                const hasImg = !!(m.imageUrl || m.imageBase64);
+                return (
+                  <Pressable
+                    key={m.id}
+                    onPress={() => onPick(m)}
+                    className="active:opacity-80"
+                    style={{
+                      flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8,
+                      borderTopWidth: i === 0 ? 0 : 1, borderTopColor: BRAND.line,
+                    }}
+                  >
+                    <View style={{ height: 52, width: 52, borderRadius: 10, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', marginRight: 10, backgroundColor: '#FFFFFF' }}>
+                      {hasImg ? (
+                        <DeviceImage url={m.imageUrl} base64={m.imageBase64} style={{ width: 52, height: 52 }} contentFit="contain" />
+                      ) : (
+                        <Smartphone size={24} color={BRAND.green} />
+                      )}
+                    </View>
+                    <Text style={{ flex: 1, fontSize: rf(13.5), fontWeight: '600', color: BRAND.ink }} numberOfLines={1}>{m.name}</Text>
+                    <ChevronRight size={15} color={BRAND.muted} />
+                  </Pressable>
+                );
+              })}
+            </View>
           )}
         </ScrollView>
+        {otherDialog}
       </View>
     );
   }
 
   // ── Normal mode: series chips + model grid ────────────────────────────────
   return (
-    <View className="flex-1 bg-background">
+    <View style={{ flex: 1, backgroundColor: BRAND.bg }}>
       <ScreenHeader
         title="Select Product"
         onBack={navigation.canGoBack() ? () => navigation.goBack() : undefined}
-        sticky={false}
-        right={(
-          <Pressable onPress={() => setSearchOpen(true)} className="h-10 w-10 items-center justify-center" hitSlop={8}>
-            <Search size={22} color="#0F172A" />
-          </Pressable>
-        )}
+        right={<HeaderIconButton icon={Search} label="Search models" onPress={() => setSearchOpen(true)} />}
       />
       {isEditing && editHints?.modelName ? (
-        <View className="px-4 pt-3 pb-3 bg-card border-b border-border">
-          <View className="bg-warning/10 border border-warning/30 rounded-xl px-3 py-2 flex-row items-center">
-            <Pencil size={13} color="#F59E0B" />
-            <View className="flex-1 ml-2">
-              <Text className="font-extrabold text-warning tracking-wider" style={{ fontSize: rf(10) }}>
+        <View style={{ backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: LINE, paddingHorizontal: 16, paddingVertical: 10 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: YELLOW_SOFT, borderWidth: 1, borderColor: BRAND.yellowLine }}>
+            <Pencil size={13} color={BRAND.yellow} />
+            <View style={{ flex: 1, marginLeft: 8 }}>
+              <Text style={{ fontSize: rf(10), fontWeight: '800', color: BRAND.ink, letterSpacing: 0.8 }}>
                 EDITING ORDER
               </Text>
-              <Text className="text-text font-semibold" style={{ fontSize: rf(12) }} numberOfLines={1}>
+              <Text style={{ fontSize: rf(12), fontWeight: '600', color: BRAND.body }} numberOfLines={1}>
                 Currently: {editHints.brandName ? `${editHints.brandName} · ` : ''}{editHints.modelName}
               </Text>
             </View>
@@ -349,21 +455,24 @@ export default function SelectModelScreen({ navigation, route }) {
           contentContainerStyle={{ paddingHorizontal: HORIZONTAL_PAD, paddingTop: 14, paddingBottom: 28 }}
           showsVerticalScrollIndicator={false}
         >
+          {otherCard}
+
           {/* ── Series chips (compact) ────────────────────────────────── */}
           {seriesWithModels.length > 0 ? (
-            <View className="mb-5">
-              <Text className="font-extrabold text-text mb-2.5" style={{ fontSize: rf(15) }}>Select Series</Text>
+            <View style={{ marginBottom: 18 }}>
+              <Text style={{ fontSize: rf(15), fontWeight: '800', color: BRAND.ink, marginBottom: 10 }}>Select Series</Text>
               {selectedSeries ? (
                 <View style={{ flexDirection: 'row' }}>
                   <Pressable
                     onPress={() => setSelSeriesId(null)}
-                    className="rounded-xl flex-row items-center active:opacity-80"
-                    style={{ paddingHorizontal: 12, paddingVertical: 9, backgroundColor: '#EEF2F6', borderWidth: 1, borderColor: '#E2E8F0' }}
+                    className="active:opacity-80"
+                    accessibilityLabel={`Clear ${selectedSeries.name} filter`}
+                    style={{ flexDirection: 'row', alignItems: 'center', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: BRAND.green, borderWidth: 1, borderColor: BRAND.green }}
                   >
-                    <Text className="font-bold text-text mr-2" style={{ fontSize: rf(12.5) }} numberOfLines={1}>
+                    <Text style={{ fontSize: rf(12.5), fontWeight: '700', color: '#FFFFFF', marginRight: 8 }} numberOfLines={1}>
                       {selectedSeries.name}
                     </Text>
-                    <X size={15} color="#64748B" />
+                    <X size={15} color="#FFFFFF" />
                   </Pressable>
                 </View>
               ) : (
@@ -372,10 +481,13 @@ export default function SelectModelScreen({ navigation, route }) {
                     <Pressable
                       key={s.id}
                       onPress={() => setSelSeriesId(s.id)}
-                      className="rounded-xl items-center justify-center active:opacity-80"
-                      style={{ width: cardWidth, minHeight: 40, paddingHorizontal: 8, paddingVertical: 8, backgroundColor: '#EEF2F6', borderWidth: 1, borderColor: '#E2E8F0' }}
+                      className="active:opacity-80"
+                      style={{
+                        width: cardWidth, minHeight: 40, paddingHorizontal: 8, paddingVertical: 8, borderRadius: 12,
+                        alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: LINE,
+                      }}
                     >
-                      <Text className="font-semibold text-text text-center" style={{ fontSize: rf(12) }} numberOfLines={2}>
+                      <Text style={{ fontSize: rf(12), fontWeight: '600', color: BRAND.ink, textAlign: 'center' }} numberOfLines={2}>
                         {s.name}
                       </Text>
                     </Pressable>
@@ -386,9 +498,11 @@ export default function SelectModelScreen({ navigation, route }) {
           ) : null}
 
           {/* ── Models grid ───────────────────────────────────────────── */}
-          {gridModels.length === 0 ? (
+          {gridModels.length === 0 && customBrand ? null : gridModels.length === 0 ? (
             <EmptyState
-              icon={<Smartphone size={28} color="#004C40" />}
+              icon={<Smartphone size={28} color={BRAND.green} />}
+              accent={BRAND.green}
+              accentSoft={MINT}
               title="No products found"
               description="No models published for this selection yet."
             />
@@ -401,23 +515,22 @@ export default function SelectModelScreen({ navigation, route }) {
                   <Pressable
                     key={m.id}
                     onPress={() => onPick(m)}
-                    className={`bg-card border rounded-2xl active:opacity-80 ${isCurrent ? 'border-primary' : 'border-border'}`}
+                    className="active:opacity-80"
                     style={{
                       width: cardWidth,
                       padding: 8,
                       alignItems: 'center',
-                      shadowColor: '#0F172A',
-                      shadowOpacity: 0.04,
-                      shadowRadius: 8,
-                      shadowOffset: { width: 0, height: 2 },
-                      elevation: 1,
+                      borderRadius: 16,
+                      backgroundColor: isCurrent ? MINT : '#FFFFFF',
+                      borderWidth: isCurrent ? 1.5 : 1,
+                      borderColor: isCurrent ? BRAND.green : LINE,
+                      ...cardShadow,
                     }}
                   >
                     <Pressable
                       onPress={() => openPreview(m)}
                       disabled={!hasImg}
-                      className="rounded-xl items-center justify-center overflow-hidden"
-                      style={{ height: imgBox, width: imgBox, marginBottom: 8 }}
+                      style={{ height: imgBox, width: imgBox, marginBottom: 8, borderRadius: 12, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}
                     >
                       {hasImg ? (
                         <DeviceImage
@@ -427,20 +540,19 @@ export default function SelectModelScreen({ navigation, route }) {
                           contentFit="contain"
                         />
                       ) : (
-                        <Smartphone size={Math.round(imgBox * 0.4)} color="#004C40" />
+                        <Smartphone size={Math.round(imgBox * 0.4)} color={BRAND.green} />
                       )}
                     </Pressable>
                     <Text
-                      className="font-extrabold text-text"
                       numberOfLines={2}
-                      style={{ fontSize: rf(11), textAlign: 'center', width: '100%' }}
+                      style={{ fontSize: rf(11), fontWeight: '800', color: BRAND.ink, textAlign: 'center', width: '100%' }}
                     >
                       {m.name}
                     </Text>
                     {isCurrent ? (
-                      <View className="flex-row items-center bg-primary/10 border border-primary/30 rounded-full px-2 py-0.5 mt-1.5">
-                        <Check size={10} color="#004C40" />
-                        <Text className="font-extrabold text-primary ml-1" style={{ fontSize: rf(9.5) }}>Current</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: BRAND.greenLine }}>
+                        <Check size={10} color={GREEN_TEXT} />
+                        <Text style={{ marginLeft: 4, fontSize: rf(9.5), fontWeight: '800', color: GREEN_TEXT }}>Current</Text>
                       </View>
                     ) : null}
                   </Pressable>
@@ -455,13 +567,14 @@ export default function SelectModelScreen({ navigation, route }) {
       <Modal visible={!!preview} transparent animationType="fade" onRequestClose={closePreview}>
         {/* RN Modal renders in its own window; gesture-handler needs a local root here (Android). */}
         <GestureHandlerRootView style={{ flex: 1 }}>
-          <View style={{ flex: 1, backgroundColor: 'rgba(2,6,23,0.94)' }}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(30,30,30,0.95)' }}>
             {/* Header: gesture hint + close button */}
             <View style={{ paddingTop: insets.top + 8, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text className="text-white/60 font-semibold" style={{ fontSize: rf(11) }}>🤏 Pinch · double-tap · swipe</Text>
+              <Text style={{ fontSize: rf(11), fontWeight: '600', color: 'rgba(255,255,255,0.6)' }}>🤏 Pinch · double-tap · swipe</Text>
               <Pressable
                 onPress={closePreview}
                 hitSlop={12}
+                accessibilityLabel="Close preview"
                 style={{ height: 42, width: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center' }}
               >
                 <X size={22} color="#FFFFFF" />
@@ -484,20 +597,22 @@ export default function SelectModelScreen({ navigation, route }) {
 
             {/* Footer: name + select */}
             <View style={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 16 }}>
-              <Text className="text-white font-extrabold mb-3 text-center" style={{ fontSize: rf(15) }} numberOfLines={2}>
+              <Text style={{ fontSize: rf(15), fontWeight: '800', color: '#FFFFFF', textAlign: 'center', marginBottom: 12 }} numberOfLines={2}>
                 {preview?.name}
               </Text>
               <Pressable
                 onPress={() => { const m = preview; closePreview(); if (m) onPick(m); }}
-                className="rounded-2xl py-4 items-center active:opacity-80"
-                style={{ backgroundColor: '#004C40' }}
+                className="active:opacity-80"
+                style={{ borderRadius: 16, paddingVertical: 15, alignItems: 'center', backgroundColor: BRAND.green }}
               >
-                <Text className="text-white font-extrabold" style={{ fontSize: rf(15) }}>Select this product</Text>
+                <Text style={{ fontSize: rf(15), fontWeight: '800', color: '#FFFFFF' }}>Select this product</Text>
               </Pressable>
             </View>
           </View>
         </GestureHandlerRootView>
       </Modal>
+
+      {otherDialog}
     </View>
   );
 }

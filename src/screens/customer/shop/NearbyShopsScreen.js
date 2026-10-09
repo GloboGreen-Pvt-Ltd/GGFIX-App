@@ -7,6 +7,13 @@ import { useCustomerLocation } from '../../../hooks/useCustomerLocation';
 import { travelTimesFor } from '../../../utils/travelTimes';
 import { isShopOpen } from '../../../utils/shopHours';
 import { rf } from '../../../utils/responsive';
+import { BRAND } from '../../../theme/brand';
+
+const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
+const LINE = '#E6E6E6';
+const MINT = '#EAF8EC';
+const YELLOW_SOFT = '#FEF6DA';
+const MUTED = '#6B6B6B';
 
 const RADIUS_OPTIONS = [5, 10, 15, 20];
 
@@ -46,8 +53,8 @@ export default function NearbyShopsScreen({ navigation }) {
   const showLoader = locLoading || (loading && shops.length === 0);
 
   return (
-    <View className="flex-1 bg-background">
-      <View className="bg-card px-4 pt-3 pb-2.5 border-b border-border">
+    <View style={{ flex: 1, backgroundColor: BRAND.bg }}>
+      <View style={{ backgroundColor: '#FFFFFF', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: LINE }}>
         <SearchBar
           value={q}
           onChangeText={setQ}
@@ -56,18 +63,24 @@ export default function NearbyShopsScreen({ navigation }) {
         />
 
         {lat != null && lng != null ? (
-          <View className="mt-2.5">
-            <Text className="font-extrabold text-text-muted tracking-widest mb-1.5" style={{ fontSize: rf(10) }}>RADIUS</Text>
-            <View className="flex-row -mx-1">
+          <View style={{ marginTop: 9 }}>
+            <Text style={{ fontSize: rf(10), fontWeight: '800', color: MUTED, letterSpacing: 1.4, marginBottom: 6 }}>RADIUS</Text>
+            <View style={{ flexDirection: 'row', marginHorizontal: -3 }}>
               {RADIUS_OPTIONS.map((r) => {
                 const active = radiusKm === r;
                 return (
-                  <View key={r} className="px-1 flex-1">
+                  <View key={r} style={{ flex: 1, paddingHorizontal: 3 }}>
                     <Pressable
                       onPress={() => setRadiusKm(r)}
-                      className={`rounded-full border py-1.5 items-center ${active ? 'bg-primary border-primary' : 'bg-card border-border'}`}
+                      className="active:opacity-80"
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      style={{
+                        alignItems: 'center', paddingVertical: 6, borderRadius: 999, borderWidth: 1,
+                        backgroundColor: active ? BRAND.green : '#FFFFFF', borderColor: active ? BRAND.green : LINE,
+                      }}
                     >
-                      <Text className={` font-extrabold ${active ? 'text-white' : 'text-text'}`} style={{ fontSize: rf(11) }}>{r} km</Text>
+                      <Text style={{ fontSize: rf(11), fontWeight: '800', color: active ? '#FFFFFF' : BRAND.ink }}>{r} km</Text>
                     </Pressable>
                   </View>
                 );
@@ -75,26 +88,26 @@ export default function NearbyShopsScreen({ navigation }) {
             </View>
           </View>
         ) : (
-          <View className="bg-warning/10 border border-warning/30 rounded-xl mt-2.5 p-2 flex-row items-center">
-            <Crosshair size={13} color="#F59E0B" />
-            <Text className="text-text ml-2 flex-1" style={{ fontSize: rf(11) }} numberOfLines={1}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 9, padding: 8, borderRadius: 12, backgroundColor: YELLOW_SOFT, borderWidth: 1, borderColor: BRAND.yellowLine }}>
+            <Crosshair size={13} color={BRAND.yellow} />
+            <Text style={{ flex: 1, marginLeft: 7, fontSize: rf(11), color: BRAND.ink }} numberOfLines={1}>
               {locError || 'Set default address for distance results'}
             </Text>
-            <Pressable onPress={refreshLoc} className="bg-warning/15 rounded-full px-2 py-0.5 active:opacity-70">
-              <Text className="text-warning font-bold" style={{ fontSize: rf(10) }}>Retry</Text>
+            <Pressable onPress={refreshLoc} className="active:opacity-70" style={{ borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3, backgroundColor: 'rgba(243,191,35,0.28)' }}>
+              <Text style={{ fontSize: rf(10), fontWeight: '700', color: BRAND.ink }}>Retry</Text>
             </Pressable>
           </View>
         )}
       </View>
 
-      <View className="flex-row items-center justify-between px-4 pt-3 pb-2">
-        <Text className="font-extrabold text-text-muted tracking-widest" style={{ fontSize: rf(10) }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 11, paddingBottom: 6 }}>
+        <Text style={{ fontSize: rf(10), fontWeight: '800', color: MUTED, letterSpacing: 1.2 }}>
           {filtered.length} SHOP{filtered.length === 1 ? '' : 'S'}{lat != null ? ` · WITHIN ${radiusKm} KM` : ''}
         </Text>
         {source ? (
-          <View className="flex-row items-center">
-            <Locate size={10} color="#004C40" />
-            <Text className="text-success font-bold ml-1" style={{ fontSize: rf(10) }}>{source === 'address' ? addressLabel : 'Live'}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Locate size={11} color={BRAND.green} />
+            <Text style={{ marginLeft: 4, fontSize: rf(10.5), fontWeight: '700', color: GREEN_TEXT }}>{source === 'address' ? addressLabel : 'Live'}</Text>
           </View>
         ) : null}
       </View>
@@ -102,10 +115,12 @@ export default function NearbyShopsScreen({ navigation }) {
       {showLoader ? (
         <Loader label="Finding shops near you..." />
       ) : (
-        <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 24 }}>
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24 }}>
           {filtered.length === 0 ? (
             <EmptyState
-              icon={<Store size={26} color="#00008B" />}
+              icon={<Store size={26} color={BRAND.green} />}
+              accent={BRAND.green}
+              accentSoft={MINT}
               title={lat != null ? `No shops within ${radiusKm} km` : 'No shops found'}
               description={lat != null && radiusKm < 100 ? 'Try expanding the search radius.' : (q ? 'Try a different search.' : 'Try again later.')}
               actionLabel={lat != null && radiusKm < 20 ? 'Expand to 20 km' : (q ? 'Clear search' : null)}
@@ -113,7 +128,7 @@ export default function NearbyShopsScreen({ navigation }) {
             />
           ) : (
             filtered.map((s) => (
-              <View key={s.id} className="mb-2.5">
+              <View key={s.id} style={{ marginBottom: 9 }}>
                 <ShopCard
                   name={s.name}
                   address={s.address || s.city}

@@ -1,9 +1,8 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Image, Pressable, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { Image, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { Audio } from 'expo-av';
+import { createAudioPlayer } from 'expo-audio';
 import {
-  ChevronLeft,
   CalendarClock,
   IndianRupee,
   FileText,
@@ -23,6 +22,18 @@ import {
 } from '../../../components/rnr';
 import { getServiceTicket } from '../../../api/orders';
 import { rf } from '../../../utils/responsive';
+import { BRAND } from '../../../theme/brand';
+
+// Brand palette (09AD2A · 1E1E1E · F8F8F8 · F3F3F3 · F3BF23 · F84141).
+const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
+const MINT = '#EAF8EC';
+const SOFT_MINT = '#F4FBF5';
+const GREEN_LINE = 'rgba(9,173,42,0.45)';
+const YELLOW_SOFT = '#FEF6DA';
+const YELLOW_FAINT = '#FFFCF3';
+const RED_SOFT = '#FEECEC';
+const LINE = '#E6E6E6';
+const MUTED = '#6B6B6B';
 
 const fmtDateTime = (v) => {
   if (!v) return '-';
@@ -66,6 +77,23 @@ const STATUS_VARIANT = {
   CANCELLED: 'softDanger',
 };
 
+// Palette pill for the STATUS_VARIANT tones (replaces the theme Badge colours).
+const PILL_TONE = {
+  softSuccess:   { bg: MINT,        fg: GREEN_TEXT },
+  softWarning:   { bg: YELLOW_SOFT, fg: BRAND.ink },
+  softDanger:    { bg: RED_SOFT,    fg: BRAND.red },
+  softPrimary:   { bg: BRAND.line,  fg: BRAND.ink },
+  softSecondary: { bg: BRAND.line,  fg: BRAND.ink },
+};
+function StatusPill({ variant, children }) {
+  const t = PILL_TONE[variant] || PILL_TONE.softPrimary;
+  return (
+    <View style={{ alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: t.bg }}>
+      <Text style={{ fontSize: rf(10), fontWeight: '800', letterSpacing: 0.4, color: t.fg, textTransform: 'uppercase' }}>{children}</Text>
+    </View>
+  );
+}
+
 function parseJsonSafe(raw, fallback) {
   if (!raw) return fallback;
   if (typeof raw === 'object') return raw;
@@ -93,7 +121,6 @@ function ComplianceNoteCard({ ticket }) {
   const audioUrl = ticket?.complianceAudioUrl || null;
   const imageUrls = Array.isArray(ticket?.complianceImageUrls) ? ticket.complianceImageUrls : [];
   const verifiedAt = ticket?.complianceVerifiedAt || null;
-  if (!noteText && !audioUrl && imageUrls.length === 0) return null;
 
   const hasAudio = !!audioUrl;
   const hasImages = imageUrls.length > 0;
@@ -103,41 +130,44 @@ function ComplianceNoteCard({ ticket }) {
   const [playing, setPlaying] = useState(false);
 
   useEffect(() => () => {
-    try { soundRef.current?.unloadAsync?.(); } catch (_) {}
+    try { soundRef.current?.remove?.(); } catch (_) {}
   }, []);
+
+  // Early return must stay below the hooks so the hook count never changes.
+  if (!noteText && !audioUrl && imageUrls.length === 0) return null;
 
   const togglePlay = async () => {
     try {
       if (playing && soundRef.current) {
-        await soundRef.current.pauseAsync();
+        soundRef.current.pause();
         setPlaying(false);
         return;
       }
       if (soundRef.current) {
-        try { await soundRef.current.unloadAsync(); } catch (_) {}
+        try { soundRef.current.remove(); } catch (_) {}
         soundRef.current = null;
       }
-      const { sound } = await Audio.Sound.createAsync({ uri: audioUrl });
-      soundRef.current = sound;
-      sound.setOnPlaybackStatusUpdate((s) => { if (s?.didJustFinish) setPlaying(false); });
-      await sound.playAsync();
+      const player = createAudioPlayer(audioUrl);
+      soundRef.current = player;
+      player.addListener('playbackStatusUpdate', (s) => { if (s?.didJustFinish) setPlaying(false); });
+      player.play();
       setPlaying(true);
     } catch (_) { /* best-effort playback */ }
   };
 
   return (
-    <Card className="rounded-2xl mb-3">
+    <Card className="rounded-2xl" style={{ padding: 12, marginBottom: 10, borderRadius: 16, borderWidth: 1, borderColor: LINE }}>
       <View className="flex-row items-center mb-3">
         <View
           className="w-8 h-8 rounded-full items-center justify-center mr-2.5"
-          style={{ backgroundColor: '#FEF3C7' }}
+          style={{ backgroundColor: YELLOW_SOFT }}
         >
-          <FileText size={14} color="#B45309" />
+          <FileText size={14} color={BRAND.ink} />
         </View>
         <View className="flex-1">
           <Text
             className="font-extrabold tracking-widest"
-            style={{ fontSize: rf(10), color: '#B45309', letterSpacing: 1.2 }}
+            style={{ fontSize: rf(10), color: BRAND.ink, letterSpacing: 1.2 }}
           >
             ISSUE VERIFIED & UPDATED
           </Text>
@@ -147,16 +177,16 @@ function ComplianceNoteCard({ ticket }) {
         </View>
         <View
           className="flex-row items-center rounded-full px-2 py-0.5"
-          style={{ backgroundColor: '#DCFCE7' }}
+          style={{ backgroundColor: MINT }}
         >
-          <ShieldCheck size={11} color="#004C40" />
-          <Text className="font-extrabold ml-1" style={{ fontSize: rf(9), color: '#004C40' }}>VERIFIED</Text>
+          <ShieldCheck size={11} color={GREEN_TEXT} />
+          <Text className="font-extrabold ml-1" style={{ fontSize: rf(9), color: GREEN_TEXT }}>VERIFIED</Text>
         </View>
       </View>
 
       <View className="flex-row">
         <View
-          style={{ width: 3, borderRadius: 2, backgroundColor: '#F59E0B', marginRight: 12, alignSelf: 'stretch' }}
+          style={{ width: 3, borderRadius: 2, backgroundColor: BRAND.yellow, marginRight: 12, alignSelf: 'stretch' }}
         />
         <View className="flex-1">
           {noteText ? (
@@ -169,12 +199,12 @@ function ComplianceNoteCard({ ticket }) {
             <TouchableOpacity
               onPress={togglePlay}
               className="flex-row items-center rounded-full self-start mt-3 px-3 py-2"
-              style={{ backgroundColor: playing ? '#FEF3C7' : '#FFFBEB', borderWidth: 1, borderColor: '#F59E0B' }}
+              style={{ backgroundColor: playing ? YELLOW_SOFT : YELLOW_FAINT, borderWidth: 1, borderColor: BRAND.yellow }}
             >
               {playing
-                ? <Pause size={13} color="#B45309" />
-                : <Play size={13} color="#B45309" />}
-              <Text className="font-extrabold ml-1.5" style={{ fontSize: rf(11), color: '#B45309' }}>
+                ? <Pause size={13} color={BRAND.ink} />
+                : <Play size={13} color={BRAND.ink} />}
+              <Text className="font-extrabold ml-1.5" style={{ fontSize: rf(11), color: BRAND.ink }}>
                 {playing ? 'Pause voice note' : 'Play voice note'}
               </Text>
             </TouchableOpacity>
@@ -193,7 +223,7 @@ function ComplianceNoteCard({ ticket }) {
                       source={{ uri: u }}
                       style={{
                         width: 84, height: 84, borderRadius: 10, marginRight: 8,
-                        backgroundColor: '#F1F5F9',
+                        backgroundColor: BRAND.line,
                       }}
                     />
                   ))}
@@ -207,9 +237,9 @@ function ComplianceNoteCard({ ticket }) {
       {verifiedAt ? (
         <View
           className="flex-row items-center mt-3 pt-3"
-          style={{ borderTopWidth: 1, borderTopColor: '#F1F5F9' }}
+          style={{ borderTopWidth: 1, borderTopColor: BRAND.line }}
         >
-          <CalendarClock size={11} color="#94A3B8" />
+          <CalendarClock size={11} color={MUTED} />
           <Text className="text-text-muted ml-1.5" style={{ fontSize: rf(10) }}>
             Verified on {fmtDateTime(verifiedAt)}
           </Text>
@@ -229,9 +259,9 @@ function PriceLine({ index, label, amount }) {
     <View className="flex-row items-center py-1.5">
       <View
         className="h-5 w-5 rounded-full items-center justify-center mr-2.5"
-        style={{ backgroundColor: '#DCFCE7' }}
+        style={{ backgroundColor: MINT }}
       >
-        <Text className="font-extrabold" style={{ fontSize: rf(10), color: '#004C40' }}>{index}</Text>
+        <Text className="font-extrabold" style={{ fontSize: rf(10), color: GREEN_TEXT }}>{index}</Text>
       </View>
       <Text className="text-text flex-1" style={{ fontSize: rf(12.5) }} numberOfLines={1}>{label || 'Item'}</Text>
       <Text className="font-extrabold text-text" style={{ fontSize: rf(12.5) }}>{fmtMoney(amount) || '-'}</Text>
@@ -242,8 +272,8 @@ function PriceLine({ index, label, amount }) {
 // Brand-green primary used throughout the screen. Variant tints keep the
 // section icons distinguishable while every "primary" emphasis (CTAs,
 // money, accents) lands on the same green so the screen reads as one app.
-const BRAND_GREEN = '#004C40';
-const BRAND_GREEN_DARK = '#004C40';
+const BRAND_GREEN = BRAND.green;
+const BRAND_GREEN_DARK = GREEN_TEXT;
 
 // Swiggy/Zomato-style section card: tinted icon chip on the left + bold
 // title. Caller passes the accent (icon color); the tint is derived from
@@ -253,24 +283,25 @@ function SectionCard({ icon: Icon, color, title, children, subtitle, right }) {
   const tint = accent + '1A'; // 10% alpha tint for the icon-chip background
   return (
     <Card
-      className="rounded-2xl mb-3"
+      className="rounded-2xl"
       style={{
-        borderWidth: 1, borderColor: '#EEF2F7',
-        shadowColor: '#0F172A', shadowOpacity: 0.05, shadowRadius: 10,
-        shadowOffset: { width: 0, height: 3 }, elevation: 2,
+        padding: 12, marginBottom: 10, borderRadius: 16,
+        borderWidth: 1, borderColor: LINE,
+        shadowColor: BRAND.ink, shadowOpacity: 0.04, shadowRadius: 8,
+        shadowOffset: { width: 0, height: 2 }, elevation: 1,
       }}
     >
-      <View className="flex-row items-center mb-3">
+      <View className="flex-row items-center" style={{ marginBottom: 9 }}>
         {Icon ? (
           <View
-            className="w-9 h-9 rounded-full items-center justify-center mr-2.5"
-            style={{ backgroundColor: tint }}
+            className="rounded-full items-center justify-center mr-2.5"
+            style={{ height: 30, width: 30, backgroundColor: tint }}
           >
-            <Icon size={15} color={accent} />
+            <Icon size={14} color={accent} />
           </View>
         ) : null}
         <View className="flex-1">
-          <Text className="font-extrabold text-text" style={{ fontSize: rf(13.5) }} numberOfLines={1}>{title}</Text>
+          <Text className="font-extrabold" style={{ fontSize: rf(13), color: BRAND.ink }} numberOfLines={1}>{title}</Text>
           {subtitle ? (
             <Text className="text-text-muted mt-0.5" style={{ fontSize: rf(10.5) }} numberOfLines={1}>{subtitle}</Text>
           ) : null}
@@ -295,23 +326,7 @@ export default function ServiceTicketDetailsScreen({ navigation, route }) {
   useLayoutEffect(() => {
     navigation.setOptions({
       title: 'View Details',
-      headerLeft: () => (
-        <Pressable
-          onPress={goHome}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          style={({ pressed }) => ({ marginLeft: 8, padding: 4, opacity: pressed ? 0.6 : 1 })}
-        >
-          <View
-            style={{
-              width: 32, height: 32, borderRadius: 16,
-              backgroundColor: '#F1F5F9',
-              alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <ChevronLeft size={18} color="#0F172A" />
-          </View>
-        </Pressable>
-      ),
+      headerBackAction: goHome,
     });
   }, [navigation, goHome]);
 
@@ -333,8 +348,10 @@ export default function ServiceTicketDetailsScreen({ navigation, route }) {
   if (loading) return <Loader label="Loading order..." />;
   if (!t) {
     return (
-      <View className="flex-1 bg-background">
+      <View className="flex-1" style={{ backgroundColor: BRAND.bg }}>
         <EmptyState
+          accent={BRAND_GREEN}
+          accentSoft={MINT}
           title="Ticket not found"
           description="We couldn't load this service order."
           actionLabel="Go home"
@@ -380,31 +397,32 @@ export default function ServiceTicketDetailsScreen({ navigation, route }) {
   const centered = { width: '100%', maxWidth: 600, alignSelf: 'center' };
 
   return (
-    <View className="flex-1" style={{ backgroundColor: '#F5F7FB' }}>
-      <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
+    <View className="flex-1" style={{ backgroundColor: BRAND.bg }}>
+      <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
         <View style={centered}>
           {/* Hero device card — left green accent bar, 72×90 thumbnail,
               tracking pill, big device name, color + status chips. The
               shadow is a hair stronger here so the hero sits visually
               above the section cards below. */}
           <Card
-            className="rounded-2xl mb-3"
+            className="rounded-2xl"
             style={{
-              borderWidth: 1, borderColor: '#E2E8F0',
-              shadowColor: '#0F172A', shadowOpacity: 0.10, shadowRadius: 16,
-              shadowOffset: { width: 0, height: 8 }, elevation: 4,
+              padding: 12, marginBottom: 10, borderRadius: 16,
+              borderWidth: 1, borderColor: LINE,
+              shadowColor: BRAND.ink, shadowOpacity: 0.06, shadowRadius: 10,
+              shadowOffset: { width: 0, height: 3 }, elevation: 2,
             }}
           >
             <View className="flex-row items-center">
               <View
-                style={{ width: 4, borderRadius: 2, backgroundColor: BRAND_GREEN, marginRight: 12, alignSelf: 'stretch' }}
+                style={{ width: 3, borderRadius: 2, backgroundColor: BRAND_GREEN, marginRight: 10, alignSelf: 'stretch' }}
               />
               <View
                 className="rounded-2xl overflow-hidden items-center justify-center"
-                style={{ width: 76, height: 96, backgroundColor: '#F0FDF4' }}
+                style={{ width: 60, height: 72, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: BRAND.line }}
               >
                 {t.deviceImageUrl ? (
-                  <Image source={{ uri: t.deviceImageUrl }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                  <Image source={{ uri: t.deviceImageUrl }} style={{ width: '92%', height: '92%' }} resizeMode="contain" />
                 ) : (
                   <Wrench size={30} color={BRAND_GREEN} />
                 )}
@@ -413,7 +431,7 @@ export default function ServiceTicketDetailsScreen({ navigation, route }) {
                 {tracking ? (
                   <View
                     className="flex-row items-center self-start rounded-full px-2 py-0.5"
-                    style={{ backgroundColor: '#DCFCE7' }}
+                    style={{ backgroundColor: MINT }}
                   >
                     <Text
                       className="uppercase font-extrabold"
@@ -424,20 +442,20 @@ export default function ServiceTicketDetailsScreen({ navigation, route }) {
                     <Text className="font-extrabold ml-1.5" style={{ fontSize: rf(11), color: BRAND_GREEN_DARK }}>{tracking}</Text>
                   </View>
                 ) : null}
-                <Text className="font-extrabold text-text mt-1.5" style={{ fontSize: rf(15.5) }} numberOfLines={2}>
+                <Text className="font-extrabold mt-1.5" style={{ fontSize: rf(14.5), color: BRAND.ink }} numberOfLines={2}>
                   {t.deviceDisplayName || 'Device'}
                 </Text>
                 <View className="flex-row items-center mt-2 flex-wrap">
                   {t.color ? (
                     <View
                       className="rounded-full px-2 py-0.5 mr-1.5 mb-1"
-                      style={{ backgroundColor: '#F1F5F9' }}
+                      style={{ backgroundColor: BRAND.line }}
                     >
                       <Text className="font-bold text-text-muted" style={{ fontSize: rf(10) }}>{t.color}</Text>
                     </View>
                   ) : null}
                   <View style={{ marginBottom: 4 }}>
-                    <Badge variant={variant}>{(t.status || '').replace(/_/g, ' ')}</Badge>
+                    <StatusPill variant={variant}>{(t.status || '').replace(/_/g, ' ')}</StatusPill>
                   </View>
                 </View>
               </View>
@@ -458,14 +476,14 @@ export default function ServiceTicketDetailsScreen({ navigation, route }) {
             )}
             <View
               className="flex-row items-center justify-between mt-3 pt-3"
-              style={{ borderTopWidth: 1, borderTopColor: '#E2E8F0' }}
+              style={{ borderTopWidth: 1, borderTopColor: LINE }}
             >
               <Text className="font-extrabold text-text" style={{ fontSize: rf(13) }}>
                 {t.finalPrice != null ? 'Final Amount' : 'Estimated Amount'}
               </Text>
               <View
                 className="rounded-full px-3 py-1"
-                style={{ backgroundColor: '#DCFCE7' }}
+                style={{ backgroundColor: MINT }}
               >
                 <Text className="font-extrabold" style={{ fontSize: rf(14), color: BRAND_GREEN_DARK }}>
                   {fmtMoney(priceTotal) || '-'}
@@ -475,12 +493,12 @@ export default function ServiceTicketDetailsScreen({ navigation, route }) {
           </SectionCard>
 
           {/* Complaint */}
-          <SectionCard icon={FileText} color="#3B82F6" title="Complaint Issue">
+          <SectionCard icon={FileText} color={BRAND.ink} title="Complaint Issue">
             <Text className="text-text leading-5" style={{ fontSize: rf(12.5) }}>{t.issueDescription || '-'}</Text>
           </SectionCard>
 
           {/* Schedule */}
-          <SectionCard icon={CalendarClock} color="#F59E0B" title="Service Schedule">
+          <SectionCard icon={CalendarClock} color={BRAND.yellow} title="Service Schedule">
             <View className="flex-row py-1.5">
               <Text className="text-text-muted" style={{ fontSize: rf(11), width: 96 }}>Approx. Ready</Text>
               <Text className="font-bold text-text flex-1" style={{ fontSize: rf(12) }}>{fmtDateTime(t.estimatedReadyAt)}</Text>
@@ -493,11 +511,11 @@ export default function ServiceTicketDetailsScreen({ navigation, route }) {
               <Text className="text-text-muted" style={{ fontSize: rf(11), width: 96 }}>Approval</Text>
               <View
                 className="rounded-full px-2 py-0.5"
-                style={{ backgroundColor: approvalDone ? '#DCFCE7' : '#FEF3C7' }}
+                style={{ backgroundColor: approvalDone ? MINT : YELLOW_SOFT }}
               >
                 <Text
                   className="font-extrabold"
-                  style={{ fontSize: rf(10.5), color: approvalDone ? BRAND_GREEN_DARK : '#B45309' }}
+                  style={{ fontSize: rf(10.5), color: approvalDone ? BRAND_GREEN_DARK : BRAND.ink }}
                 >
                   {approvalDone ? 'DONE' : 'PENDING'}
                 </Text>
@@ -514,9 +532,9 @@ export default function ServiceTicketDetailsScreen({ navigation, route }) {
                     <View
                       className="rounded-xl items-center justify-center overflow-hidden"
                       style={{
-                        height: 100,
-                        backgroundColor: '#F0FDF4',
-                        borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#7FB8AE',
+                        height: 84,
+                        backgroundColor: SOFT_MINT,
+                        borderWidth: 1.5, borderStyle: 'dashed', borderColor: GREEN_LINE,
                       }}
                     >
                       {photos[k] ? (
@@ -543,7 +561,7 @@ export default function ServiceTicketDetailsScreen({ navigation, route }) {
               <View className="flex-row items-center">
                 <View
                   className="rounded-full px-2.5 py-1"
-                  style={{ backgroundColor: '#DCFCE7' }}
+                  style={{ backgroundColor: MINT }}
                 >
                   <Text className="font-extrabold" style={{ fontSize: rf(11), color: BRAND_GREEN_DARK }}>
                     {t.deviceSecurityType}
@@ -557,16 +575,16 @@ export default function ServiceTicketDetailsScreen({ navigation, route }) {
           </SectionCard>
 
           {/* Missing parts */}
-          <SectionCard icon={PackageX} color="#DC2626" title="Missing / Damage Parts">
+          <SectionCard icon={PackageX} color={BRAND.red} title="Missing / Damage Parts">
             {missingPartsLabels.length ? (
               <View className="flex-row flex-wrap -mx-0.5">
                 {missingPartsLabels.map((p, i) => (
                   <View
                     key={i}
                     className="rounded-full px-2.5 py-1 mr-1 mb-1"
-                    style={{ backgroundColor: '#FEE2E2' }}
+                    style={{ backgroundColor: RED_SOFT }}
                   >
-                    <Text className="font-extrabold" style={{ fontSize: rf(11), color: '#B91C1C' }}>{p}</Text>
+                    <Text className="font-extrabold" style={{ fontSize: rf(11), color: BRAND.red }}>{p}</Text>
                   </View>
                 ))}
               </View>
@@ -598,8 +616,8 @@ export default function ServiceTicketDetailsScreen({ navigation, route }) {
                           className="rounded-xl items-center justify-center overflow-hidden"
                           style={{
                             aspectRatio: 1,
-                            backgroundColor: '#F0FDF4',
-                            borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#7FB8AE',
+                            backgroundColor: SOFT_MINT,
+                            borderWidth: 1.5, borderStyle: 'dashed', borderColor: GREEN_LINE,
                           }}
                         >
                           {technicianPhotos[i] ? (
@@ -628,8 +646,8 @@ export default function ServiceTicketDetailsScreen({ navigation, route }) {
                       className="rounded-xl items-center justify-center overflow-hidden"
                       style={{
                         aspectRatio: 1,
-                        backgroundColor: '#F0FDF4',
-                        borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#7FB8AE',
+                        backgroundColor: SOFT_MINT,
+                        borderWidth: 1.5, borderStyle: 'dashed', borderColor: GREEN_LINE,
                       }}
                     >
                       {technicianPhotos[i] ? (

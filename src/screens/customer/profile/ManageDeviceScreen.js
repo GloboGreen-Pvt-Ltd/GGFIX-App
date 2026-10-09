@@ -5,21 +5,26 @@ import {
   Smartphone, Laptop, Watch, Tablet, Headphones, Volume2,
   Plus, Pencil, Trash2, Star, ChevronRight, HardDrive, Hash,
 } from 'lucide-react-native';
-import {
-  Loader, EmptyState, Badge, SectionHeader, Chip,
-} from '../../../components/rnr';
+import { Loader, EmptyState } from '../../../components/rnr';
 import { confirm, notify } from '../../../components/confirm';
 import { listSavedDevices, deleteSavedDevice, setDefaultSavedDevice } from '../../../api/customer';
 import { getDeviceCategories, getBrands, getModelsByBrand, getRamOptions, getStorageOptions } from '../../../api/masterData';
+import { resolveDeviceImageSource } from '../../../utils/images';
+import { BRAND } from '../../../theme/brand';
+import { tintFor } from '../../../theme/categoryTints';
 import { rf } from '../../../utils/responsive';
 
+const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
+const LINE = '#E6E6E6';
+const cardShadow = { shadowColor: BRAND.ink, shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 1 };
+
 const CATEGORY_META = {
-  MOBILE:     { name: 'Mobile',        icon: Smartphone,  color: '#00008B', bg: 'bg-primary/10' },
-  LAPTOP:     { name: 'Laptops',       icon: Laptop,      color: '#7C3AED', bg: 'bg-primary/10' },
-  SMARTWATCH: { name: 'Smartwatches',  icon: Watch,       color: '#B45309', bg: 'bg-warning/10' },
-  TABLET:     { name: 'Tablets',       icon: Tablet,      color: '#0369A1', bg: 'bg-info/10' },
-  AUDIO:      { name: 'Audio Devices', icon: Headphones,  color: '#BE185D', bg: 'bg-danger/10' },
-  SPEAKER:    { name: 'Speakers',      icon: Volume2,     color: '#0E9384', bg: 'bg-success/10' },
+  MOBILE:     { name: 'Mobile',        icon: Smartphone },
+  LAPTOP:     { name: 'Laptops',       icon: Laptop },
+  SMARTWATCH: { name: 'Smartwatches',  icon: Watch },
+  TABLET:     { name: 'Tablets',       icon: Tablet },
+  AUDIO:      { name: 'Audio Devices', icon: Headphones },
+  SPEAKER:    { name: 'Speakers',      icon: Volume2 },
 };
 
 // Saved devices store admin-derived codes (Mobile -> MOBILE, Smartwatches ->
@@ -42,6 +47,36 @@ const FILTERS = [
   { key: 'TABLET',     label: 'Tablets' },
   { key: 'AUDIO',      label: 'Audio' },
 ];
+
+// NOTE: Pressables take plain style objects only — NativeWind's cssInterop
+// drops function-form `style={({ pressed }) => ...}` on native.
+function FilterChip({ label, active, onPress }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      className="active:opacity-80"
+      style={{
+        height: 32, paddingHorizontal: 14, borderRadius: 16, marginRight: 8, alignItems: 'center', justifyContent: 'center',
+        backgroundColor: active ? BRAND.green : '#FFFFFF', borderWidth: 1, borderColor: active ? BRAND.green : LINE,
+      }}
+    >
+      <Text style={{ fontSize: rf(12), fontWeight: '700', color: active ? '#FFFFFF' : BRAND.ink }}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function CardAction({ icon: Icon, label, color, textColor = BRAND.ink, onPress, divider }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      className="active:opacity-70"
+      style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 5, borderLeftWidth: divider ? 1 : 0, borderLeftColor: BRAND.line }}
+    >
+      <Icon size={13} color={color} />
+      <Text style={{ marginLeft: 5, fontSize: rf(11), fontWeight: '700', color: textColor }}>{label}</Text>
+    </Pressable>
+  );
+}
 
 export default function ManageDeviceScreen({ navigation }) {
   const [items, setItems] = useState([]);
@@ -112,9 +147,10 @@ export default function ManageDeviceScreen({ navigation }) {
       ? `${d.brandName || brandById[d.brandId]?.name} device`
       : 'Device')
   ), [modelById, brandById]);
+  // Normalised source: data: prefix for base64, JPEG for Cloudinary .avif.
   const deviceImage = useCallback((d) => {
     const m = modelById[d.modelId];
-    return (m && (m.imageUrl || m.imageBase64)) || null;
+    return m ? resolveDeviceImageSource({ url: m.imageUrl, base64: m.imageBase64 }) : null;
   }, [modelById]);
   const deviceRam = useCallback((d) => d.ramLabel || ramById[d.ramOptionId]?.label || null, [ramById]);
   const deviceStorage = useCallback((d) => d.storageLabel || storageById[d.storageOptionId]?.label || null, [storageById]);
@@ -170,16 +206,16 @@ export default function ManageDeviceScreen({ navigation }) {
   if (loading) return <Loader label="Loading your devices..." />;
 
   return (
-    <View className="flex-1 bg-background">
+    <View style={{ flex: 1, backgroundColor: BRAND.bg }}>
       {/* Filter chips */}
-      <View className="bg-card border-b border-border px-3 pt-2 pb-2">
+      <View style={{ backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: LINE, paddingHorizontal: 12, paddingVertical: 8 }}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 8 }}>
           {FILTERS.map((f) => {
             const count = f.key === 'ALL'
               ? items.length
               : items.filter((d) => deviceCode(d) === f.key).length;
             return (
-              <Chip
+              <FilterChip
                 key={f.key}
                 label={count > 0 ? `${f.label} (${count})` : f.label}
                 active={filter === f.key}
@@ -193,125 +229,92 @@ export default function ManageDeviceScreen({ navigation }) {
       <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 100 }}>
         {items.length === 0 ? (
           <EmptyState
-            icon={<Smartphone size={26} color="#00008B" />}
+            icon={<Smartphone size={28} color={BRAND.green} />}
+            accentSoft="#EAF8EC"
             title="No saved devices yet"
             description="Add a device to speed up your repair bookings."
           />
         ) : grouped.length === 0 ? (
           <EmptyState
-            icon={<Smartphone size={26} color="#00008B" />}
+            icon={<Smartphone size={28} color={BRAND.green} />}
+            accentSoft="#EAF8EC"
             title="No devices in this category"
             description="Switch filter or add a new device below."
           />
         ) : (
           grouped.map(([catCode, devices]) => {
-            const meta = CATEGORY_META[catCode] || {
-              name: 'Other', icon: Smartphone, color: '#64748B', bg: 'bg-background',
-            };
+            const meta = CATEGORY_META[catCode] || { name: 'Other', icon: Smartphone };
             const Icon = meta.icon;
+            const tint = tintFor(catCode);
             return (
-              <View key={catCode} className="mb-3">
-                <View className="flex-row items-center mb-1.5">
-                  <View className={`h-7 w-7 rounded-lg items-center justify-center mr-2 ${meta.bg}`}>
-                    <Icon size={14} color={meta.color} />
+              <View key={catCode} style={{ marginBottom: 10 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                  <View style={{ height: 24, width: 24, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginRight: 7, backgroundColor: tint }}>
+                    <Icon size={13} color={BRAND.green} />
                   </View>
-                  <Text className="font-extrabold text-text flex-1" style={{ fontSize: rf(12) }}>
-                    {meta.name}
-                  </Text>
-                  <Text className="text-text-muted" style={{ fontSize: rf(10) }}>{devices.length} saved</Text>
+                  <Text style={{ flex: 1, fontSize: rf(12.5), fontWeight: '800', color: BRAND.ink }}>{meta.name}</Text>
+                  <Text style={{ fontSize: rf(10.5), color: BRAND.muted }}>{devices.length} saved</Text>
                 </View>
 
-                {devices.map((d) => (
-                  <View
-                    key={d.id}
-                    className="bg-card border border-border rounded-xl p-2.5 mb-2"
-                    style={{ shadowColor: '#0F172A', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1 }}
-                  >
-                    {/* Row 1: icon + name + default star */}
-                    <View className="flex-row items-start">
-                      <View className={`h-11 w-11 rounded-xl items-center justify-center mr-2.5 overflow-hidden ${meta.bg}`}>
-                        {deviceImage(d) ? (
-                          <Image source={{ uri: deviceImage(d) }} style={{ width: 44, height: 44 }} resizeMode="cover" />
-                        ) : (
-                          <Icon size={18} color={meta.color} />
-                        )}
-                      </View>
-                      <View className="flex-1 pr-2">
-                        <View className="flex-row items-center">
-                          <Text className="font-extrabold text-text flex-1" style={{ fontSize: rf(13) }} numberOfLines={1}>
-                            {deviceName(d)}
-                          </Text>
-                          {d.isDefault ? <Badge variant="softSuccess">DEFAULT</Badge> : null}
+                {devices.map((d) => {
+                  const img = deviceImage(d);
+                  const specs = [deviceRam(d), deviceStorage(d)].filter(Boolean).join(' / ');
+                  return (
+                    <View key={d.id} style={{ backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1, borderColor: LINE, padding: 10, marginBottom: 8, ...cardShadow }}>
+                      {/* Row 1: image + name + default star */}
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <View style={{ height: 46, width: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 10, overflow: 'hidden', backgroundColor: tint }}>
+                          {img ? (
+                            <Image source={{ uri: img }} style={{ width: 42, height: 42 }} resizeMode="contain" />
+                          ) : (
+                            <Icon size={20} color={BRAND.green} />
+                          )}
                         </View>
-                        <View className="flex-row items-center mt-0.5 flex-wrap">
-                          {d.color ? (
-                            <Text className="text-text-muted mr-2" style={{ fontSize: rf(10) }}>{d.color}</Text>
-                          ) : null}
-                          {(deviceRam(d) || deviceStorage(d)) ? (
-                            <View className="flex-row items-center mr-2">
-                              <HardDrive size={9} color="#64748B" />
-                              <Text className="text-text-muted ml-0.5" style={{ fontSize: rf(10) }}>
-                                {[deviceRam(d), deviceStorage(d)].filter(Boolean).join(' / ')}
-                              </Text>
-                            </View>
-                          ) : null}
-                          {d.imei ? (
-                            <View className="flex-row items-center">
-                              <Hash size={9} color="#64748B" />
-                              <Text className="text-text-muted ml-0.5" style={{ fontSize: rf(10) }} numberOfLines={1}>
-                                {d.imei}
-                              </Text>
-                            </View>
-                          ) : null}
+                        <View style={{ flex: 1, minWidth: 0, paddingRight: 6 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: rf(13), fontWeight: '800', color: BRAND.ink }}>{deviceName(d)}</Text>
+                            {d.isDefault ? (
+                              <View style={{ marginLeft: 6, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2, backgroundColor: '#EAF8EC' }}>
+                                <Text style={{ fontSize: rf(9), fontWeight: '800', color: GREEN_TEXT, letterSpacing: 0.4 }}>DEFAULT</Text>
+                              </View>
+                            ) : null}
+                          </View>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginTop: 3 }}>
+                            {d.color ? <Text style={{ fontSize: rf(10.5), color: BRAND.muted, marginRight: 8 }}>{d.color}</Text> : null}
+                            {specs ? (
+                              <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 8 }}>
+                                <HardDrive size={10} color={BRAND.muted} />
+                                <Text style={{ fontSize: rf(10.5), color: BRAND.muted, marginLeft: 3 }}>{specs}</Text>
+                              </View>
+                            ) : null}
+                            {d.imei ? (
+                              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <Hash size={10} color={BRAND.muted} />
+                                <Text numberOfLines={1} style={{ fontSize: rf(10.5), color: BRAND.muted, marginLeft: 3 }}>{d.imei}</Text>
+                              </View>
+                            ) : null}
+                          </View>
                         </View>
-                      </View>
-                      <Pressable
-                        onPress={() => !d.isDefault && onDefault(d.id)}
-                        hitSlop={8}
-                        className="active:opacity-70"
-                      >
-                        <Star
-                          size={18}
-                          color={d.isDefault ? '#F59E0B' : '#CBD5E1'}
-                          fill={d.isDefault ? '#F59E0B' : 'transparent'}
-                        />
-                      </Pressable>
-                    </View>
-
-                    {d.note ? (
-                      <Text className="text-text-muted mt-1.5" style={{ fontSize: rf(10) }} numberOfLines={2}>
-                        Note: {d.note}
-                      </Text>
-                    ) : null}
-
-                    {/* Actions */}
-                    <View className="flex-row mt-2 pt-1.5 border-t border-border -mx-0.5">
-                      <Pressable
-                        onPress={() => onEdit(d)}
-                        className="flex-1 flex-row items-center justify-center py-1 active:opacity-70"
-                      >
-                        <Pencil size={11} color="#2563EB" />
-                        <Text className="ml-1 font-bold text-secondary" style={{ fontSize: rf(10) }}>Edit</Text>
-                      </Pressable>
-                      {!d.isDefault ? (
-                        <Pressable
-                          onPress={() => onDefault(d.id)}
-                          className="flex-1 flex-row items-center justify-center py-1 active:opacity-70 border-l border-border"
-                        >
-                          <Star size={11} color="#F59E0B" />
-                          <Text className="ml-1 font-bold text-warning" style={{ fontSize: rf(10) }}>Set Default</Text>
+                        <Pressable onPress={() => !d.isDefault && onDefault(d.id)} hitSlop={8} className="active:opacity-70">
+                          <Star size={18} color={d.isDefault ? BRAND.yellow : '#C9C9C9'} fill={d.isDefault ? BRAND.yellow : 'transparent'} />
                         </Pressable>
+                      </View>
+
+                      {d.note ? (
+                        <Text numberOfLines={2} style={{ fontSize: rf(10.5), color: BRAND.muted, marginTop: 6 }}>Note: {d.note}</Text>
                       ) : null}
-                      <Pressable
-                        onPress={() => onDelete(d.id)}
-                        className="flex-1 flex-row items-center justify-center py-1 active:opacity-70 border-l border-border"
-                      >
-                        <Trash2 size={11} color="#EF4444" />
-                        <Text className="ml-1 font-bold text-danger" style={{ fontSize: rf(10) }}>Delete</Text>
-                      </Pressable>
+
+                      {/* Actions */}
+                      <View style={{ flexDirection: 'row', marginTop: 8, paddingTop: 6, borderTopWidth: 1, borderTopColor: BRAND.line }}>
+                        <CardAction icon={Pencil} label="Edit" color={BRAND.green} onPress={() => onEdit(d)} />
+                        {!d.isDefault ? (
+                          <CardAction icon={Star} label="Set Default" color={BRAND.yellow} onPress={() => onDefault(d.id)} divider />
+                        ) : null}
+                        <CardAction icon={Trash2} label="Delete" color={BRAND.red} textColor={BRAND.red} onPress={() => onDelete(d.id)} divider />
+                      </View>
                     </View>
-                  </View>
-                ))}
+                  );
+                })}
               </View>
             );
           })
@@ -320,18 +323,17 @@ export default function ManageDeviceScreen({ navigation }) {
         {/* Add device CTA */}
         <Pressable
           onPress={onAdd}
-          className="bg-primary/5 border border-dashed border-primary/40 rounded-xl p-3 flex-row items-center mt-1 active:opacity-80"
+          className="active:opacity-80"
+          style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, padding: 12, borderRadius: 14, backgroundColor: '#FFFFFF', borderWidth: 1.5, borderStyle: 'dashed', borderColor: BRAND.greenLine }}
         >
-          <View className="h-10 w-10 rounded-xl bg-primary/10 items-center justify-center mr-2.5">
-            <Plus size={18} color="#00008B" />
+          <View style={{ height: 38, width: 38, borderRadius: 19, backgroundColor: '#EAF8EC', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+            <Plus size={18} color={BRAND.green} />
           </View>
-          <View className="flex-1">
-            <Text className="font-extrabold text-primary" style={{ fontSize: rf(13) }}>Add a new device</Text>
-            <Text className="text-text-muted mt-0.5" style={{ fontSize: rf(11) }} numberOfLines={1}>
-              Pick category, brand & model
-            </Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: rf(13), fontWeight: '800', color: GREEN_TEXT }}>Add a new device</Text>
+            <Text numberOfLines={1} style={{ fontSize: rf(11), color: BRAND.muted, marginTop: 2 }}>Pick category, brand & model</Text>
           </View>
-          <ChevronRight size={16} color="#00008B" />
+          <ChevronRight size={16} color={BRAND.green} />
         </Pressable>
       </ScrollView>
     </View>

@@ -93,7 +93,7 @@ export function Empty({ text = 'Nothing here yet' }) {
 export function Loader() {
   return (
     <View style={styles.center}>
-      <ActivityIndicator size="large" color={colors.primary} />
+      <ActivityIndicator size="large" color="#09AD2A" />
     </View>
   );
 }
