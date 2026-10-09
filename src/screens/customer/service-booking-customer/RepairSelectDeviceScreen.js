@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import {
@@ -12,6 +12,15 @@ import { confirm, notify } from '../../../components/confirm';
 import { listSavedDevices, deleteSavedDevice } from '../../../api/customer';
 import { getBrands, getModelsByBrand, getRamOptions, getStorageOptions } from '../../../api/masterData';
 import { rf } from '../../../utils/responsive';
+import { FlowHeader } from './FlowChrome';
+
+const DEEP = '#004C40';
+const PRIMARY = '#006B57';
+const MINT = '#E8F7F2';
+const SOFT_MINT = '#F4FBF8';
+const BORDER = '#DCE7E2';
+const INK = '#111827';
+const MUTED = '#667085';
 
 // Friendly names + per-category icon for the contextual banner.
 const CATEGORY_META = {
@@ -23,8 +32,29 @@ const CATEGORY_META = {
   SPEAKER:    { name: 'Speakers',     icon: Volume2,     color: '#0E9384', bg: 'bg-success/10' },
 };
 
+// NOTE: Pressables take plain style objects only — NativeWind's cssInterop
+// drops function-form `style={({ pressed }) => ...}` on native.
+function CardAction({ icon: Icon, label, color, onPress, divider }) {
+  return (
+    <>
+      {divider ? <View style={{ width: 1, height: 20, backgroundColor: BORDER }} /> : null}
+      <Pressable
+        onPress={onPress}
+        className="active:opacity-70"
+        style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 38 }}
+      >
+        <Icon size={16} color={color} />
+        <Text style={{ marginLeft: 6, fontSize: rf(13), fontWeight: '700', color }}>{label}</Text>
+      </Pressable>
+    </>
+  );
+}
+
 export default function RepairSelectDeviceScreen({ navigation, route }) {
   const bottomSpace = useBottomBarInset(96);
+  // This screen draws its own header (round back button + centred title), so
+  // the stack's default header is hidden here. Route and title are unchanged.
+  useLayoutEffect(() => { navigation.setOptions({ headerShown: false }); }, [navigation]);
   const params = route?.params || {};
   const presetCategoryId = params.categoryId || null;
   const presetCategoryName = params.categoryName
@@ -150,32 +180,45 @@ export default function RepairSelectDeviceScreen({ navigation, route }) {
 
   const selectedDevice = items.find((x) => x.id === selectedId);
 
+  const selectedImage = selectedDevice ? (deviceImage(selectedDevice) || selectedDevice.imageUrl) : null;
+
   return (
-    <View className="flex-1 bg-background">
-      <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: bottomSpace }}>
-        {/* Category context banner */}
+    <View style={{ flex: 1, backgroundColor: '#fff' }}>
+      <FlowHeader title="Select Device" navigation={navigation} />
+
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: bottomSpace }}>
+        {/* Repairing summary */}
         {presetCategoryName ? (
-          <View className={`border rounded-xl p-2.5 mb-3 flex-row items-center ${meta?.bg || 'bg-primary/5'} border-primary/15`}>
-            <View className={`h-8 w-8 rounded-full items-center justify-center mr-2 ${meta?.bg || 'bg-primary/10'}`}>
-              <Icon size={14} color={meta?.color || '#00008B'} />
+          <View
+            style={{
+              flexDirection: 'row', alignItems: 'center',
+              backgroundColor: SOFT_MINT, borderWidth: 1, borderColor: '#D5EDE3', borderRadius: 22,
+              paddingVertical: 12, paddingLeft: 12, paddingRight: 12, marginBottom: 16,
+            }}
+          >
+            <View style={{ height: 44, width: 44, borderRadius: 22, backgroundColor: MINT, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+              <Icon size={20} color={DEEP} />
             </View>
-            <View className="flex-1">
-              <Text className="text-text-muted uppercase tracking-widest" style={{ fontSize: rf(10) }}>Repairing</Text>
-              <Text className="font-extrabold text-text" style={{ fontSize: rf(13) }}>{presetCategoryName}</Text>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={{ fontSize: rf(10.5), color: MUTED, letterSpacing: 1.6, fontWeight: '600' }}>REPAIRING</Text>
+              <Text style={{ fontSize: rf(17), fontWeight: '800', color: INK, marginTop: 1 }} numberOfLines={1}>{presetCategoryName}</Text>
             </View>
-            <Badge variant="softPrimary">{items.length} SAVED</Badge>
+            <View style={{ backgroundColor: MINT, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7 }}>
+              <Text style={{ color: DEEP, fontSize: rf(12), fontWeight: '800', letterSpacing: 0.8 }}>{items.length} SAVED</Text>
+            </View>
           </View>
         ) : null}
 
-        <SectionHeader
-          title={categoryCode ? `Your ${presetCategoryName}` : 'Your Devices'}
-          caption={items.length ? 'Pick one or add a new one' : 'No saved devices in this category'}
-          className="mt-0 mb-2"
-        />
+        <Text style={{ fontSize: rf(20), fontWeight: '800', color: INK }}>
+          {categoryCode ? `Your ${presetCategoryName}` : 'Your Devices'}
+        </Text>
+        <Text style={{ fontSize: rf(13), color: MUTED, marginTop: 2, marginBottom: 12 }}>
+          {items.length ? 'Pick one or add a new one' : 'No saved devices in this category'}
+        </Text>
 
         {items.length === 0 ? (
           <EmptyState
-            icon={<Icon size={26} color={meta?.color || '#00008B'} />}
+            icon={<Icon size={26} color={meta?.color || DEEP} />}
             title={categoryCode ? `No saved ${presetCategoryName?.toLowerCase()} yet` : 'No saved devices'}
             description={presetCategoryId ? 'Add the device you want to repair.' : 'Add one to book a repair.'}
           />
@@ -184,47 +227,72 @@ export default function RepairSelectDeviceScreen({ navigation, route }) {
             const active = selectedId === d.id;
             const dMeta = d.categoryCode && CATEGORY_META[d.categoryCode];
             const DIcon = dMeta?.icon || Icon;
+            const img = deviceImage(d);
             return (
               <Pressable
                 key={d.id}
                 onPress={() => setSelectedId(d.id)}
-                className={`bg-card border rounded-xl p-2.5 mb-2 active:opacity-80 ${active ? 'border-primary' : 'border-border'}`}
+                className="active:opacity-90"
+                style={{
+                  backgroundColor: active ? '#FAFDFB' : '#fff',
+                  borderWidth: active ? 1.5 : 1, borderColor: active ? PRIMARY : BORDER,
+                  borderRadius: 20, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 4, marginBottom: 10,
+                  shadowColor: '#0F172A', shadowOpacity: active ? 0.08 : 0.04, shadowRadius: 12,
+                  shadowOffset: { width: 0, height: 4 }, elevation: active ? 3 : 1,
+                }}
               >
-                <View className="flex-row items-start">
-                  <View className={`h-11 w-11 rounded-xl items-center justify-center mr-2.5 overflow-hidden ${active ? 'bg-primary' : (dMeta?.bg || 'bg-primary/10')}`}>
-                    {deviceImage(d) ? (
-                      <Image source={{ uri: deviceImage(d) }} style={{ width: 44, height: 44 }} resizeMode="cover" />
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <View
+                    style={{
+                      height: 60, width: 52, borderRadius: 12, marginRight: 12, overflow: 'hidden',
+                      alignItems: 'center', justifyContent: 'center',
+                      backgroundColor: img ? '#fff' : MINT,
+                      shadowColor: '#0F172A', shadowOpacity: img ? 0.06 : 0, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: img ? 1 : 0,
+                    }}
+                  >
+                    {img ? (
+                      <Image source={{ uri: img }} style={{ width: 48, height: 56 }} resizeMode="contain" />
                     ) : (
-                      <DIcon size={18} color={active ? '#fff' : (dMeta?.color || '#00008B')} />
+                      <DIcon size={22} color={DEEP} />
                     )}
                   </View>
-                  <View className="flex-1">
-                    <View className="flex-row items-center">
-                      <Text className="font-extrabold text-text mr-1.5" style={{ fontSize: rf(13) }} numberOfLines={1}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <Text style={{ fontSize: rf(16), fontWeight: '800', color: INK, marginRight: 6, flexShrink: 1 }} numberOfLines={1}>
                         {deviceName(d)}
                       </Text>
                       {d.isDefault ? <Badge variant="softSuccess">DEFAULT</Badge> : null}
                     </View>
-                    <View className="flex-row items-center mt-0.5 flex-wrap">
-                      {d.color ? <Text className="text-text-muted mr-2" style={{ fontSize: rf(10) }}>{d.color}</Text> : null}
-                      {(deviceRam(d) || deviceStorage(d)) ? (
-                        <View className="flex-row items-center mr-2">
-                          <HardDrive size={9} color="#64748B" />
-                          <Text className="text-text-muted ml-0.5" style={{ fontSize: rf(10) }}>
-                            {[deviceRam(d), deviceStorage(d)].filter(Boolean).join(' / ')}
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
+                    {d.color ? (
+                      <Text style={{ fontSize: rf(12), color: MUTED, marginTop: 1 }} numberOfLines={1}>{d.color}</Text>
+                    ) : null}
+                    {(deviceRam(d) || deviceStorage(d)) ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                        <HardDrive size={13} color={MUTED} />
+                        <Text style={{ fontSize: rf(12), color: MUTED, marginLeft: 5 }} numberOfLines={1}>
+                          {[deviceRam(d), deviceStorage(d)].filter(Boolean).join(' / ')}
+                        </Text>
+                      </View>
+                    ) : null}
                   </View>
-                  <View className={`h-4 w-4 rounded-full border-2 ${active ? 'border-primary' : 'border-border'} items-center justify-center`}>
-                    {active ? <View className="h-2 w-2 rounded-full bg-primary" /> : null}
+                  {/* Radio — follows the existing selectedId. */}
+                  <View
+                    style={{
+                      height: 22, width: 22, borderRadius: 11, alignSelf: 'center',
+                      borderWidth: 2.5, borderColor: active ? DEEP : '#CBD5E1',
+                      alignItems: 'center', justifyContent: 'center',
+                    }}
+                  >
+                    {active ? <View style={{ height: 11, width: 11, borderRadius: 6, backgroundColor: PRIMARY }} /> : null}
                   </View>
                 </View>
 
                 {active ? (
-                  <View className="flex-row mt-2 pt-2 border-t border-border -mx-1">
-                    <Pressable
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, paddingTop: 2, borderTopWidth: 1, borderTopColor: BORDER }}>
+                    <CardAction
+                      icon={Pencil}
+                      label="Edit"
+                      color="#2563EB"
                       onPress={() => navigation.navigate('SelectVariant', {
                         flow: 'PROFILE',
                         deviceId: d.id,
@@ -238,29 +306,19 @@ export default function RepairSelectDeviceScreen({ navigation, route }) {
                         storageOptionId: d.storageOptionId,
                         color: d.color,
                       })}
-                      className="flex-1 flex-row items-center justify-center py-1.5 active:opacity-70"
-                    >
-                      <Pencil size={12} color="#2563EB" />
-                      <Text className="font-bold text-secondary ml-1" style={{ fontSize: rf(11) }}>Edit</Text>
-                    </Pressable>
-                    <Pressable
+                    />
+                    <CardAction
+                      icon={Trash2}
+                      label="Delete"
+                      color="#EF4444"
+                      divider
                       onPress={async () => {
                         const ok = await confirm({ title: 'Delete', message: 'Remove this device?', confirmText: 'Delete', destructive: true });
                         if (!ok) return;
                         try { await deleteSavedDevice(d.id); load(); } catch (e) { notify('Error', e.message); }
                       }}
-                      className="flex-1 flex-row items-center justify-center py-1.5 active:opacity-70 border-l border-border"
-                    >
-                      <Trash2 size={12} color="#EF4444" />
-                      <Text className="font-bold text-danger ml-1" style={{ fontSize: rf(11) }}>Delete</Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => proceedWith(d)}
-                      className="flex-1 flex-row items-center justify-center py-1.5 active:opacity-70 border-l border-border"
-                    >
-                      <CheckCircle2 size={12} color="#004C40" />
-                      <Text className="font-bold text-success ml-1" style={{ fontSize: rf(11) }}>Use</Text>
-                    </Pressable>
+                    />
+                    <CardAction icon={CheckCircle2} label="Use" color={DEEP} divider onPress={() => proceedWith(d)} />
                   </View>
                 ) : null}
               </Pressable>
@@ -269,40 +327,71 @@ export default function RepairSelectDeviceScreen({ navigation, route }) {
         )}
 
         {items.length > 0 ? (
-          <View className="flex-row items-center my-3">
-            <View className="flex-1 h-px bg-border" />
-            <Text className="font-bold text-text-muted mx-3 uppercase tracking-widest" style={{ fontSize: rf(11) }}>or</Text>
-            <View className="flex-1 h-px bg-border" />
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 14 }}>
+            <View style={{ flex: 1, height: 1, backgroundColor: '#E2E8F0' }} />
+            <Text style={{ marginHorizontal: 14, fontSize: rf(13), fontWeight: '600', color: MUTED, letterSpacing: 0.5 }}>OR</Text>
+            <View style={{ flex: 1, height: 1, backgroundColor: '#E2E8F0' }} />
           </View>
         ) : null}
 
+        {/* Select Other Device — dashed card, same handler. */}
         <Pressable
           onPress={selectOtherDevice}
-          className="bg-primary/5 border border-dashed border-primary/40 rounded-xl p-3 flex-row items-center mt-1 active:opacity-80"
+          className="active:opacity-85"
+          style={{
+            flexDirection: 'row', alignItems: 'center',
+            backgroundColor: SOFT_MINT, borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#9ED3BF',
+            borderRadius: 22, paddingVertical: 14, paddingLeft: 14, paddingRight: 12, marginTop: items.length ? 0 : 8,
+          }}
         >
-          <View className="h-10 w-10 rounded-xl bg-primary/10 items-center justify-center mr-2.5">
-            <Plus size={18} color="#00008B" />
+          <View style={{ height: 52, width: 52, borderRadius: 26, backgroundColor: MINT, alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
+            <Plus size={24} color={DEEP} strokeWidth={2.5} />
           </View>
-          <View className="flex-1">
-            <Text className="font-extrabold text-primary" style={{ fontSize: rf(13) }}>Select Other Device</Text>
-            <Text className="text-text-muted mt-0.5" style={{ fontSize: rf(11) }} numberOfLines={1}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={{ fontSize: rf(16), fontWeight: '800', color: DEEP }}>Select Other Device</Text>
+            <Text style={{ fontSize: rf(12.5), color: MUTED, marginTop: 3 }} numberOfLines={1}>
               {presetCategoryId ? 'Pick a different brand & model' : 'Pick category, brand & model'}
             </Text>
           </View>
-          <ChevronRight size={16} color="#00008B" />
+          <ChevronRight size={22} color={DEEP} />
         </Pressable>
       </ScrollView>
 
+      {/* Sticky bottom bar — selected device summary · Book Repair. Same
+          visibility rule (only with a selection) and same proceedWith(). */}
       {selectedDevice ? (
-        <BottomActionBar
-          priceCaption="Selected"
-          priceValue={deviceName(selectedDevice).split(' ').slice(0, 3).join(' ')}
-          priceLabel="Continue with this"
-          title="Book Repair"
-          onPress={() => proceedWith(selectedDevice)}
-        />
+        <BottomActionBar>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0, paddingRight: 10 }}>
+              {selectedImage ? (
+                <Image source={{ uri: selectedImage }} style={{ width: 38, height: 50, marginRight: 8 }} resizeMode="contain" />
+              ) : null}
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={{ fontSize: rf(10.5), color: MUTED, letterSpacing: 1.2, fontWeight: '600' }}>SELECTED</Text>
+                <Text style={{ fontSize: rf(16), fontWeight: '800', color: INK }} numberOfLines={1}>
+                  {deviceName(selectedDevice).split(' ').slice(0, 3).join(' ')}
+                </Text>
+                <Text style={{ fontSize: rf(12), color: MUTED }} numberOfLines={1}>Continue with this</Text>
+              </View>
+            </View>
+            <View style={{ width: 1, alignSelf: 'stretch', backgroundColor: BORDER, marginRight: 12 }} />
+            <Pressable
+              onPress={() => proceedWith(selectedDevice)}
+              accessibilityRole="button"
+              className="active:opacity-90"
+              style={{
+                flexBasis: '47%', height: 58, borderRadius: 22,
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                backgroundColor: DEEP,
+                shadowColor: DEEP, shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 4,
+              }}
+            >
+              <Text style={{ color: '#fff', fontSize: rf(16), fontWeight: '800', marginRight: 6 }}>Book Repair</Text>
+              <ChevronRight size={20} color="#fff" />
+            </Pressable>
+          </View>
+        </BottomActionBar>
       ) : null}
     </View>
   );
 }
-

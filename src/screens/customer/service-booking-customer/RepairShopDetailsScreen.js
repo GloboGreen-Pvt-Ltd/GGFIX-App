@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Dimensions,
   Image,
   Linking,
   Platform,
@@ -8,8 +7,8 @@ import {
   ScrollView,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ChevronLeft,
@@ -21,12 +20,14 @@ import {
   Truck,
   Smartphone,
   ShoppingCart,
-  Share2,
   Bookmark,
   MapPin,
   Award,
   Check,
   Apple,
+  ChevronRight,
+  Store,
+  BadgeCheck,
 } from 'lucide-react-native';
 import {
   BottomActionBar,
@@ -38,10 +39,29 @@ import { getShop } from '../../../api/shops';
 import { useCustomerLocation } from '../../../hooks/useCustomerLocation';
 import { rf } from '../../../utils/responsive';
 import { isShopOpen } from '../../../utils/shopHours';
+import { FLOW as BASE_FLOW, FlowCta, useHideStackHeader } from './FlowChrome';
+import { BRAND, BRAND_FLOW } from '../../../theme/brand';
+import PageHeader, { HeaderIconButton, HEADER } from '../../../components/PageHeader';
 
-const { width: SCREEN_W } = Dimensions.get('window');
 const HERO_HEIGHT = 168;
 const MAX_W = 600;
+
+// Brand palette in the FLOW shape (09AD2A · 1E1E1E · F8F8F8 · F3F3F3 · F3BF23 · F84141).
+const FLOW = {
+  ...BASE_FLOW,
+  primary: BRAND.green,
+  deep: '#078F23', // green text / icons (#09AD2A shaded)
+  ink: BRAND.ink,
+  muted: '#6B6B6B',
+  mint: '#EAF8EC',
+  softMint: '#F4FBF5',
+  tint: '#F4FBF5',
+  border: '#E6E6E6',
+  bg: BRAND.bg,
+};
+const YELLOW_SOFT = '#FEF6DA';
+const RED_SOFT = '#FEECEC';
+const cardShadow = { shadowColor: BRAND.ink, shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1 };
 
 const FALLBACK_IMAGES = [
   'https://images.unsplash.com/photo-1604754742629-3e0498a8e3e0?w=1080&q=70',
@@ -64,8 +84,10 @@ const Dot = () => <View className="h-1 w-1 rounded-full bg-text-muted/50 mx-2" /
 export default function RepairShopDetailsScreen({ navigation, route }) {
   const bottomSpace = useBottomBarInset(96);
   const params = route.params || {};
+  useHideStackHeader(navigation);
   const shopId = params.shopId;
   const { lat, lng, loading: locLoading } = useCustomerLocation();
+  const { width: SCREEN_W } = useWindowDimensions();
 
   const [shop, setShop] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -92,8 +114,14 @@ export default function RepairShopDetailsScreen({ navigation, route }) {
   if (loading) return <Loader label="Loading shop..." />;
   if (!shop) {
     return (
-      <View className="flex-1 bg-background items-center justify-center px-8">
-        <Text className="text-text-muted text-center">We couldn't load this shop.</Text>
+      <View style={{ flex: 1, backgroundColor: FLOW.bg }}>
+        <PageHeader title="Shop Details" subtitle="Shop info & services" onBack={() => navigation.goBack()} />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
+          <View style={{ height: 56, width: 56, borderRadius: 28, backgroundColor: FLOW.mint, alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
+            <Store size={24} color={FLOW.deep} />
+          </View>
+          <Text style={{ fontSize: rf(13.5), color: FLOW.muted, textAlign: 'center' }}>We couldn't load this shop.</Text>
+        </View>
       </View>
     );
   }
@@ -135,217 +163,268 @@ export default function RepairShopDetailsScreen({ navigation, route }) {
     else navigation.navigate('RepairSelectAddress', { ...params, shopId });
   };
 
+  // ---- presentation-only values ----
+  const imgBox = Math.min(112, Math.round(Math.min(SCREEN_W, MAX_W) * 0.26));
+  const cardGap = 10;
+  const tileW = Math.floor((Math.min(SCREEN_W, MAX_W) - 32 - cardGap) / 2);
+  const twoCol = tileW >= 140; // collapse to one column on very narrow screens
+  const subtitle = shop.tagline || shop.description
+    || (shop.city ? `Your trusted device care partner in ${shop.city}` : null);
+  // One grid: the two selectable options (existing `selected` state), then the
+  // existing informational items. Only the selectable ones carry a chevron.
+  const TILE = {
+    ENQUIRY:  { sub: 'Get help & ask questions', tint: FLOW.mint, color: FLOW.deep },
+    PICKUP:   { sub: 'We pick up from your home', tint: FLOW.mint, color: FLOW.deep },
+    REPAIR:   { sub: 'Professional repair service', tint: BRAND.line, color: BRAND.ink },
+    EXCHANGE: { sub: 'Upgrade to a new device', tint: RED_SOFT, color: BRAND.red },
+    VERIFIED: { sub: 'Trusted & authenticated', tint: YELLOW_SOFT, color: BRAND.yellow },
+    FREEPICK: { sub: 'No extra charges', tint: FLOW.mint, color: FLOW.deep },
+  };
+  const infoTiles = [
+    ...FEATURE_CARDS.map((f) => ({ key: f.key, title: f.title, icon: f.icon })),
+    { key: 'VERIFIED', title: 'Verified Shop', icon: Award },
+    { key: 'FREEPICK', title: 'Free Pickup', icon: Truck },
+  ];
+
+  const ServiceTile = ({ k, title, Icon, selectable }) => {
+    const t = TILE[k] || TILE.REPAIR;
+    const isSel = selectable && selected === k;
+    const body = (
+      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', minHeight: 60, paddingVertical: 9, paddingLeft: 10, paddingRight: isSel ? 26 : 8 }}>
+        <View
+          style={{
+            height: 36, width: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center', marginRight: 9,
+            backgroundColor: isSel ? 'rgba(255,255,255,0.14)' : t.tint,
+            borderWidth: isSel ? 1 : 0, borderColor: 'rgba(255,255,255,0.35)',
+          }}
+        >
+          <Icon size={18} color={isSel ? '#fff' : t.color} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={{ fontSize: rf(12.5), fontWeight: '800', color: isSel ? '#fff' : FLOW.ink }} numberOfLines={2}>{title}</Text>
+          <Text style={{ fontSize: rf(10.5), color: isSel ? 'rgba(255,255,255,0.9)' : FLOW.muted, marginTop: 1 }} numberOfLines={2}>{t.sub}</Text>
+        </View>
+        {selectable && !isSel ? <ChevronRight size={16} color={FLOW.muted} style={{ marginLeft: 3 }} /> : null}
+      </View>
+    );
+    const shell = {
+      width: twoCol ? tileW : '100%', marginBottom: cardGap, borderRadius: 16, overflow: 'hidden',
+      borderWidth: 1, borderColor: isSel ? BRAND.green : FLOW.border, backgroundColor: '#fff',
+      ...(isSel ? { shadowColor: BRAND.green, shadowOpacity: 0.22, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 4 } : cardShadow),
+    };
+    const inner = isSel ? (
+      <LinearGradient colors={[BRAND.green, '#0A9E27']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ flex: 1 }}>
+        {body}
+        <View style={{ position: 'absolute', top: 6, right: 6, height: 20, width: 20, borderRadius: 10, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' }}>
+          <Check size={12} color={FLOW.deep} strokeWidth={3} />
+        </View>
+      </LinearGradient>
+    ) : body;
+    return selectable ? (
+      <Pressable onPress={() => setSelected(k)} className="active:opacity-90" accessibilityRole="button" accessibilityState={{ selected: isSel }} style={shell}>
+        {inner}
+      </Pressable>
+    ) : (
+      <View style={shell}>{inner}</View>
+    );
+  };
+
   return (
-    <View className="flex-1 bg-background">
+    <View style={{ flex: 1, backgroundColor: FLOW.bg }}>
+      <PageHeader
+        title="Shop Details"
+        subtitle="Shop info & services"
+        onBack={() => navigation.goBack()}
+        right={(
+          <HeaderIconButton
+            icon={Bookmark}
+            label="Save shop"
+            color={bookmarked ? HEADER.action : HEADER.title}
+            fill={bookmarked ? HEADER.action : undefined}
+            onPress={() => setBookmarked((v) => !v)}
+          />
+        )}
+      />
       <ScrollView contentContainerStyle={{ paddingBottom: bottomSpace }} showsVerticalScrollIndicator={false}>
-        {/* Hero carousel */}
-        <View style={{ height: HERO_HEIGHT, backgroundColor: '#E2E8F0' }}>
-          <ScrollView
-            ref={scrollRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={(e) => setPage(Math.round(e.nativeEvent.contentOffset.x / SCREEN_W))}
-          >
-            {images.map((uri, i) => (
-              <Image key={i} source={{ uri }} style={{ width: SCREEN_W, height: HERO_HEIGHT }} resizeMode="cover" />
+        {/* Hero — soft map-style illustration (decorative only). */}
+        <LinearGradient colors={['#EAF8EC', '#F8F8F8', '#F1FAF2']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ paddingBottom: 34, overflow: 'hidden' }}>
+          <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+            {/* map blocks */}
+            {[[0.52, 30, 70, 40], [0.7, 90, 60, 36], [0.86, 20, 54, 44], [0.6, 150, 80, 34], [0.08, 90, 70, 30], [0.3, 20, 60, 28]].map(([x, y, w, h], i) => (
+              <View key={`b${i}`} style={{ position: 'absolute', left: SCREEN_W * x, top: y, width: w, height: h, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.75)', transform: [{ rotate: '-18deg' }] }} />
             ))}
-          </ScrollView>
+            {/* roads */}
+            <View style={{ position: 'absolute', left: SCREEN_W * 0.4, top: -40, width: 14, height: 320, backgroundColor: 'rgba(255,255,255,0.9)', transform: [{ rotate: '35deg' }] }} />
+            <View style={{ position: 'absolute', left: SCREEN_W * 0.1, top: 110, width: SCREEN_W * 1.2, height: 12, backgroundColor: 'rgba(255,255,255,0.8)', transform: [{ rotate: '-14deg' }] }} />
+            <View style={{ position: 'absolute', right: SCREEN_W * 0.08, top: 150, width: 12, height: 160, borderRadius: 6, backgroundColor: 'rgba(30,30,30,0.08)', transform: [{ rotate: '-30deg' }] }} />
+            {/* trees */}
+            {[[0.64, 6, 16], [0.94, 64, 18], [0.7, 196, 20], [0.9, 222, 22], [0.66, 300, 20], [0.82, 4, 14]].map(([x, y, s], i) => (
+              <View key={`t${i}`} style={{ position: 'absolute', left: SCREEN_W * x, top: y, alignItems: 'center' }}>
+                <View style={{ width: s, height: s * 1.3, borderRadius: s, backgroundColor: 'rgba(9,173,42,0.30)' }} />
+                <View style={{ width: 2, height: 10, backgroundColor: 'rgba(30,30,30,0.18)' }} />
+              </View>
+            ))}
+            {/* big map pin with store */}
+            <View style={{ position: 'absolute', right: SCREEN_W * 0.16, top: 42, alignItems: 'center' }}>
+              <MapPin size={78} color="#fff" fill={BRAND.green} strokeWidth={1.2} />
+              <View style={{ position: 'absolute', top: 16, height: 34, width: 34, borderRadius: 17, backgroundColor: BRAND.green, alignItems: 'center', justifyContent: 'center' }}>
+                <Store size={18} color="#fff" />
+              </View>
+              <View style={{ width: 28, height: 7, borderRadius: 14, backgroundColor: 'rgba(30,30,30,0.10)', marginTop: -5 }} />
+            </View>
+          </View>
 
-          <LinearGradient colors={['rgba(0,0,0,0.45)', 'rgba(0,0,0,0)']} style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 80 }} />
-
-          <SafeAreaView edges={['top']} style={{ position: 'absolute', top: 0, left: 0, right: 0 }}>
-            <View className="flex-row items-center justify-between px-3 pt-2">
-              <Pressable onPress={() => navigation.goBack()} className="h-9 w-9 rounded-full bg-white items-center justify-center active:opacity-80" style={{ elevation: 3 }}>
-                <ChevronLeft size={20} color="#0F172A" />
-              </Pressable>
-              <View className="flex-row">
-                <Pressable onPress={() => setBookmarked((v) => !v)} className="h-9 w-9 rounded-full bg-white items-center justify-center active:opacity-80 mr-2" style={{ elevation: 3 }}>
-                  <Bookmark size={17} color={bookmarked ? '#00008B' : '#0F172A'} fill={bookmarked ? '#00008B' : 'transparent'} />
-                </Pressable>
-                <Pressable className="h-9 w-9 rounded-full bg-white items-center justify-center active:opacity-80" style={{ elevation: 3 }}>
-                  <Share2 size={16} color="#0F172A" />
-                </Pressable>
+          <View style={[centered, { paddingHorizontal: 18, paddingTop: 14, paddingRight: Math.min(SCREEN_W, MAX_W) * 0.38 }]}>
+            <Text style={{ fontSize: rf(22), fontWeight: '900', color: FLOW.ink, letterSpacing: -0.5 }} numberOfLines={2}>{shop.name}</Text>
+            <View style={{ flexDirection: 'row', marginTop: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: open ? BRAND.green : BRAND.red }}>
+                <View style={{ height: 6, width: 6, borderRadius: 3, backgroundColor: '#fff', marginRight: 6 }} />
+                <Text style={{ color: '#fff', fontSize: rf(10.5), fontWeight: '800', letterSpacing: 0.6 }}>{open ? 'OPEN NOW' : 'CLOSED'}</Text>
               </View>
             </View>
-          </SafeAreaView>
-
-          <View className={`absolute left-3 bottom-3 rounded-full px-2.5 py-0.5 flex-row items-center ${open ? 'bg-success' : 'bg-danger'}`}>
-            <View className="h-1.5 w-1.5 rounded-full bg-white mr-1.5" />
-            <Text className="text-white font-bold tracking-wide" style={{ fontSize: rf(10) }}>{open ? 'OPEN NOW' : 'CLOSED'}</Text>
+            {subtitle ? (
+              <Text style={{ fontSize: rf(12.5), color: FLOW.muted, marginTop: 6, lineHeight: rf(17) }} numberOfLines={3}>{subtitle}</Text>
+            ) : null}
           </View>
-          <View className="absolute right-3 bottom-3 flex-row">
-            {images.map((_, i) => (
-              <View key={i} className={`h-1.5 rounded-full mx-0.5 ${i === page ? 'bg-white w-5' : 'bg-white/50 w-1.5'}`} />
-            ))}
-          </View>
-        </View>
+        </LinearGradient>
 
         <View style={centered}>
           {/* Shop card */}
-          <View className="px-4 -mt-5">
-            <View className="bg-card border border-border rounded-2xl p-3.5" style={{ shadowColor: '#0F172A', shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 4 }}>
-              <View className="flex-row items-start">
-                <View className="flex-1 pr-2">
-                  <Text className="font-extrabold text-text leading-5" style={{ fontSize: rf(16) }} numberOfLines={2}>{shop.name}</Text>
-                  <View className="flex-row items-center mt-1.5 flex-wrap">
-                    <View className="flex-row items-center bg-success rounded-md px-1.5 py-0.5 mr-2">
-                      <Text className="text-white font-extrabold mr-0.5" style={{ fontSize: rf(11) }}>{rating.toFixed(1)}</Text>
-                      <Star size={10} color="#fff" fill="#fff" />
+          <View style={{ paddingHorizontal: 16, marginTop: -22 }}>
+            <View style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: FLOW.border, borderRadius: 18, padding: 12, shadowColor: BRAND.ink, shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 3 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                {/* Shop photos — same images as before (banner + storefront, or
+                    the stock fallback), still swipeable with page dots. */}
+                <View style={{ width: imgBox, height: imgBox, borderRadius: 14, overflow: 'hidden', backgroundColor: BRAND.line, marginRight: 11 }}>
+                  <ScrollView
+                    ref={scrollRef}
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    onMomentumScrollEnd={(e) => setPage(Math.round(e.nativeEvent.contentOffset.x / imgBox))}
+                  >
+                    {images.map((uri, i) => (
+                      <Image key={i} source={{ uri }} style={{ width: imgBox, height: imgBox }} resizeMode="cover" />
+                    ))}
+                  </ScrollView>
+                  {images.length > 1 ? (
+                    <View pointerEvents="none" style={{ position: 'absolute', bottom: 6, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center' }}>
+                      {images.map((_, i) => (
+                        <View key={i} style={{ height: 5, width: i === page ? 14 : 5, borderRadius: 3, marginHorizontal: 2, backgroundColor: i === page ? '#fff' : 'rgba(255,255,255,0.6)' }} />
+                      ))}
                     </View>
-                    <Text className="text-text-muted" style={{ fontSize: rf(11) }}>{(shop.reviewCount || 248).toLocaleString()} reviews</Text>
+                  ) : null}
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                    <Text style={{ flex: 1, fontSize: rf(15), fontWeight: '800', color: FLOW.ink, marginRight: 6 }} numberOfLines={2}>{shop.name}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: FLOW.mint, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 4, marginTop: 1 }}>
+                      <BadgeCheck size={12} color="#fff" fill={BRAND.green} />
+                      <Text style={{ fontSize: rf(8.5), fontWeight: '800', color: FLOW.deep, marginLeft: 3, letterSpacing: 0.3 }}>VERIFIED</Text>
+                    </View>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: BRAND.green, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2, marginRight: 7 }}>
+                      <Text style={{ color: '#fff', fontWeight: '800', fontSize: rf(12), marginRight: 3 }}>{rating.toFixed(1)}</Text>
+                      <Star size={11} color={BRAND.yellow} fill={BRAND.yellow} />
+                    </View>
+                    <Text style={{ fontSize: rf(11.5), color: FLOW.muted }}>{(shop.reviewCount || 248).toLocaleString()} reviews</Text>
                     {shop.distanceKm != null ? (
                       <>
-                        <Dot />
-                        <Text className="text-text-muted" style={{ fontSize: rf(11) }}>{Number(shop.distanceKm).toFixed(1)} km</Text>
+                        <View style={{ height: 4, width: 4, borderRadius: 2, backgroundColor: BRAND.ring, marginHorizontal: 6 }} />
+                        <Text style={{ fontSize: rf(11.5), fontWeight: '700', color: FLOW.deep }}>{Number(shop.distanceKm).toFixed(1)} km</Text>
                       </>
                     ) : null}
                   </View>
-                </View>
-                <Badge variant="softSuccess">VERIFIED</Badge>
-              </View>
-
-              <View className="flex-row items-start mt-2">
-                <MapPin size={13} color="#64748B" style={{ marginTop: 1 }} />
-                <Text className="text-text ml-1 flex-1 leading-4" style={{ fontSize: rf(12) }}>
-                  {shop.address || `${shop.city || ''}${shop.pincode ? ' ' + shop.pincode : ''}`}
-                </Text>
-              </View>
-              {(shop.phone || shop.mobile) ? (
-                <View className="flex-row items-center mt-1">
-                  <Phone size={12} color="#64748B" />
-                  <Text className="text-text-muted ml-1" style={{ fontSize: rf(12) }}>{(shop.phone || shop.mobile)}</Text>
-                </View>
-              ) : null}
-
-              {/* Call / Directions */}
-              <View className="flex-row mt-3">
-                <Pressable onPress={callShop} className="flex-1 mr-2 bg-success rounded-xl flex-row items-center justify-center py-2.5 active:opacity-90">
-                  <Phone size={15} color="#fff" />
-                  <Text className="text-white font-extrabold ml-2" style={{ fontSize: rf(13) }}>Call Shop</Text>
-                </Pressable>
-                <Pressable onPress={directions} className="flex-1 ml-2 bg-card border border-success rounded-xl flex-row items-center justify-center py-2.5 active:opacity-80">
-                  <Navigation size={15} color="#004C40" />
-                  <Text className="text-success font-extrabold ml-2" style={{ fontSize: rf(13) }}>Get Directions</Text>
-                </Pressable>
-              </View>
-
-              {/* Hours (compact, single row) */}
-              <View className="bg-background rounded-xl p-2.5 mt-3 flex-row items-center">
-                <View className="h-8 w-8 rounded-full bg-success/10 items-center justify-center mr-2">
-                  <Clock size={15} color="#004C40" />
-                </View>
-                <View className="flex-1">
-                  <Text className="font-extrabold text-text" style={{ fontSize: rf(12) }} numberOfLines={1}>{openDays}</Text>
-                  <Text className="text-text-muted" style={{ fontSize: rf(10) }} numberOfLines={1}>{hoursText}</Text>
-                </View>
-                <Badge variant={open ? 'softSuccess' : 'softDanger'}>{open ? 'OPEN' : 'CLOSED'}</Badge>
-              </View>
-            </View>
-          </View>
-
-          {/* Services available */}
-          <Text className="font-extrabold text-text px-4 mt-4 mb-2" style={{ fontSize: rf(13) }}>Services at {shop.name}</Text>
-          <View className="px-4 flex-row">
-            {PRIMARY_OPTIONS.map((opt) => {
-              const Icon = opt.icon;
-              const isSelected = selected === opt.key;
-              return (
-                <Pressable
-                  key={opt.key}
-                  onPress={() => setSelected(opt.key)}
-                  className={`flex-1 ${opt.key === 'ENQUIRY' ? 'mr-2' : 'ml-2'} rounded-2xl overflow-hidden border ${isSelected ? 'border-transparent' : 'border-border opacity-90'}`}
-                >
-                  <LinearGradient colors={opt.palette} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ padding: 11 }}>
-                    <View className="flex-row items-center justify-between">
-                      <Icon size={18} color="#fff" />
-                      <View className={`h-5 w-5 rounded-md border-2 border-white items-center justify-center ${isSelected ? 'bg-white' : ''}`}>
-                        {isSelected ? <Check size={12} color={opt.palette[0]} strokeWidth={2} /> : null}
-                      </View>
-                    </View>
-                    <Text className="text-white font-extrabold mt-2.5" style={{ fontSize: rf(13) }}>{opt.title}</Text>
-                  </LinearGradient>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          {/* Feature cards */}
-          <View className="px-4 mt-2.5 flex-row">
-            {FEATURE_CARDS.map((f, idx) => {
-              const Icon = f.icon;
-              return (
-                <View key={f.key} className={`flex-1 ${idx === 0 ? 'mr-2' : 'ml-2'} bg-card border border-border rounded-2xl p-2.5 flex-row items-center`}>
-                  <View className={`h-9 w-9 rounded-xl ${f.bg} items-center justify-center mr-2`}>
-                    <Icon size={18} color={f.accent} />
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 7 }}>
+                    <MapPin size={14} color={BRAND.red} style={{ marginTop: 1 }} />
+                    <Text style={{ flex: 1, fontSize: rf(11.5), color: BRAND.body, marginLeft: 6, lineHeight: rf(16) }} numberOfLines={3}>
+                      {shop.address || `${shop.city || ''}${shop.pincode ? ' ' + shop.pincode : ''}`}
+                    </Text>
                   </View>
-                  <Text className="font-bold text-text flex-1" style={{ fontSize: rf(11) }} numberOfLines={2}>{f.title}</Text>
+                  {(shop.phone || shop.mobile) ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+                      <Phone size={13} color={FLOW.deep} />
+                      <Text style={{ fontSize: rf(11.5), color: FLOW.muted, marginLeft: 6 }}>{(shop.phone || shop.mobile)}</Text>
+                    </View>
+                  ) : null}
                 </View>
-              );
-            })}
+              </View>
+
+              {/* Call / Directions — same handlers */}
+              <View style={{ flexDirection: 'row', marginTop: 12 }}>
+                <Pressable onPress={callShop} className="active:opacity-90" accessibilityRole="button" style={{ flex: 1, marginRight: 5, height: 44, borderRadius: 14, backgroundColor: BRAND.green, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                  <Phone size={16} color="#fff" />
+                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: rf(13.5), marginLeft: 7 }}>Call Shop</Text>
+                </Pressable>
+                <Pressable onPress={directions} className="active:opacity-85" accessibilityRole="button" style={{ flex: 1, marginLeft: 5, height: 44, borderRadius: 14, backgroundColor: '#fff', borderWidth: 1.5, borderColor: BRAND.green, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                  <Navigation size={15} color={BRAND.green} />
+                  <Text style={{ color: FLOW.deep, fontWeight: '800', fontSize: rf(13.5), marginLeft: 7 }} numberOfLines={1}>Get Directions</Text>
+                </Pressable>
+              </View>
+
+              {/* Hours */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 11, paddingTop: 11, borderTopWidth: 1, borderTopColor: BRAND.line }}>
+                <View style={{ height: 36, width: 36, borderRadius: 18, backgroundColor: YELLOW_SOFT, alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                  <Clock size={17} color={BRAND.yellow} />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={{ fontSize: rf(13), fontWeight: '800', color: FLOW.ink }} numberOfLines={1}>{openDays}</Text>
+                  <Text style={{ fontSize: rf(11.5), color: FLOW.muted, marginTop: 1 }} numberOfLines={1}>{hoursText}</Text>
+                </View>
+                <View style={{ borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: open ? FLOW.mint : RED_SOFT }}>
+                  <Text style={{ fontSize: rf(11), fontWeight: '800', color: open ? FLOW.deep : BRAND.red }}>{open ? 'OPEN' : 'CLOSED'}</Text>
+                </View>
+              </View>
+            </View>
           </View>
 
-          {/* Trust strip */}
-          <View className="px-4 mt-3 flex-row">
-            <View className="flex-1 mr-2 bg-card border border-border rounded-xl py-2 items-center">
-              <Award size={15} color="#F59E0B" />
-              <Text className="font-bold text-text mt-0.5" style={{ fontSize: rf(10) }}>Verified Shop</Text>
-            </View>
-            <View className="flex-1 ml-2 bg-card border border-border rounded-xl py-2 items-center">
-              <Truck size={15} color="#00008B" />
-              <Text className="font-bold text-text mt-0.5" style={{ fontSize: rf(10) }}>Free Pickup</Text>
-            </View>
+          {/* Services at shop */}
+          <Text style={{ fontSize: rf(16.5), fontWeight: '800', color: FLOW.ink, paddingHorizontal: 16, marginTop: 18 }} numberOfLines={2}>Services at {shop.name}</Text>
+          <Text style={{ fontSize: rf(11.5), color: FLOW.muted, paddingHorizontal: 16, marginTop: 1, marginBottom: 10 }}>Choose the service you need</Text>
+          <View style={{ paddingHorizontal: 16, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+            {PRIMARY_OPTIONS.map((opt) => (
+              <ServiceTile key={opt.key} k={opt.key} title={opt.title} Icon={opt.icon} selectable />
+            ))}
+            {infoTiles.map((f) => (
+              <ServiceTile key={f.key} k={f.key} title={f.title} Icon={f.icon} />
+            ))}
           </View>
 
           {/* Service categories — what this shop repairs (Android / Apple). */}
           {serviceCats ? (
-            <View className="px-4 mt-4">
-              <Text className="font-extrabold text-text mb-2" style={{ fontSize: rf(13) }}>Service Categories</Text>
-              {serviceCats.android.length ? (
-                <View className="bg-card border border-border rounded-2xl p-3 mb-2.5">
-                  <View className="flex-row items-center mb-2">
-                    <View className="h-6 w-6 rounded-full items-center justify-center mr-2" style={{ backgroundColor: '#DCFCE7' }}>
-                      <Smartphone size={13} color="#004C40" />
+            <View style={{ paddingHorizontal: 16, marginTop: 10 }}>
+              <Text style={{ fontSize: rf(15), fontWeight: '800', color: FLOW.ink, marginBottom: 8 }}>Service Categories</Text>
+              {[['android', 'Android', Smartphone, FLOW.mint, FLOW.deep], ['apple', 'Apple', Apple, BRAND.line, FLOW.ink]].map(([key, label, CIcon, bg, fg]) => (serviceCats[key].length ? (
+                <View key={key} style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: FLOW.border, borderRadius: 16, padding: 11, marginBottom: 9, ...cardShadow }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                    <View style={{ height: 30, width: 30, borderRadius: 15, backgroundColor: bg, alignItems: 'center', justifyContent: 'center', marginRight: 9 }}>
+                      <CIcon size={15} color={fg} />
                     </View>
-                    <Text className="font-extrabold text-text" style={{ fontSize: rf(12.5) }}>Android</Text>
-                    <Text className="text-text-muted ml-auto" style={{ fontSize: rf(10) }}>{serviceCats.android.length} services</Text>
+                    <Text style={{ fontSize: rf(14), fontWeight: '800', color: FLOW.ink }}>{label}</Text>
+                    <Text style={{ fontSize: rf(11.5), color: FLOW.muted, marginLeft: 'auto' }}>{serviceCats[key].length} services</Text>
                   </View>
-                  <View className="flex-row flex-wrap -m-0.5">
-                    {serviceCats.android.map((c) => (
-                      <View key={c} className="m-0.5 rounded-full bg-primary/10 px-2.5 py-1">
-                        <Text className="font-bold text-primary" style={{ fontSize: rf(11) }}>{c}</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', margin: -3 }}>
+                    {serviceCats[key].map((c) => (
+                      <View key={c} style={{ margin: 3, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4, backgroundColor: key === 'android' ? FLOW.mint : BRAND.line }}>
+                        <Text style={{ fontSize: rf(11), fontWeight: '700', color: key === 'android' ? FLOW.deep : FLOW.ink }}>{c}</Text>
                       </View>
                     ))}
                   </View>
                 </View>
-              ) : null}
-              {serviceCats.apple.length ? (
-                <View className="bg-card border border-border rounded-2xl p-3">
-                  <View className="flex-row items-center mb-2">
-                    <View className="h-6 w-6 rounded-full items-center justify-center mr-2" style={{ backgroundColor: '#F1F5F9' }}>
-                      <Apple size={13} color="#0F172A" />
-                    </View>
-                    <Text className="font-extrabold text-text" style={{ fontSize: rf(12.5) }}>Apple</Text>
-                    <Text className="text-text-muted ml-auto" style={{ fontSize: rf(10) }}>{serviceCats.apple.length} services</Text>
-                  </View>
-                  <View className="flex-row flex-wrap -m-0.5">
-                    {serviceCats.apple.map((c) => (
-                      <View key={c} className="m-0.5 rounded-full px-2.5 py-1" style={{ backgroundColor: '#F1F5F9' }}>
-                        <Text className="font-bold text-text" style={{ fontSize: rf(11) }}>{c}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              ) : null}
+              ) : null))}
             </View>
           ) : null}
         </View>
       </ScrollView>
 
-      <BottomActionBar
-        title={selected === 'ENQUIRY' ? 'Start Enquiry Chat' : 'Continue with this Shop'}
-        onPress={onContinue}
-      />
+      <BottomActionBar>
+        <FlowCta
+          title={selected === 'ENQUIRY' ? 'Start Enquiry Chat' : 'Continue with this Shop'}
+          onPress={onContinue}
+          palette={BRAND_FLOW}
+        />
+      </BottomActionBar>
     </View>
   );
 }

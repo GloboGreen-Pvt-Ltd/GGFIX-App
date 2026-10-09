@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Image, Pressable, Text, View } from 'react-native';
 import { Lock } from 'lucide-react-native';
 import { isAppLockEnabled, authenticate } from '../auth/appLock';
+import { finishBoot } from '../boot/bootProgress';
 import { rf, rlh } from '../utils/responsive';
 
 // Wraps the authenticated app. When App Lock is on, requires the OS unlock
@@ -28,6 +29,8 @@ export default function AppLockGate({ children, onLogout }) {
       if (cancelled) return;
       setEnabled(on);
       if (!on) { setLocked(false); return; }
+      // Locked: hand over from the launch screen to the unlock prompt.
+      finishBoot();
       setLocked(true);
       runUnlock();
     })();

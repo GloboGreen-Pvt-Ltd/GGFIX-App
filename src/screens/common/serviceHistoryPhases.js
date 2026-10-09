@@ -12,7 +12,7 @@
 // invoice lifecycle and the in-progress customer handover.
 import React, { useEffect, useRef, useState } from 'react';
 import { Text, View, TouchableOpacity, Image, ScrollView } from 'react-native';
-import { Audio } from 'expo-av';
+import { createAudioPlayer } from 'expo-audio';
 import { Play, Pause } from 'lucide-react-native';
 import { rf } from '../../utils/responsive';
 
@@ -74,9 +74,10 @@ const LABEL_BY_KEY = Object.fromEntries(
   SHOP_BOOKING_STATUS_OPTIONS.map((o) => [o.value, o.label]),
 );
 
-const SUCCESS = '#004C40';      // green dot / line for completed steps
-const DOT_BORDER = '#CBD5E1';   // gray ring around upcoming steps
-const LINE_PENDING = '#E2E8F0'; // connector between unreached steps
+// Brand palette: #09AD2A for reached steps, neutral greys for upcoming ones.
+const SUCCESS = '#09AD2A';      // green dot / line for completed steps
+const DOT_BORDER = '#C9C9C9';   // gray ring around upcoming steps
+const LINE_PENDING = '#E6E6E6'; // connector between unreached steps
 
 // Inline media block rendered under a step event row when the event carries
 // optional attachments. Currently only the technician's compliance-note emit
@@ -85,7 +86,6 @@ const LINE_PENDING = '#E2E8F0'; // connector between unreached steps
 function EventMedia({ audioUrl, imageUrls }) {
   const hasAudio = !!audioUrl;
   const hasImages = Array.isArray(imageUrls) && imageUrls.length > 0;
-  if (!hasAudio && !hasImages) return null;
 
   const soundRef = useRef(null);
   const [playing, setPlaying] = useState(false);
@@ -93,26 +93,29 @@ function EventMedia({ audioUrl, imageUrls }) {
   // Release the sound when the row unmounts so changing screens doesn't leak
   // a player or block the next audio acquisition.
   useEffect(() => () => {
-    try { soundRef.current?.unloadAsync?.(); } catch (_) {}
+    try { soundRef.current?.remove?.(); } catch (_) {}
   }, []);
+
+  // Early return must stay below the hooks so the hook count never changes.
+  if (!hasAudio && !hasImages) return null;
 
   const togglePlay = async () => {
     try {
       if (playing && soundRef.current) {
-        await soundRef.current.pauseAsync();
+        soundRef.current.pause();
         setPlaying(false);
         return;
       }
       if (soundRef.current) {
-        try { await soundRef.current.unloadAsync(); } catch (_) {}
+        try { soundRef.current.remove(); } catch (_) {}
         soundRef.current = null;
       }
-      const { sound } = await Audio.Sound.createAsync({ uri: audioUrl });
-      soundRef.current = sound;
-      sound.setOnPlaybackStatusUpdate((s) => {
+      const player = createAudioPlayer(audioUrl);
+      soundRef.current = player;
+      player.addListener('playbackStatusUpdate', (s) => {
         if (s?.didJustFinish) setPlaying(false);
       });
-      await sound.playAsync();
+      player.play();
       setPlaying(true);
     } catch (_) { /* swallow — best-effort playback */ }
   };
@@ -124,11 +127,11 @@ function EventMedia({ audioUrl, imageUrls }) {
           <TouchableOpacity
             onPress={togglePlay}
             className="flex-row items-center rounded-md px-2 py-1"
-            style={{ borderWidth: 1, borderColor: '#CBD5E1', backgroundColor: '#FFFFFF' }}
+            style={{ borderWidth: 1, borderColor: '#E6E6E6', backgroundColor: '#FFFFFF' }}
           >
             {playing
-              ? <Pause size={12} color="#0F172A" />
-              : <Play size={12} color="#0F172A" />}
+              ? <Pause size={12} color="#1E1E1E" />
+              : <Play size={12} color="#1E1E1E" />}
             <Text className="text-text ml-1" style={{ fontSize: rf(10) }}>Voice note</Text>
           </TouchableOpacity>
         </View>
@@ -230,10 +233,11 @@ export function ServiceHistoryTimeline({ events, status, phaseFilter }) {
             <View className="items-center mr-3" style={{ width: 18 }}>
               <View
                 style={{
-                  width: 14, height: 14, borderRadius: 7,
+                  width: 12, height: 12, borderRadius: 6,
                   backgroundColor: completed ? SUCCESS : '#FFFFFF',
                   borderWidth: completed ? 0 : 2, borderColor: DOT_BORDER,
-                  marginTop: 2,
+                  marginTop: 3,
+                  ...(isCurrent ? { shadowColor: SUCCESS, shadowOpacity: 0.35, shadowRadius: 5, shadowOffset: { width: 0, height: 0 }, elevation: 2 } : null),
                 }}
               />
               {!isLast ? (
@@ -243,23 +247,23 @@ export function ServiceHistoryTimeline({ events, status, phaseFilter }) {
                 />
               ) : null}
             </View>
-            <View className="flex-1 pb-4">
+            <View className="flex-1" style={{ paddingBottom: 11 }}>
               <View className="flex-row items-center justify-between">
                 <Text
                   className={` flex-1 pr-2 ${
                     completed ? 'font-extrabold text-text' : 'font-bold text-text-muted'
-                  }`} style={{ fontSize: rf(13) }}
+                  }`} style={{ fontSize: rf(12.5), color: completed ? '#1E1E1E' : '#8E8E8E' }}
                 >
                   {opt.label}
                 </Text>
                 {isCurrent ? (
-                  <View className="bg-success/15 rounded-full px-1.5 py-0.5 ml-1">
-                    <Text className="font-extrabold text-success" style={{ fontSize: rf(8) }}>NOW</Text>
+                  <View className="rounded-full px-1.5 py-0.5 ml-1" style={{ backgroundColor: '#EAF8EC' }}>
+                    <Text className="font-extrabold" style={{ fontSize: rf(8.5), color: '#078F23' }}>NOW</Text>
                   </View>
                 ) : null}
               </View>
               {ev?.createdAt ? (
-                <Text className="text-text-muted mt-1" style={{ fontSize: rf(10) }}>{fmt(ev.createdAt)}</Text>
+                <Text className="text-text-muted" style={{ fontSize: rf(10), marginTop: 2, color: '#6B6B6B' }}>{fmt(ev.createdAt)}</Text>
               ) : null}
               {ev?.note && ev.note !== opt.label ? (
                 <Text className="text-text mt-0.5" style={{ fontSize: rf(11) }}>{ev.note}</Text>

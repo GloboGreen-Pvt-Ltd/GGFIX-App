@@ -89,7 +89,7 @@ export function Button({
     : shadowVariants.none;
   const spinColor =
     variant === 'outline' || variant === 'ghost' || variant === 'soft' || variant === 'muted' || variant === 'softAccent'
-      ? tokens.primary
+      ? '#09AD2A'
       : '#fff';
   return (
     <Pressable

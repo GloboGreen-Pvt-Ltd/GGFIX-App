@@ -32,3 +32,29 @@ export function setAuthExpiredHandler(fn) { authExpiredHandler = fn; }
 export function notifyAuthExpired() {
   try { if (authExpiredHandler) authExpiredHandler(); } catch (_) {}
 }
+
+// Expiry (seconds since epoch) read from a JWT access token; null when the token
+// isn't a JWT or carries no `exp`. Never throws.
+export function tokenExpiry(token) {
+  try {
+    const part = String(token || '').split('.')[1];
+    if (!part || typeof atob !== 'function') return null;
+    const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
+    const exp = JSON.parse(atob(b64.padEnd(Math.ceil(b64.length / 4) * 4, '=')))?.exp;
+    return typeof exp === 'number' ? exp : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+// True only when the token says it has expired (30 s early, for clock skew).
+export function isTokenExpired(token) {
+  const exp = tokenExpiry(token);
+  return exp != null && exp * 1000 <= Date.now() + 30000;
+}
+
+// User-confirmed "Log in again": drop the stored session and show Login.
+export async function forceRelogin() {
+  await clearSession();
+  notifyAuthExpired();
+}

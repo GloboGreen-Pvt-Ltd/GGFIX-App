@@ -6,6 +6,12 @@ import { getRepairBooking } from '../../../api/orders';
 import { resolveBookingDevice } from '../../../utils/bookingDevice';
 import { cleanIssueSummary } from '../../../utils/pickupEstimateMeta';
 import { rf } from '../../../utils/responsive';
+import { BRAND } from '../../../theme/brand';
+
+const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
+const MINT = '#EAF8EC';
+const LINE = '#E6E6E6';
+const MUTED = '#6B6B6B';
 
 const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -18,11 +24,11 @@ const fmtDateTime = (v) => {
   });
 };
 
-function InfoLine({ label, value, valueClass }) {
+function InfoLine({ label, value, valueClass, valueStyle }) {
   return (
     <View className="flex-row flex-wrap mt-1.5">
-      <Text className="text-text-muted" style={{ fontSize: rf(11) }}>{label} : </Text>
-      <Text className={` font-bold flex-1 ${valueClass || 'text-text'}`} style={{ fontSize: rf(11) }}>{value || '-'}</Text>
+      <Text style={{ fontSize: rf(11), color: MUTED }}>{label} : </Text>
+      <Text className={` font-bold flex-1 ${valueClass || 'text-text'}`} style={[{ fontSize: rf(11), color: BRAND.ink }, valueStyle]}>{value || '-'}</Text>
     </View>
   );
 }
@@ -46,8 +52,8 @@ export default function ServiceReceiptScreen({ route }) {
   if (loading) return <Loader label="Loading receipt..." />;
   if (!b) {
     return (
-      <View className="flex-1 bg-background">
-        <EmptyState title="Receipt unavailable" description="We couldn't load this receipt." />
+      <View className="flex-1" style={{ backgroundColor: BRAND.bg }}>
+        <EmptyState accent={BRAND.green} accentSoft={MINT} title="Receipt unavailable" description="We couldn't load this receipt." />
       </View>
     );
   }
@@ -63,22 +69,22 @@ export default function ServiceReceiptScreen({ route }) {
     : '-';
 
   return (
-    <View className="flex-1 bg-background">
+    <View className="flex-1" style={{ backgroundColor: BRAND.bg }}>
       {/* Success header */}
-      <View className="bg-card border-b border-border px-4 pt-3 pb-4 flex-row items-center">
-        <View className="h-11 w-11 rounded-full bg-success/10 items-center justify-center mr-3">
-          <CheckCircle2 size={24} color="#004C40" />
+      <View className="px-4 pt-3 pb-3 flex-row items-center" style={{ backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: LINE }}>
+        <View className="rounded-full items-center justify-center mr-3" style={{ height: 40, width: 40, backgroundColor: MINT }}>
+          <CheckCircle2 size={21} color={BRAND.green} />
         </View>
         <View className="flex-1">
-          <Text className="font-extrabold text-text" style={{ fontSize: rf(15) }}>Booking Successful</Text>
+          <Text className="font-extrabold" style={{ fontSize: rf(14.5), color: BRAND.ink }}>Booking Successful</Text>
           <Text className="text-text-muted mt-0.5" style={{ fontSize: rf(11) }}>{fmtDateTime(b.createdAt)}</Text>
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 28 }}>
+      <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 28 }}>
         <View style={{ width: '100%', maxWidth: 560, alignSelf: 'center' }}>
-          <Card className="rounded-2xl">
-            <Text className="font-extrabold text-success mb-2" style={{ fontSize: rf(13) }}>Receipt Details</Text>
+          <Card className="rounded-2xl" style={{ padding: 12, borderRadius: 16, borderWidth: 1, borderColor: LINE, shadowColor: BRAND.ink, shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1 }}>
+            <Text className="font-extrabold mb-2" style={{ fontSize: rf(12.5), color: GREEN_TEXT, letterSpacing: 0.3 }}>Receipt Details</Text>
 
             {/* Device */}
             <View className="flex-row items-start">
@@ -90,11 +96,11 @@ export default function ServiceReceiptScreen({ route }) {
                   <InfoLine label="Repair Services" value={services.map((s) => s.serviceName).join(', ')} />
                 ) : null}
               </View>
-              <View className="h-16 w-16 rounded-xl bg-primary/10 items-center justify-center overflow-hidden">
+              <View className="rounded-xl items-center justify-center overflow-hidden" style={{ height: 56, width: 56, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: BRAND.line }}>
                 {dev.image ? (
-                  <Image source={{ uri: dev.image }} style={{ width: 64, height: 64 }} resizeMode="cover" />
+                  <Image source={{ uri: dev.image }} style={{ width: 52, height: 52 }} resizeMode="contain" />
                 ) : (
-                  <Smartphone size={26} color="#00008B" />
+                  <Smartphone size={24} color={BRAND.green} />
                 )}
               </View>
             </View>
@@ -106,8 +112,8 @@ export default function ServiceReceiptScreen({ route }) {
             {services.map((s, i) => (
               <View key={i} className="flex-row items-center justify-between py-1">
                 <View className="flex-row items-center flex-1 pr-2">
-                  <View className="h-4 w-4 rounded bg-primary/10 items-center justify-center mr-2">
-                    <Text className="font-bold text-primary" style={{ fontSize: rf(9) }}>{i + 1}</Text>
+                  <View className="rounded items-center justify-center mr-2" style={{ height: 16, width: 16, backgroundColor: MINT }}>
+                    <Text className="font-bold" style={{ fontSize: rf(9), color: GREEN_TEXT }}>{i + 1}</Text>
                   </View>
                   <Text className="text-text flex-1" style={{ fontSize: rf(12) }} numberOfLines={1}>{s.serviceName}</Text>
                 </View>
@@ -116,7 +122,7 @@ export default function ServiceReceiptScreen({ route }) {
             ))}
             <View className="flex-row items-center justify-between mt-1.5 pt-1.5 border-t border-border">
               <Text className="font-extrabold text-text" style={{ fontSize: rf(12) }}>Estimated Repair Amount</Text>
-              <Text className="font-extrabold text-primary" style={{ fontSize: rf(13) }}>{money(estimate)}</Text>
+              <Text className="font-extrabold" style={{ fontSize: rf(13), color: GREEN_TEXT }}>{money(estimate)}</Text>
             </View>
 
             <View className="h-px bg-border my-3" />
@@ -125,7 +131,7 @@ export default function ServiceReceiptScreen({ route }) {
             {(() => { const ci = cleanIssueSummary(b.issueSummary); return ci ? <InfoLine label="Complaint Issue" value={ci} /> : null; })()}
             <InfoLine label="Estimated Approximate Time" value={estTime} />
             <InfoLine label="Estimated Delivery Date" value={fmtDateTime(b.estimatedDeliveryAt)} />
-            <InfoLine label="Customer Repair Approval" value={approval} valueClass="text-success" />
+            <InfoLine label="Customer Repair Approval" value={approval} valueStyle={{ color: GREEN_TEXT }} />
           </Card>
         </View>
       </ScrollView>

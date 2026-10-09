@@ -3,24 +3,32 @@ import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   Smartphone, Laptop, Watch, Tablet, Headphones, Volume2,
-  Plus, Pencil, Trash2, ChevronRight, Tag, CheckCircle2, HardDrive,
+  Plus, Pencil, Trash2, ChevronRight, Tag, CheckCircle2,
 } from 'lucide-react-native';
-import {
-  BottomActionBar, Loader, Badge, EmptyState, SectionHeader, useBottomBarInset,
-} from '../../../components/rnr';
+import { BottomActionBar, Loader, useBottomBarInset } from '../../../components/rnr';
 import { confirm, notify } from '../../../components/confirm';
 import { listSavedDevices, deleteSavedDevice } from '../../../api/customer';
 import { getBrands, getModelsByBrand, getRamOptions, getStorageOptions } from '../../../api/masterData';
 import { rf } from '../../../utils/responsive';
+import { BRAND } from '../../../theme/brand';
 
-// Friendly names + per-category icon for the contextual banner.
+// Palette: 09AD2A · 1E1E1E · F8F8F8 · F3F3F3 · F3BF23 · F84141.
+const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
+const MINT = '#EAF8EC';
+const LINE = '#E6E6E6';
+const GREEN_LINE = 'rgba(9,173,42,0.45)';
+const MUTED = '#6B6B6B';
+const cardShadow = { shadowColor: BRAND.ink, shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1 };
+const ACTION = { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 4 };
+
+// Friendly names + per-category icon (palette tints) for the banner / rows.
 const CATEGORY_META = {
-  SMARTPHONE: { name: 'Smartphones',  icon: Smartphone,  color: '#00008B', bg: 'bg-primary/10' },
-  LAPTOP:     { name: 'Laptops',      icon: Laptop,      color: '#7C3AED', bg: 'bg-primary/10' },
-  SMARTWATCH: { name: 'Smartwatches', icon: Watch,       color: '#B45309', bg: 'bg-warning/10' },
-  TABLET:     { name: 'Tablets',      icon: Tablet,      color: '#0369A1', bg: 'bg-info/10' },
-  AUDIO:      { name: 'Audio Devices', icon: Headphones, color: '#BE185D', bg: 'bg-danger/10' },
-  SPEAKER:    { name: 'Speakers',     icon: Volume2,     color: '#0E9384', bg: 'bg-success/10' },
+  SMARTPHONE: { name: 'Smartphones',   icon: Smartphone, color: '#078F23', tint: '#EAF8EC' },
+  LAPTOP:     { name: 'Laptops',       icon: Laptop,     color: '#1E1E1E', tint: '#F3F3F3' },
+  SMARTWATCH: { name: 'Smartwatches',  icon: Watch,      color: '#1E1E1E', tint: '#FEF6DA' },
+  TABLET:     { name: 'Tablets',       icon: Tablet,     color: '#078F23', tint: '#EAF8EC' },
+  AUDIO:      { name: 'Audio Devices', icon: Headphones, color: '#F84141', tint: '#FEECEC' },
+  SPEAKER:    { name: 'Speakers',      icon: Volume2,    color: '#078F23', tint: '#EAF8EC' },
 };
 
 export default function SellSelectDeviceScreen({ navigation, route }) {
@@ -158,81 +166,89 @@ export default function SellSelectDeviceScreen({ navigation, route }) {
   if (loading) return <Loader label="Loading your devices..." />;
 
   const selectedDevice = items.find((x) => x.id === selectedId);
+  const accent = meta?.color || GREEN_TEXT;
+  const tint = meta?.tint || MINT;
 
   return (
-    <View className="flex-1 bg-background">
-      <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: bottomSpace }}>
+    <View style={{ flex: 1, backgroundColor: BRAND.bg }}>
+      <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: selectedDevice ? bottomSpace : 24 }}>
         {/* Category context banner */}
         {presetCategoryName ? (
-          <View className={`border rounded-xl p-2.5 mb-3 flex-row items-center ${meta?.bg || 'bg-primary/5'} border-primary/15`}>
-            <View className={`h-8 w-8 rounded-full items-center justify-center mr-2 ${meta?.bg || 'bg-primary/10'}`}>
-              <Icon size={14} color={meta?.color || '#00008B'} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1, borderColor: LINE, padding: 9, marginBottom: 10, ...cardShadow }}>
+            <View style={{ height: 30, width: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', marginRight: 9, backgroundColor: tint }}>
+              <Icon size={14} color={accent} />
             </View>
-            <View className="flex-1">
-              <Text className="text-text-muted uppercase tracking-widest" style={{ fontSize: rf(10) }}>Selling</Text>
-              <Text className="font-extrabold text-text" style={{ fontSize: rf(13) }}>{presetCategoryName}</Text>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={{ fontSize: rf(9.5), fontWeight: '700', letterSpacing: 1, color: MUTED }}>SELLING</Text>
+              <Text style={{ fontSize: rf(13), fontWeight: '800', color: BRAND.ink }} numberOfLines={1}>{presetCategoryName}</Text>
             </View>
-            <Badge variant="softPrimary">{items.length} SAVED</Badge>
+            <View style={{ borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3, backgroundColor: MINT }}>
+              <Text style={{ fontSize: rf(9.5), fontWeight: '800', color: GREEN_TEXT }}>{items.length} SAVED</Text>
+            </View>
           </View>
         ) : null}
 
-        <SectionHeader
-          title={categoryCode ? `Your ${presetCategoryName}` : 'Your Devices'}
-          caption={items.length ? 'Pick one or add a new one' : 'No saved devices in this category'}
-          className="mt-0 mb-2"
-        />
+        <View style={{ marginBottom: 8, paddingHorizontal: 2 }}>
+          <Text style={{ fontSize: rf(14), fontWeight: '800', color: BRAND.ink }}>{categoryCode ? `Your ${presetCategoryName}` : 'Your Devices'}</Text>
+          <Text style={{ fontSize: rf(11), color: MUTED, marginTop: 1 }}>{items.length ? 'Pick one or add a new one' : 'No saved devices in this category'}</Text>
+        </View>
 
         {items.length === 0 ? (
-          <EmptyState
-            icon={<Icon size={26} color={meta?.color || '#00008B'} />}
-            title={categoryCode ? `No saved ${presetCategoryName?.toLowerCase()} yet` : 'No saved devices'}
-            description={presetCategoryId ? 'Add the device you want to sell.' : 'Add one to sell.'}
-          />
+          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1, borderColor: LINE, padding: 12, ...cardShadow }}>
+            <View style={{ height: 40, width: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginRight: 10, backgroundColor: tint }}>
+              <Icon size={18} color={accent} />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={{ fontSize: rf(13), fontWeight: '800', color: BRAND.ink }}>{categoryCode ? `No saved ${presetCategoryName?.toLowerCase()} yet` : 'No saved devices'}</Text>
+              <Text style={{ fontSize: rf(11), color: MUTED, marginTop: 1 }}>{presetCategoryId ? 'Add the device you want to sell.' : 'Add one to sell.'}</Text>
+            </View>
+          </View>
         ) : (
           items.map((d) => {
             const active = selectedId === d.id;
             const dMeta = d.categoryCode && CATEGORY_META[d.categoryCode];
             const DIcon = dMeta?.icon || Icon;
+            const img = deviceImage(d);
+            const spec = [d.color, [deviceRam(d), deviceStorage(d)].filter(Boolean).join(' / ')].filter(Boolean).join(' · ');
             return (
               <Pressable
                 key={d.id}
                 onPress={() => setSelectedId(d.id)}
-                className={`bg-card border rounded-xl p-2.5 mb-2 active:opacity-80 ${active ? 'border-primary' : 'border-border'}`}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: active }}
+                accessibilityLabel={deviceName(d)}
+                className="active:opacity-90"
+                style={{
+                  backgroundColor: active ? '#F7FCF8' : '#FFFFFF', borderRadius: 14, padding: 10, marginBottom: 8,
+                  borderWidth: active ? 1.5 : 1, borderColor: active ? BRAND.green : LINE, ...cardShadow,
+                }}
               >
-                <View className="flex-row items-start">
-                  <View className={`h-11 w-11 rounded-xl items-center justify-center mr-2.5 overflow-hidden ${active ? 'bg-primary' : (dMeta?.bg || 'bg-primary/10')}`}>
-                    {deviceImage(d) ? (
-                      <Image source={{ uri: deviceImage(d) }} style={{ width: 44, height: 44 }} resizeMode="cover" />
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <View style={{ height: 42, width: 42, borderRadius: 11, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', backgroundColor: img ? '#FFFFFF' : (active ? BRAND.green : (dMeta?.tint || MINT)), borderWidth: 1, borderColor: BRAND.line }}>
+                    {img ? (
+                      <Image source={{ uri: img }} style={{ width: 38, height: 38 }} resizeMode="contain" />
                     ) : (
-                      <DIcon size={18} color={active ? '#fff' : (dMeta?.color || '#00008B')} />
+                      <DIcon size={18} color={active ? '#FFFFFF' : (dMeta?.color || GREEN_TEXT)} />
                     )}
                   </View>
-                  <View className="flex-1">
-                    <View className="flex-row items-center">
-                      <Text className="font-extrabold text-text mr-1.5" style={{ fontSize: rf(13) }} numberOfLines={1}>
-                        {deviceName(d)}
-                      </Text>
-                      {d.isDefault ? <Badge variant="softSuccess">DEFAULT</Badge> : null}
-                    </View>
-                    <View className="flex-row items-center mt-0.5 flex-wrap">
-                      {d.color ? <Text className="text-text-muted mr-2" style={{ fontSize: rf(10) }}>{d.color}</Text> : null}
-                      {(deviceRam(d) || deviceStorage(d)) ? (
-                        <View className="flex-row items-center mr-2">
-                          <HardDrive size={9} color="#64748B" />
-                          <Text className="text-text-muted ml-0.5" style={{ fontSize: rf(10) }}>
-                            {[deviceRam(d), deviceStorage(d)].filter(Boolean).join(' / ')}
-                          </Text>
+                  <View style={{ flex: 1, minWidth: 0, marginLeft: 9 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={{ flexShrink: 1, fontSize: rf(13), fontWeight: '800', color: BRAND.ink }} numberOfLines={1}>{deviceName(d)}</Text>
+                      {d.isDefault ? (
+                        <View style={{ marginLeft: 6, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 1.5, backgroundColor: MINT }}>
+                          <Text style={{ fontSize: rf(8.5), fontWeight: '800', letterSpacing: 0.5, color: GREEN_TEXT }}>DEFAULT</Text>
                         </View>
                       ) : null}
                     </View>
+                    {spec ? <Text style={{ fontSize: rf(10.5), color: MUTED, marginTop: 1 }} numberOfLines={1}>{spec}</Text> : null}
                   </View>
-                  <View className={`h-4 w-4 rounded-full border-2 ${active ? 'border-primary' : 'border-border'} items-center justify-center`}>
-                    {active ? <View className="h-2 w-2 rounded-full bg-primary" /> : null}
+                  <View style={{ height: 18, width: 18, borderRadius: 9, marginLeft: 8, borderWidth: 2, borderColor: active ? BRAND.green : '#C9C9C9', alignItems: 'center', justifyContent: 'center' }}>
+                    {active ? <View style={{ height: 9, width: 9, borderRadius: 5, backgroundColor: BRAND.green }} /> : null}
                   </View>
                 </View>
 
                 {active ? (
-                  <View className="flex-row mt-2 pt-2 border-t border-border -mx-1">
+                  <View style={{ flexDirection: 'row', marginTop: 9, paddingTop: 7, borderTopWidth: 1, borderTopColor: BRAND.line }}>
                     <Pressable
                       onPress={() => navigation.navigate('SelectVariant', {
                         flow: 'PROFILE',
@@ -247,10 +263,12 @@ export default function SellSelectDeviceScreen({ navigation, route }) {
                         storageOptionId: d.storageOptionId,
                         color: d.color,
                       })}
-                      className="flex-1 flex-row items-center justify-center py-1.5 active:opacity-70"
+                      accessibilityRole="button"
+                      className="active:opacity-70"
+                      style={ACTION}
                     >
-                      <Pencil size={12} color="#2563EB" />
-                      <Text className="font-bold text-secondary ml-1" style={{ fontSize: rf(11) }}>Edit</Text>
+                      <Pencil size={12} color={BRAND.ink} />
+                      <Text style={{ marginLeft: 5, fontSize: rf(11.5), fontWeight: '800', color: BRAND.ink }}>Edit</Text>
                     </Pressable>
                     <Pressable
                       onPress={async () => {
@@ -258,17 +276,21 @@ export default function SellSelectDeviceScreen({ navigation, route }) {
                         if (!ok) return;
                         try { await deleteSavedDevice(d.id); load(); } catch (e) { notify('Error', e.message); }
                       }}
-                      className="flex-1 flex-row items-center justify-center py-1.5 active:opacity-70 border-l border-border"
+                      accessibilityRole="button"
+                      className="active:opacity-70"
+                      style={{ ...ACTION, borderLeftWidth: 1, borderLeftColor: BRAND.line }}
                     >
-                      <Trash2 size={12} color="#EF4444" />
-                      <Text className="font-bold text-danger ml-1" style={{ fontSize: rf(11) }}>Delete</Text>
+                      <Trash2 size={12} color={BRAND.red} />
+                      <Text style={{ marginLeft: 5, fontSize: rf(11.5), fontWeight: '800', color: BRAND.red }}>Delete</Text>
                     </Pressable>
                     <Pressable
                       onPress={() => proceedWith(d)}
-                      className="flex-1 flex-row items-center justify-center py-1.5 active:opacity-70 border-l border-border"
+                      accessibilityRole="button"
+                      className="active:opacity-70"
+                      style={{ ...ACTION, borderLeftWidth: 1, borderLeftColor: BRAND.line }}
                     >
-                      <CheckCircle2 size={12} color="#004C40" />
-                      <Text className="font-bold text-success ml-1" style={{ fontSize: rf(11) }}>Use</Text>
+                      <CheckCircle2 size={12} color={GREEN_TEXT} />
+                      <Text style={{ marginLeft: 5, fontSize: rf(11.5), fontWeight: '800', color: GREEN_TEXT }}>Use</Text>
                     </Pressable>
                   </View>
                 ) : null}
@@ -278,38 +300,57 @@ export default function SellSelectDeviceScreen({ navigation, route }) {
         )}
 
         {items.length > 0 ? (
-          <View className="flex-row items-center my-3">
-            <View className="flex-1 h-px bg-border" />
-            <Text className="font-bold text-text-muted mx-3 uppercase tracking-widest" style={{ fontSize: rf(11) }}>or</Text>
-            <View className="flex-1 h-px bg-border" />
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 10 }}>
+            <View style={{ flex: 1, height: 1, backgroundColor: LINE }} />
+            <Text style={{ marginHorizontal: 10, fontSize: rf(10.5), fontWeight: '700', letterSpacing: 1, color: MUTED }}>OR</Text>
+            <View style={{ flex: 1, height: 1, backgroundColor: LINE }} />
           </View>
         ) : null}
 
         <Pressable
           onPress={selectOtherDevice}
-          className="bg-primary/5 border border-dashed border-primary/40 rounded-xl p-3 flex-row items-center mt-1 active:opacity-80"
+          accessibilityRole="button"
+          accessibilityLabel="Select Other Device"
+          className="active:opacity-85"
+          style={{
+            flexDirection: 'row', alignItems: 'center', marginTop: items.length ? 0 : 10,
+            backgroundColor: '#F4FBF5', borderRadius: 14, borderWidth: 1, borderStyle: 'dashed', borderColor: GREEN_LINE,
+            paddingVertical: 9, paddingHorizontal: 10,
+          }}
         >
-          <View className="h-10 w-10 rounded-xl bg-primary/10 items-center justify-center mr-2.5">
-            <Plus size={18} color="#00008B" />
+          <View style={{ height: 32, width: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginRight: 9, backgroundColor: MINT }}>
+            <Plus size={16} color={GREEN_TEXT} strokeWidth={2.5} />
           </View>
-          <View className="flex-1">
-            <Text className="font-extrabold text-primary" style={{ fontSize: rf(13) }}>Select Other Device</Text>
-            <Text className="text-text-muted mt-0.5" style={{ fontSize: rf(11) }} numberOfLines={1}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={{ fontSize: rf(13), fontWeight: '800', color: GREEN_TEXT }}>Select Other Device</Text>
+            <Text style={{ fontSize: rf(10.5), color: MUTED, marginTop: 1 }} numberOfLines={1}>
               {presetCategoryId ? 'Pick a different brand & model' : 'Pick category, brand & model'}
             </Text>
           </View>
-          <ChevronRight size={16} color="#00008B" />
+          <ChevronRight size={16} color={GREEN_TEXT} />
         </Pressable>
       </ScrollView>
 
       {selectedDevice ? (
-        <BottomActionBar
-          priceCaption="Selected"
-          priceValue={deviceName(selectedDevice).split(' ').slice(0, 3).join(' ')}
-          priceLabel="Continue with this"
-          title="Sell Device"
-          onPress={() => proceedWith(selectedDevice)}
-        />
+        <BottomActionBar>
+          {/* Same action as before: continue selling the selected saved device. */}
+          <Pressable
+            onPress={() => proceedWith(selectedDevice)}
+            accessibilityRole="button"
+            accessibilityLabel="Sell Device"
+            className="active:opacity-90"
+            style={{ flexDirection: 'row', alignItems: 'center', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: BRAND.green }}
+          >
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={{ fontSize: rf(9.5), fontWeight: '800', letterSpacing: 0.8, color: 'rgba(255,255,255,0.85)' }}>SELECTED</Text>
+              <Text style={{ marginTop: 1, fontSize: rf(13), fontWeight: '800', color: '#FFFFFF' }} numberOfLines={1}>{deviceName(selectedDevice)}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 10, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.2)' }}>
+              <Text style={{ fontSize: rf(13), fontWeight: '800', color: '#FFFFFF' }}>Sell Device</Text>
+              <ChevronRight size={16} color="#FFFFFF" />
+            </View>
+          </Pressable>
+        </BottomActionBar>
       ) : null}
     </View>
   );

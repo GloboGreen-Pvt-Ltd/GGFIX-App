@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import PageHeader, { HEADER } from '../../../components/PageHeader';
 import { useFocusEffect } from '@react-navigation/native';
-import { ChevronLeft, MessageCircle, Search, ShieldCheck, Store, MapPin } from 'lucide-react-native';
+import { MessageCircle, Search, Store, MapPin } from 'lucide-react-native';
 import { Avatar, EmptyState, Loader } from '../../../components/rnr';
 import { listChats, pingChatPresence } from '../../../api/marketplace';
 import { listNearbyShops } from '../../../api/shops';
@@ -96,52 +96,30 @@ export default function CustomerChatInboxScreen({ navigation }) {
 
   return (
     <View className="flex-1" style={{ backgroundColor: tokens.background }}>
-      <SafeAreaView edges={['top']} style={{ backgroundColor: tokens.primary }}>
-        <View className="px-3 pt-1.5 pb-3" style={{ backgroundColor: tokens.primary }}>
-          <View className="flex-row items-center">
-            <Pressable
-              onPress={() => navigation.goBack()}
-              className="h-10 w-10 rounded-full items-center justify-center active:opacity-80"
-              style={{ backgroundColor: 'rgba(255,255,255,0.18)' }}
-            >
-              <ChevronLeft size={20} color="#fff" />
-            </Pressable>
-            <View className="flex-1 ml-2">
-              <Text className="text-white font-extrabold" style={{ fontSize: rf(16) }}>Messages</Text>
-              <View className="flex-row items-center mt-0.5">
-                <MessageCircle size={11} color="rgba(255,255,255,0.85)" />
-                <Text className="text-white/85 ml-1" style={{ fontSize: rf(11) }}>
-                  {threads.length} shops {totalUnread > 0 ? `· ${totalUnread} unread` : ''}
-                </Text>
-              </View>
-            </View>
-            <View className="bg-white/15 rounded-full px-2 py-1 flex-row items-center">
-              <ShieldCheck size={11} color="#A7F3D0" />
-              <Text className="text-emerald-100 font-extrabold ml-1 tracking-wider" style={{ fontSize: rf(10) }}>ENCRYPTED</Text>
-            </View>
-          </View>
-
-          <View className="mt-3 bg-white rounded-2xl px-3 py-2 flex-row items-center"
-                style={{ shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 4 }}>
-            <Search size={16} color={tokens.primary} />
-            <TextInput
-              value={q}
-              onChangeText={setQ}
-              placeholder="Search shop or message"
-              placeholderTextColor="#94A3B8"
-              className="flex-1 text-text ml-2" style={{ fontSize: rf(13) }}
-              autoCorrect={false}
-              autoCapitalize="none"
-              returnKeyType="search"
-            />
-          </View>
+      <PageHeader
+        title="Messages"
+        subtitle={`${threads.length} shops${totalUnread > 0 ? ` · ${totalUnread} unread` : ''} · Encrypted`}
+        onBack={() => navigation.goBack()}
+      >
+        <View style={{ marginTop: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F3F3', borderRadius: 16, borderWidth: 1, borderColor: '#E6E6E6', paddingHorizontal: 12, height: 44 }}>
+          <Search size={16} color={HEADER.action} />
+          <TextInput
+            value={q}
+            onChangeText={setQ}
+            placeholder="Search shop or message"
+            placeholderTextColor="#8E8E8E"
+            className="flex-1 text-text ml-2" style={{ fontSize: rf(13), outlineStyle: 'none' }}
+            autoCorrect={false}
+            autoCapitalize="none"
+            returnKeyType="search"
+          />
         </View>
-      </SafeAreaView>
+      </PageHeader>
 
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 32 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={tokens.primary} colors={[tokens.primary]} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#09AD2A" colors={['#09AD2A']} />}
       >
         {filtered.length > 0 ? (
           <>

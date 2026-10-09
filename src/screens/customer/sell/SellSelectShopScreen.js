@@ -5,7 +5,7 @@ import { notify } from '../../../components/confirm';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../../../theme/colors';
 import { Loader, PrimaryButton, Empty } from '../../../components/ui';
-import { getSellOrderQuotations, chooseSellQuotation } from '../../../api/orders';
+import { getSellOrderQuotations, chooseSellQuotation, getSellOrder } from '../../../api/orders';
 import { rf } from '../../../utils/responsive';
 
 const styles = StyleSheet.create({
@@ -32,8 +32,15 @@ export default function SellSelectShopScreen({ navigation, route }) {
     setSaving(true);
     try {
       await chooseSellQuotation(sellOrderId, selectedId);
-      navigation.popToTop();
-      navigation.navigate('MyOrders');
+      // The backend assigns the shop; re-read the order so the details screen
+      // shows its real shopId / finalPrice / status rather than local guesses.
+      const updated = await getSellOrder(sellOrderId).catch(() => null);
+      const price = updated?.finalPrice != null && Number(updated.finalPrice) > 0
+        ? ` · ₹${Number(updated.finalPrice).toLocaleString('en-IN')}` : '';
+      notify('Shop selected', `${String(updated?.status || 'Updated').replace(/_/g, ' ')}${price}`, { preset: 'done' });
+      // popTo returns to the details screen already on the stack (pushing it
+      // if absent) instead of stacking a duplicate; it refetches on focus.
+      navigation.popTo('SellOrderDetails', { sellOrderId, sellOrder: updated });
     } catch (e) { notify('Error', e.message); }
     finally { setSaving(false); }
   };

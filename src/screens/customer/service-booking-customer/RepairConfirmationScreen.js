@@ -1,9 +1,6 @@
 import React from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Image, ScrollView, Text, View } from 'react-native';
 import {
-  CheckCircle2,
   CalendarClock,
   Smartphone,
   MapPin,
@@ -11,27 +8,52 @@ import {
   Phone,
   BadgeCheck,
   Home,
+  Check,
+  Wrench,
+  Truck,
+  ChevronRight,
+  ClipboardCheck,
+  PackageCheck,
 } from 'lucide-react-native';
-import { Button, Card, CardTitle, Badge } from '../../../components/rnr';
 import { rf } from '../../../utils/responsive';
+import { BRAND } from '../../../theme/brand';
+import { SuccessHero, SuccessCard, StatusPill, InfoRow, SuccessActions, GREEN_TEXT, MINT, MUTED } from '../../../components/SuccessChrome';
 
-function Row({ icon, label, value, sub }) {
+const hashed = (n) => (n ? (String(n).startsWith('#') ? String(n) : `#${n}`) : '');
+const humanize = (s) => String(s || '').replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+
+// Compact progress strip: Confirmed ✓ → Pickup → Repair → Delivered.
+const PROGRESS = [
+  { icon: Check, label: 'Confirmed' },
+  { icon: Truck, label: 'Pickup' },
+  { icon: Wrench, label: 'Repair' },
+  { icon: PackageCheck, label: 'Delivered' },
+];
+function ProgressStrip() {
   return (
-    <View className="flex-row items-start py-2.5 border-b border-border">
-      <View className="h-8 w-8 rounded-full bg-primary/10 items-center justify-center mr-3 mt-0.5">
-        {icon}
-      </View>
-      <View className="flex-1">
-        <Text className="text-text-muted uppercase tracking-widest" style={{ fontSize: rf(11) }}>{label}</Text>
-        <Text className="text-text font-bold mt-0.5" style={{ fontSize: rf(13) }}>{value || '-'}</Text>
-        {sub ? <Text className="text-text-muted mt-0.5" style={{ fontSize: rf(11) }}>{sub}</Text> : null}
-      </View>
+    <View style={{ flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 8, paddingHorizontal: 2, borderBottomWidth: 1, borderBottomColor: BRAND.line }}>
+      {PROGRESS.map((s, i) => {
+        const Icon = s.icon;
+        const done = i === 0;
+        return (
+          <React.Fragment key={s.label}>
+            <View style={{ alignItems: 'center', width: 58 }}>
+              <View style={{ height: 26, width: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: done ? BRAND.green : MINT, borderWidth: done ? 3 : 0, borderColor: 'rgba(9,173,42,0.22)' }}>
+                <Icon size={12} color={done ? '#FFFFFF' : GREEN_TEXT} strokeWidth={done ? 3 : 2.2} />
+              </View>
+              <Text style={{ fontSize: rf(9.5), fontWeight: '700', color: done ? GREEN_TEXT : MUTED, marginTop: 3 }} numberOfLines={1}>{s.label}</Text>
+            </View>
+            {i < PROGRESS.length - 1 ? (
+              <View style={{ flex: 1, height: 2, borderRadius: 1, marginTop: 12, marginHorizontal: -8, backgroundColor: i === 0 ? 'rgba(9,173,42,0.45)' : '#E3E3E3' }} />
+            ) : null}
+          </React.Fragment>
+        );
+      })}
     </View>
   );
 }
 
 export default function RepairConfirmationScreen({ navigation, route }) {
-  const insets = useSafeAreaInsets();
   const { booking = {}, device = {}, shop, address, services = [] } = route.params || {};
 
   const deviceName = device.modelName || booking.modelName || device.brandName || booking.brandName || '-';
@@ -40,84 +62,72 @@ export default function RepairConfirmationScreen({ navigation, route }) {
   const addressText = address
     ? [address.addressLine, address.locality, address.city, address.state, address.pincode].filter(Boolean).join(', ')
     : '-';
-  const scheduledText = `${booking.pickupDate || ''} · ${String(booking.pickupSlotStart || '').slice(0, 5)} - ${String(booking.pickupSlotEnd || '').slice(0, 5)}`;
+  // '-' (via InfoRow) rather than a stray ' · -' when the booking carries no slot.
+  const scheduledText = booking.pickupDate
+    ? `${booking.pickupDate} · ${String(booking.pickupSlotStart || '').slice(0, 5)} - ${String(booking.pickupSlotEnd || '').slice(0, 5)}`
+    : null;
+
+  // ---- presentation-only values ----
+  const addrRest = address ? [address.locality, address.city, address.state, address.pincode].filter(Boolean).join(', ') : '';
+  const statusLabel = humanize(booking.status || 'ORDER_PLACED');
 
   return (
-    <View className="flex-1 bg-background">
-      <SafeAreaView edges={['top']} style={{ backgroundColor: '#004C40' }}>
-        <LinearGradient
-          colors={['#004C40', '#004C40']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{ paddingTop: 24, paddingBottom: 44, borderBottomLeftRadius: 32, borderBottomRightRadius: 32, alignItems: 'center' }}
-        >
-          <View className="h-20 w-20 rounded-full bg-white/20 items-center justify-center mb-3">
-            <View className="h-14 w-14 rounded-full bg-white items-center justify-center">
-              <CheckCircle2 size={32} color="#004C40" />
+    <View style={{ flex: 1, backgroundColor: BRAND.bg }}>
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+        <SuccessHero
+          title="Booking Confirmed!"
+          subtitle="Your repair pickup is scheduled. We'll keep you posted on every step."
+          chips={booking.bookingNumber ? [{ icon: BadgeCheck, text: hashed(booking.bookingNumber), selectable: true }] : []}
+        />
+
+        {/* Cards overlap the hero's lower edge */}
+        <View style={{ paddingHorizontal: 14, marginTop: -30 }}>
+          <SuccessCard raised icon={ClipboardCheck} title="Order Details" right={<StatusPill icon={CalendarClock} text={statusLabel} />}>
+            <ProgressStrip />
+
+            {/* device block */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: BRAND.line }}>
+              <View style={{ height: 46, width: 42, borderRadius: 10, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: BRAND.line, alignItems: 'center', justifyContent: 'center', marginRight: 9, overflow: 'hidden' }}>
+                {device.imageUrl ? (
+                  <Image source={{ uri: device.imageUrl }} style={{ width: 38, height: 42 }} resizeMode="contain" />
+                ) : (
+                  <Smartphone size={20} color={GREEN_TEXT} />
+                )}
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={{ fontSize: rf(9), color: GREEN_TEXT, letterSpacing: 1, fontWeight: '800' }}>DEVICE</Text>
+                <Text style={{ fontSize: rf(13.5), fontWeight: '800', color: BRAND.ink, marginTop: 1 }} numberOfLines={2}>{deviceName}</Text>
+                {deviceSpecs ? <Text style={{ fontSize: rf(11), color: MUTED, marginTop: 1 }} numberOfLines={1}>{deviceSpecs}</Text> : null}
+              </View>
             </View>
-          </View>
-          <Text className="text-white font-extrabold" style={{ fontSize: rf(22) }}>Booking Confirmed!</Text>
-          <Text className="text-white/85 mt-1 text-center px-8" style={{ fontSize: rf(13) }}>
-            Your repair pickup is scheduled. We'll keep you posted on every step.
-          </Text>
-          {booking.bookingNumber ? (
-            <View className="bg-white/20 rounded-full px-4 py-1.5 mt-4 flex-row items-center">
-              <BadgeCheck size={13} color="#fff" />
-              <Text className="text-white font-bold ml-1.5" style={{ fontSize: rf(12) }}>#{booking.bookingNumber}</Text>
-            </View>
-          ) : null}
 
-        </LinearGradient>
-      </SafeAreaView>
+            <InfoRow icon={Wrench} label="Repair Services" value={services.map((s) => s.name).join(', ')} />
+            <InfoRow
+              icon={MapPin}
+              label="Pickup Address"
+              value={address ? (address.addressLine || addressText) : null}
+              sub={address && address.addressLine ? addrRest : null}
+            />
+            <InfoRow icon={CalendarClock} label="Scheduled" value={scheduledText} last />
+          </SuccessCard>
 
-      <ScrollView className="flex-1 -mt-6" showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
-        <Card className="rounded-2xl mb-3">
-          <CardTitle className="mb-1">Order Details</CardTitle>
-          <Row icon={<Smartphone size={14} color="#00008B" />} label="Device" value={deviceName} sub={deviceSpecs} />
-          <Row icon={<BadgeCheck size={14} color="#00008B" />} label="Repair Services" value={services.map((s) => s.name).join(', ')} />
-          <Row icon={<MapPin size={14} color="#00008B" />} label="Pickup Address" value={address ? addressText : null} />
-          <Row icon={<CalendarClock size={14} color="#00008B" />} label="Scheduled" value={scheduledText} />
-        </Card>
+          <SuccessCard icon={Store} title="Shop Details">
+            <InfoRow icon={Store} label="Shop Name" value={shop?.name} />
+            <InfoRow icon={MapPin} label="Address" value={shop?.address} />
+            <InfoRow icon={Phone} label="Phone" value={shop?.mobile || shop?.phone} last />
+          </SuccessCard>
 
-        <Card className="rounded-2xl mb-3">
-          <CardTitle className="mb-1">Shop</CardTitle>
-          <Row icon={<Store size={14} color="#2563EB" />} label="Shop Name" value={shop?.name} />
-          <Row icon={<MapPin size={14} color="#2563EB" />} label="Address" value={shop?.address} />
-          <Row icon={<Phone size={14} color="#2563EB" />} label="Phone" value={shop?.mobile || shop?.phone} />
-        </Card>
-
-        <Card className="rounded-2xl mb-3">
-          <View className="flex-row items-center justify-between">
-            <CardTitle>Service Status</CardTitle>
-            <Badge variant="softSuccess">
-              {(booking.status || 'ORDER_PLACED').replace(/_/g, ' ')}
-            </Badge>
-          </View>
-          <Text className="text-text-muted mt-1" style={{ fontSize: rf(12) }}>
+          <Text style={{ fontSize: rf(11), color: MUTED, textAlign: 'center', paddingHorizontal: 12, lineHeight: rf(16) }}>
             We'll send you live updates as your repair progresses through pickup, diagnosis, repair and delivery.
           </Text>
-        </Card>
+        </View>
       </ScrollView>
 
-      <View className="px-4 pt-3 bg-card border-t border-border" style={{ paddingBottom: Math.max(insets.bottom, 12) + 8, shadowColor: '#0F172A', shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: -4 }, elevation: 12 }}>
-        <View className="flex-row">
-          <Button
-            variant="outline"
-            className="flex-1 mr-2"
-            onPress={() => navigation.popToTop()}
-            leftIcon={<Home size={16} color="#00008B" />}
-          >
-            Home
-          </Button>
-          <Button
-            className="flex-1 ml-2"
-            onPress={() => navigation.replace('RepairOrderDetails', { bookingId: booking.id })}
-          >
-            Track Order
-          </Button>
-        </View>
-      </View>
+      {/* Sticky actions — same handlers as before. */}
+      <SuccessActions
+        secondary={{ label: 'Home', icon: Home, onPress: () => navigation.popToTop() }}
+        primary={{ label: 'Track Order', icon: Truck, trailing: ChevronRight, onPress: () => navigation.replace('RepairOrderDetails', { bookingId: booking.id }) }}
+      />
     </View>
   );
 }
-

@@ -1,4 +1,3 @@
-import { Platform } from 'react-native';
 import {
   AUTH_BASE,
   MASTER_BASE,
@@ -11,7 +10,9 @@ import {
   ORDER_BASE,
   USER_BASE,
 } from './config';
-import { getToken, clearSession, notifyAuthExpired } from '../auth/session';
+import { getToken, clearSession, notifyAuthExpired, isTokenExpired } from '../auth/session';
+import { Platform } from 'react-native';
+import { File, UploadType } from 'expo-file-system';
 
 // RN's fetch has NO default timeout. Against this 12-service backend a single
 // down/hung service would otherwise leave every awaiting screen stuck on a
@@ -36,7 +37,7 @@ function joinUrl(base, path) {
   return `${base}${p.startsWith('/') ? p : `/${p}`}`;
 }
 
-async function request(baseUrlOrNull, method, path, { query, body, headers, skipAuthExpiry } = {}) {
+async function request(baseUrlOrNull, method, path, { query, body, headers, skipAuthExpiry, timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
   const base = resolveBase(baseUrlOrNull);
   const url = new URL(joinUrl(base, path));
   if (query) {
@@ -46,9 +47,17 @@ async function request(baseUrlOrNull, method, path, { query, body, headers, skip
   }
 
   const token = await getToken();
+  if (token && !skipAuthExpiry && isTokenExpired(token)) {
+    await clearSession();
+    notifyAuthExpired();
+    const err = new Error('Your session has expired. Please log in again.');
+    err.status = 401;
+    err.authRejected = true;
+    throw err;
+  }
   const urlString = url.toString();
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   let res;
   try {
     res = await fetch(urlString, {
@@ -68,7 +77,7 @@ async function request(baseUrlOrNull, method, path, { query, body, headers, skip
         ? ' (note: localhost on a phone means the phone itself)'
         : '';
     const msg = timedOut
-      ? `Request timed out after ${Math.round(REQUEST_TIMEOUT_MS / 1000)}s — the server may be down or unreachable.`
+      ? `Request timed out after ${Math.round(timeoutMs / 1000)}s — the server may be down or unreachable.`
       : (e?.message || 'Network request failed');
     const err = new Error(`Network request failed${baseHint}. URL: ${urlString}. ${msg}`);
     err.status = 0;
@@ -104,41 +113,75 @@ async function request(baseUrlOrNull, method, path, { query, body, headers, skip
     const err = new Error(message);
     err.status = res.status;
     err.payload = json;
+    // The login itself was refused (expired / invalid token): a 401 from any
+    // service, or the empty-bodied 403 user / auth services send for it.
+    err.authRejected = !!token && (res.status === 401 || (res.status === 403 && !text));
     throw err;
   }
 
   return json;
 }
 
-// Multipart file upload. Does NOT set Content-Type so fetch can add the
-// multipart boundary itself. `file` is an expo-image-picker asset { uri }.
-async function uploadRequest(baseUrlOrNull, path, { uri, name, type, fields } = {}) {
+// Multipart file upload. `file` is an expo-image-picker asset { uri, name,
+// type } (or an equivalent object built elsewhere).
+//
+// This used to branch on Platform.OS: web read the uri into a real Blob via
+// fetch(uri).blob(), native passed the classic RN `{ uri, name, type }`
+// shorthand straight to FormData. Both are bridge-era RN patterns that break
+// under the New Architecture (this app runs newArchEnabled=true, RN 0.86):
+// the native shorthand throws "Unsupported FormDataPart implementation"
+// (the New Architecture's rewritten Networking module doesn't recognise it),
+// and Expo SDK 56+'s global `expo/fetch` makes Response.blob() fall back to
+// routing bytes through React Native's OWN legacy Blob module (never
+// migrated to TurboModules — see its own "TODO: use turbomodules" comment),
+// which is unreliable enough to corrupt the bytes silently.
+//
+// expo-file-system's `File` is Expo's own New-Architecture-native
+// implementation, with a purpose-built multipart upload task — no JS
+// FormData/Blob bridging at all. `mimeType` is set explicitly rather than
+// left to whatever a blob happened to infer, and `parameters` covers the
+// extra form fields (`fields`) the old FormData path used to carry.
+async function uploadRequest(baseUrlOrNull, path, { uri, name: _name, type, fields } = {}) {
   const base = resolveBase(baseUrlOrNull);
   const urlString = joinUrl(base, path);
 
-  const form = new FormData();
-  const filename = name || 'upload.jpg';
-  if (Platform.OS === 'web') {
-    // On web the picker gives a blob:/data: URI — fetch it into a real Blob so
-    // FormData produces a valid multipart body (RN's { uri } shape is native-only).
-    const blob = await (await fetch(uri)).blob();
-    form.append('file', blob, filename);
-  } else {
-    form.append('file', { uri, name: filename, type: type || 'image/jpeg' });
-  }
-  if (fields) Object.entries(fields).forEach(([k, v]) => { if (v != null) form.append(k, String(v)); });
+  const parameters = {};
+  if (fields) Object.entries(fields).forEach(([k, v]) => { if (v != null) parameters[k] = String(v); });
 
   const token = await getToken();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
-  let res;
+  let result;
   try {
-    res = await fetch(urlString, {
-      method: 'POST',
-      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: form,
-      signal: controller.signal,
-    });
+    if (Platform.OS === 'web') {
+      // expo-file-system's File.upload() is native-only; the browser's own
+      // fetch + FormData is the reliable multipart path on web.
+      const blob = await fetch(uri).then((r) => r.blob());
+      const form = new FormData();
+      form.append('file', blob, _name || 'upload');
+      Object.entries(parameters).forEach(([k, v]) => form.append(k, v));
+      const res = await fetch(urlString, {
+        method: 'POST',
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: form,
+        signal: controller.signal,
+      });
+      result = { status: res.status, body: await res.text() };
+    } else {
+      const file = new File(uri);
+      result = await file.upload(urlString, {
+        httpMethod: 'POST',
+        uploadType: UploadType.MULTIPART,
+        fieldName: 'file',
+        // The server validates the file's own magic bytes, not this header —
+        // but an absent/wrong Content-Type still trips its declared-vs-actual
+        // cross-check, so this needs to be the real type, not a guess.
+        mimeType: type || 'image/jpeg',
+        parameters,
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        signal: controller.signal,
+      });
+    }
   } catch (e) {
     const timedOut = e?.name === 'AbortError';
     const msg = timedOut
@@ -152,15 +195,15 @@ async function uploadRequest(baseUrlOrNull, path, { uri, name, type, fields } = 
     clearTimeout(timer);
   }
 
-  const text = await res.text();
+  const { status, body: text } = result;
   let json;
   try { json = text ? JSON.parse(text) : null; } catch { json = null; }
-  if (!res.ok) {
+  if (status < 200 || status >= 300) {
     // Same rule as request(): only an auth-service 401 ends the session.
-    if (res.status === 401 && token && base === AUTH_BASE) { await clearSession(); notifyAuthExpired(); }
-    const message = (json && (json.message || json.error)) || text || `HTTP ${res.status}`;
+    if (status === 401 && token && base === AUTH_BASE) { await clearSession(); notifyAuthExpired(); }
+    const message = (json && (json.message || json.error)) || text || `HTTP ${status}`;
     const err = new Error(message);
-    err.status = res.status;
+    err.status = status;
     throw err;
   }
   return json;

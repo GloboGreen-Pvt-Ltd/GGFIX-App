@@ -49,7 +49,14 @@ export default function RepairEstimateScreen({ navigation, route }) {
 
   useEffect(() => { load(); }, [load]);
 
-  if (loading) return <Loader label="Loading estimate..." />;
+  if (loading) {
+    return (
+      <View style={{ flex: 1 }}>
+        <AppHeader title="Repair Estimate" onBack={() => navigation.goBack()} />
+        <Loader label="Loading estimate..." />
+      </View>
+    );
+  }
   if (error) {
     return (
       <ScreenContainer>
@@ -95,7 +102,7 @@ export default function RepairEstimateScreen({ navigation, route }) {
       <AppHeader title="Repair Estimate" subtitle={`#${booking.bookingNumber || bookingId?.slice?.(0, 8)}`} onBack={() => navigation.goBack()} />
       <ScrollView
         contentContainerStyle={{ padding: 16, paddingBottom: insetBottom + (canDecide ? 110 : 24) }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={tokens.primary} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#09AD2A" colors={['#09AD2A']} />}
       >
         <Card>
           <View className="flex-row items-center">

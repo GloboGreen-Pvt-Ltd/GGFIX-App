@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Image, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Image, Platform, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import {
   Smartphone,
@@ -10,6 +10,8 @@ import {
   ShieldCheck,
   Wrench,
   Upload,
+  Check,
+  ChevronRight,
 } from 'lucide-react-native';
 import {
   BottomActionBar,
@@ -20,6 +22,16 @@ import {
 } from '../../../components/rnr';
 import { notify } from '../../../components/confirm';
 import { rf } from '../../../utils/responsive';
+import { FlowCta, FlowDecor, FlowHeader, useHideStackHeader } from './FlowChrome';
+import { BRAND, BRAND_FLOW } from '../../../theme/brand';
+
+const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
+const LINE = '#E6E6E6';
+const MINT = '#EAF8EC';
+const YELLOW_SOFT = '#FEF6DA';
+const MUTED = '#6B6B6B';
+const GREEN_LINE = 'rgba(9,173,42,0.45)';
+const shadow = { shadowColor: BRAND.ink, shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1 };
 
 const SLOTS = [
   { key: 'front', label: 'Front Side',  hint: 'Show the screen',     accent: 'primary',   icon: Smartphone },
@@ -35,6 +47,7 @@ const accentMap = {
 
 export default function RepairReviewScreen({ navigation, route }) {
   const bottomSpace = useBottomBarInset(96);
+  useHideStackHeader(navigation);
   const { device = {}, services = [] } = route.params || {};
   const [media, setMedia] = useState({ front: null, back: null, video: null });
   // Picker chooser modal: which slot is currently asking for Camera vs Upload?
@@ -91,138 +104,178 @@ export default function RepairReviewScreen({ navigation, route }) {
   const filled = Object.values(media).filter(Boolean).length;
   const ready = !!media.front && !!media.back; // video optional
 
+  // ---- presentation-only values ----
+  const { width } = useWindowDimensions();
+  const specLine = [device.color, device.ramLabel, device.storageLabel].filter(Boolean).join('  ·  ');
+  const tileW = Math.floor((Math.min(width, 640) - 32 - 22 - 16) / 3); // screen − page pad − card pad − gaps
+  const tileH = Math.max(84, Math.min(104, Math.round(tileW * 0.82)));
+  // Slot tones: front + video green, back yellow (palette tints).
+  const TONE = {
+    primary:   { tint: MINT,        bg: '#F7FCF8', border: GREEN_LINE,       fg: GREEN_TEXT, icon: BRAND.green },
+    secondary: { tint: YELLOW_SOFT, bg: '#FFFCF3', border: BRAND.yellowLine, fg: BRAND.ink,  icon: BRAND.yellow },
+    success:   { tint: MINT,        bg: '#F7FCF8', border: GREEN_LINE,       fg: GREEN_TEXT, icon: BRAND.green },
+  };
+  const card = {
+    backgroundColor: '#FFFFFF', borderRadius: 16, borderWidth: 1, borderColor: LINE,
+    padding: 11, marginBottom: 10, ...shadow,
+  };
+
   return (
-    <View className="flex-1 bg-background">
-      <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: bottomSpace }}>
+    <View style={{ flex: 1, backgroundColor: BRAND.bg }}>
+      <FlowDecor palette={BRAND_FLOW} />
+      {/* bottom-left decorative curve (visual only) */}
+      <View pointerEvents="none" style={{ position: 'absolute', left: -width * 0.4, bottom: 60, width: width * 1.2, height: width * 0.7, borderRadius: width, backgroundColor: 'rgba(9,173,42,0.04)' }} />
+      <FlowHeader title="Review Report" navigation={navigation} />
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: bottomSpace }}>
 
         {/* Device summary */}
-        <Card className="rounded-2xl mb-2.5">
-          <View className="flex-row items-center">
-            <View className="h-11 w-11 rounded-xl bg-primary/10 items-center justify-center mr-3 overflow-hidden">
-              {device.imageUrl ? (
-                <Image source={{ uri: device.imageUrl }} style={{ width: 44, height: 44 }} resizeMode="cover" />
-              ) : (
-                <Smartphone size={20} color="#00008B" />
-              )}
-            </View>
-            <View className="flex-1">
-              <Text className="text-text-muted uppercase tracking-widest" style={{ fontSize: rf(10) }}>Your Device</Text>
-              <Text className="font-extrabold text-text" style={{ fontSize: rf(14) }} numberOfLines={1}>{device.modelName || 'Device'}</Text>
-              <View className="flex-row items-center mt-0.5 flex-wrap">
-                {device.color ? <Text className="text-text-muted mr-2" style={{ fontSize: rf(10) }}>{device.color}</Text> : null}
-                {device.ramLabel ? <Text className="text-text-muted mr-2" style={{ fontSize: rf(10) }}>· {device.ramLabel}</Text> : null}
-                {device.storageLabel ? <Text className="text-text-muted" style={{ fontSize: rf(10) }}>· {device.storageLabel}</Text> : null}
-              </View>
-            </View>
+        <View style={[card, { flexDirection: 'row', alignItems: 'center' }]}>
+          <View style={{ height: 56, width: 56, borderRadius: 14, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: BRAND.line, alignItems: 'center', justifyContent: 'center', marginRight: 11, overflow: 'hidden' }}>
+            {device.imageUrl ? (
+              <Image source={{ uri: device.imageUrl }} style={{ width: 50, height: 52 }} resizeMode="contain" />
+            ) : (
+              <Smartphone size={24} color={GREEN_TEXT} />
+            )}
           </View>
-        </Card>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={{ fontSize: rf(9.5), color: GREEN_TEXT, letterSpacing: 1.2, fontWeight: '800' }}>YOUR DEVICE</Text>
+            <Text style={{ fontSize: rf(15.5), fontWeight: '800', color: BRAND.ink, marginTop: 1 }} numberOfLines={2}>{device.modelName || 'Device'}</Text>
+            {specLine ? <Text style={{ fontSize: rf(11.5), color: MUTED, marginTop: 2 }} numberOfLines={1}>{specLine}</Text> : null}
+          </View>
+          {/* decorative — this card had no tap action before */}
+          <View pointerEvents="none" style={{ height: 30, width: 30, borderRadius: 15, backgroundColor: MINT, alignItems: 'center', justifyContent: 'center', marginLeft: 8 }}>
+            <ChevronRight size={16} color={GREEN_TEXT} />
+          </View>
+        </View>
 
         {/* Selected services */}
-        <Card className="rounded-2xl mb-2.5">
-          <View className="flex-row items-center mb-2">
-            <Wrench size={15} color="#00008B" />
-            <CardTitle className="ml-2 flex-1">Repair Services</CardTitle>
-            <Badge variant="softPrimary">{services.length}</Badge>
+        <View style={card}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 9 }}>
+            <View style={{ height: 34, width: 34, borderRadius: 17, backgroundColor: MINT, alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+              <Wrench size={17} color={GREEN_TEXT} />
+            </View>
+            <Text style={{ flex: 1, fontSize: rf(14.5), fontWeight: '800', color: BRAND.ink }}>Repair Services</Text>
+            <View style={{ minWidth: 26, height: 26, borderRadius: 13, paddingHorizontal: 7, backgroundColor: MINT, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ fontSize: rf(12), fontWeight: '800', color: GREEN_TEXT }}>{services.length}</Text>
+            </View>
           </View>
           {services.length === 0 ? (
-            <Text className="text-text-muted" style={{ fontSize: rf(12) }}>No services selected</Text>
+            <Text style={{ fontSize: rf(12), color: MUTED }}>No services selected</Text>
           ) : (
-            <View className="flex-row flex-wrap">
-              {services.map((s) => (
-                <View key={s.id} className="bg-primary/10 rounded-full px-2.5 py-1 mr-1.5 mb-1.5">
-                  <Text className="font-bold text-primary" style={{ fontSize: rf(11) }}>{s.name}</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: -6 }}>
+              {services.map((sv) => (
+                <View key={sv.id} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: MINT, borderWidth: 1, borderColor: GREEN_LINE, borderRadius: 999, paddingLeft: 4, paddingRight: 10, paddingVertical: 4, marginRight: 6, marginBottom: 6, maxWidth: '100%' }}>
+                  <View style={{ height: 18, width: 18, borderRadius: 9, backgroundColor: BRAND.green, alignItems: 'center', justifyContent: 'center', marginRight: 5 }}>
+                    <Check size={11} color="#fff" strokeWidth={3} />
+                  </View>
+                  <Text style={{ fontSize: rf(12), fontWeight: '700', color: GREEN_TEXT, flexShrink: 1 }} numberOfLines={1}>{sv.name}</Text>
                 </View>
               ))}
             </View>
           )}
-        </Card>
+        </View>
 
         {/* Device photos */}
-        <Card className="rounded-2xl mb-2.5">
-          <View className="flex-row items-center mb-1">
-            <Camera size={15} color="#F59E0B" />
-            <CardTitle className="ml-2 flex-1">Device Photos</CardTitle>
-            <Badge variant={ready ? 'softSuccess' : 'softWarning'}>
-              {filled}/3
-            </Badge>
+        <View style={card}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ height: 34, width: 34, borderRadius: 17, backgroundColor: YELLOW_SOFT, alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+              <Camera size={17} color={BRAND.yellow} />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={{ fontSize: rf(14.5), fontWeight: '800', color: BRAND.ink }}>Device Photos</Text>
+              <Text style={{ fontSize: rf(11), color: MUTED, marginTop: 1 }} numberOfLines={1}>Front & Back required · video optional.</Text>
+            </View>
+            <View style={{ borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: ready ? MINT : YELLOW_SOFT, borderWidth: 1, borderColor: ready ? GREEN_LINE : BRAND.yellowLine }}>
+              <Text style={{ fontSize: rf(12), fontWeight: '800', color: ready ? GREEN_TEXT : BRAND.ink }}>{filled}/3</Text>
+            </View>
           </View>
-          <Text className="text-text-muted mb-2" style={{ fontSize: rf(10) }}>
-            Front & Back required · video optional.
-          </Text>
 
-          <View className="flex-row -mx-1">
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 11 }}>
             {SLOTS.map((slot) => {
               const asset = media[slot.key];
-              const accent = accentMap[slot.accent];
+              const t = TONE[slot.accent];
               const Icon = slot.icon;
+              const ring = Math.min(42, Math.round(tileW * 0.4));
               return (
-                <View key={slot.key} style={{ width: '33.333%' }} className="px-1">
+                <View key={slot.key} style={{ width: tileW }}>
                   <Pressable
                     onPress={() => pick(slot)}
-                    className={`rounded-xl overflow-hidden border-2 border-dashed ${accent.border}`}
-                    style={{ height: 104, backgroundColor: '#F8FAFC' }}
+                    className="active:opacity-85"
+                    accessibilityLabel={`Add ${slot.label}`}
+                    style={{
+                      height: tileH, borderRadius: 14, overflow: 'hidden',
+                      borderWidth: asset ? 1 : 1.5, borderStyle: asset ? 'solid' : 'dashed',
+                      borderColor: asset ? LINE : t.border, backgroundColor: t.bg,
+                    }}
                   >
                     {asset ? (
-                      <View className="flex-1">
+                      <View style={{ flex: 1 }}>
                         {slot.isVideo ? (
-                          <View className="flex-1 bg-text/90 items-center justify-center">
+                          <View style={{ flex: 1, backgroundColor: BRAND.ink, alignItems: 'center', justifyContent: 'center' }}>
                             <Video size={22} color="#fff" />
-                            <Text className="text-white font-bold mt-0.5" style={{ fontSize: rf(9) }}>VIDEO</Text>
+                            <Text style={{ fontSize: rf(9.5), fontWeight: '800', color: '#fff', marginTop: 3 }}>VIDEO</Text>
                           </View>
                         ) : (
                           <Image source={{ uri: asset.uri }} style={{ flex: 1 }} resizeMode="cover" />
                         )}
                         <Pressable
                           onPress={() => remove(slot.key)}
-                          className="absolute right-1 top-1 h-5 w-5 rounded-full bg-black/60 items-center justify-center"
+                          accessibilityLabel={`Remove ${slot.label}`}
+                          style={{ position: 'absolute', right: 5, top: 5, height: 22, width: 22, borderRadius: 11, backgroundColor: 'rgba(30,30,30,0.65)', alignItems: 'center', justifyContent: 'center' }}
                         >
-                          <X size={11} color="#fff" />
+                          <X size={12} color="#fff" />
                         </Pressable>
                       </View>
                     ) : (
-                      <View className="flex-1 items-center justify-center">
-                        <View className={`h-9 w-9 rounded-full ${accent.bg} items-center justify-center mb-1.5`}>
-                          <Icon size={16} color={accent.tint} />
+                      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                        <View style={{ height: ring, width: ring, borderRadius: ring / 2, backgroundColor: t.tint, alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
+                          <Icon size={19} color={t.icon} />
                         </View>
-                        <View className="flex-row items-center">
-                          <Plus size={10} color="#64748B" />
-                          <Text className="text-text-muted ml-0.5" style={{ fontSize: rf(9) }}>Add</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <Plus size={12} color={t.fg} strokeWidth={2.6} />
+                          <Text style={{ fontSize: rf(12), fontWeight: '700', color: t.fg, marginLeft: 3 }}>Add</Text>
                         </View>
                       </View>
                     )}
                   </Pressable>
-                  <Text className={` font-extrabold mt-1 text-center ${asset ? accent.text : 'text-text'}`} style={{ fontSize: rf(10) }} numberOfLines={1}>
+                  <Text style={{ fontSize: rf(11.5), fontWeight: '700', textAlign: 'center', marginTop: 5, color: asset ? GREEN_TEXT : BRAND.ink }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
                     {slot.label}
                   </Text>
                 </View>
               );
             })}
           </View>
-        </Card>
 
-        <View className="flex-row items-center px-1">
-          <ShieldCheck size={13} color="#004C40" />
-          <Text className="text-text-muted ml-1.5 flex-1" style={{ fontSize: rf(10) }}>
-            Photos are encrypted and only visible to the shop you book.
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: BRAND.line, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 10, marginTop: 11 }}>
+            <ShieldCheck size={16} color={GREEN_TEXT} />
+            <Text style={{ flex: 1, fontSize: rf(11), color: MUTED, marginLeft: 8, lineHeight: rf(15) }}>
+              Photos are encrypted and only visible to the shop you book.
+            </Text>
+          </View>
         </View>
       </ScrollView>
 
-      <BottomActionBar
-        priceCaption="Photos"
-        priceValue={`${filled}/3`}
-        priceLabel={ready ? 'ready' : 'add front & back'}
-        title="Choose a Shop"
-        onPress={onContinue}
-        disabled={!ready}
-      />
+      {/* Sticky bar — same count, `ready` rule and onContinue. */}
+      <BottomActionBar>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={{ minWidth: 88, paddingRight: 12 }}>
+            <Text style={{ fontSize: rf(11.5), color: MUTED }}>Photos</Text>
+            <Text style={{ fontSize: rf(19), fontWeight: '900', color: BRAND.ink, lineHeight: rf(23) }}>{`${filled}/3`}</Text>
+            <Text style={{ fontSize: rf(11), color: ready ? GREEN_TEXT : MUTED }} numberOfLines={1}>{ready ? 'ready' : 'add front & back'}</Text>
+          </View>
+          <View style={{ width: 1, alignSelf: 'stretch', backgroundColor: LINE, marginRight: 14 }} />
+          <View style={{ flex: 1 }}>
+            <FlowCta title="Choose a Shop" onPress={onContinue} disabled={!ready} palette={BRAND_FLOW} />
+          </View>
+        </View>
+      </BottomActionBar>
 
       {chooserFor ? (
         <Pressable
           onPress={() => setChooserFor(null)}
           style={{
             position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(15,23,42,0.45)',
+            backgroundColor: 'rgba(30,30,30,0.45)',
             justifyContent: 'flex-end',
           }}
         >
@@ -230,86 +283,74 @@ export default function RepairReviewScreen({ navigation, route }) {
             onPress={(e) => e.stopPropagation && e.stopPropagation()}
             style={{
               backgroundColor: '#fff',
-              borderTopLeftRadius: 22, borderTopRightRadius: 22,
-              paddingTop: 14, paddingBottom: 28, paddingHorizontal: 16,
+              borderTopLeftRadius: 20, borderTopRightRadius: 20,
+              paddingTop: 12, paddingBottom: 24, paddingHorizontal: 16,
             }}
           >
-            <View style={{ height: 4, width: 44, borderRadius: 2, backgroundColor: '#E5E7EB', alignSelf: 'center', marginBottom: 16 }} />
-            <Text style={{ fontSize: rf(16), fontWeight: '800', color: '#0F172A', marginBottom: 4 }}>
+            <View style={{ height: 4, width: 44, borderRadius: 2, backgroundColor: LINE, alignSelf: 'center', marginBottom: 14 }} />
+            <Text style={{ fontSize: rf(15), fontWeight: '800', color: BRAND.ink, marginBottom: 3 }}>
               Add {chooserFor.label.toLowerCase()}
             </Text>
-            <Text style={{ fontSize: rf(12), color: '#64748B', marginBottom: 14 }}>
+            <Text style={{ fontSize: rf(11.5), color: MUTED, marginBottom: 12 }}>
               Take a fresh photo or pick one from your gallery.
             </Text>
 
             <Pressable
               onPress={() => { const slot = chooserFor; setChooserFor(null); launch(slot, 'camera'); }}
-              android_ripple={{ color: '#DCFCE7' }}
+              android_ripple={{ color: MINT }}
               style={{
                 flexDirection: 'row', alignItems: 'center',
-                backgroundColor: '#F6F7F9', borderRadius: 14,
-                paddingHorizontal: 14, paddingVertical: 14,
-                marginBottom: 10,
-                borderWidth: 1, borderColor: '#F1F5F9',
+                backgroundColor: BRAND.bg, borderRadius: 14,
+                paddingHorizontal: 12, paddingVertical: 11,
+                marginBottom: 8,
+                borderWidth: 1, borderColor: LINE,
               }}
             >
-              <View
-                style={{
-                  height: 40, width: 40, borderRadius: 20,
-                  backgroundColor: '#DCFCE7',
-                  alignItems: 'center', justifyContent: 'center',
-                  marginRight: 12,
-                }}
-              >
-                <Camera size={18} color="#004C40" />
+              <View style={{ height: 36, width: 36, borderRadius: 18, backgroundColor: MINT, alignItems: 'center', justifyContent: 'center', marginRight: 11 }}>
+                <Camera size={17} color={GREEN_TEXT} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: rf(14), fontWeight: '800', color: '#0F172A' }}>
+                <Text style={{ fontSize: rf(13.5), fontWeight: '800', color: BRAND.ink }}>
                   Take a photo
                 </Text>
-                <Text style={{ fontSize: rf(11.5), color: '#64748B', marginTop: 1 }}>
+                <Text style={{ fontSize: rf(11), color: MUTED, marginTop: 1 }}>
                   Open camera now
                 </Text>
               </View>
+              <ChevronRight size={15} color={MUTED} />
             </Pressable>
 
             <Pressable
               onPress={() => { const slot = chooserFor; setChooserFor(null); launch(slot, 'library'); }}
-              android_ripple={{ color: '#FFEDD5' }}
+              android_ripple={{ color: YELLOW_SOFT }}
               style={{
                 flexDirection: 'row', alignItems: 'center',
-                backgroundColor: '#F6F7F9', borderRadius: 14,
-                paddingHorizontal: 14, paddingVertical: 14,
-                marginBottom: 14,
-                borderWidth: 1, borderColor: '#F1F5F9',
+                backgroundColor: BRAND.bg, borderRadius: 14,
+                paddingHorizontal: 12, paddingVertical: 11,
+                marginBottom: 12,
+                borderWidth: 1, borderColor: LINE,
               }}
             >
-              <View
-                style={{
-                  height: 40, width: 40, borderRadius: 20,
-                  backgroundColor: '#FFEDD5',
-                  alignItems: 'center', justifyContent: 'center',
-                  marginRight: 12,
-                }}
-              >
-                <Upload size={18} color="#C2410C" />
+              <View style={{ height: 36, width: 36, borderRadius: 18, backgroundColor: YELLOW_SOFT, alignItems: 'center', justifyContent: 'center', marginRight: 11 }}>
+                <Upload size={17} color={BRAND.yellow} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: rf(14), fontWeight: '800', color: '#0F172A' }}>
+                <Text style={{ fontSize: rf(13.5), fontWeight: '800', color: BRAND.ink }}>
                   Upload from gallery
                 </Text>
-                <Text style={{ fontSize: rf(11.5), color: '#64748B', marginTop: 1 }}>
+                <Text style={{ fontSize: rf(11), color: MUTED, marginTop: 1 }}>
                   Pick an existing photo
                 </Text>
               </View>
+              <ChevronRight size={15} color={MUTED} />
             </Pressable>
 
             <Pressable
               onPress={() => setChooserFor(null)}
-              android_ripple={{ color: '#F1F5F9' }}
-              style={{ paddingVertical: 12, alignItems: 'center' }}
+              android_ripple={{ color: BRAND.line }}
+              style={{ paddingVertical: 10, alignItems: 'center' }}
             >
-              <Text style={{ fontSize: rf(13), fontWeight: '800', color: '#64748B' }}>
+              <Text style={{ fontSize: rf(13), fontWeight: '800', color: MUTED }}>
                 Cancel
               </Text>
             </Pressable>
@@ -319,4 +360,3 @@ export default function RepairReviewScreen({ navigation, route }) {
     </View>
   );
 }
-

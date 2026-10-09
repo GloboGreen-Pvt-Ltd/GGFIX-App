@@ -45,6 +45,13 @@ export async function uploadMedia(asset, folder = 'sell', { slot } = {}) {
 export async function getBrands() {
   return unwrap(await masterApi.get('/master/brands'));
 }
+// Every catalogue model (~4 MB) — used by the Home search, which caches it
+// once per session (utils/searchCatalog.js).
+export async function getAllModels() {
+  // ~4 MB and not compressed by the server — allow longer than the 20 s default
+  // so slower mobile data can finish the download.
+  return unwrap(await masterApi.get('/master/models', { timeoutMs: 60000 }));
+}
 export async function getModelsByBrand(brandId) {
   if (!brandId) return [];
   return unwrap(await masterApi.get(`/master/brands/${brandId}/models`));
@@ -86,6 +93,32 @@ export async function getModelsBySeries(seriesId) {
   if (!seriesId) return [];
   return unwrap(await masterApi.get(`/master/series/${seriesId}/models`).catch(() => []));
 }
+/**
+ * "What device is this?" — POST /master/device-identify (master-data sends the
+ * photo to Google Cloud Vision server-side and ranks catalogue models). Same
+ * endpoint as the Partner app's product scanner. Matches keep the raw shape
+ * { id, brand, model, modelCode, categoryName, imageUrl, similarity }.
+ */
+export async function identifyDevice(photo, { limit = 8 } = {}) {
+  const res = await masterApi.upload('/master/device-identify', {
+    uri: photo.uri,
+    name: photo.fileName || 'scan.jpg',
+    type: photo.mimeType || 'image/jpeg',
+    fields: { limit },
+  });
+  return {
+    configured: res?.configured !== false,
+    error: res?.error || null,
+    confidence: res?.confidence || 'low',
+    recognisedAs: res?.recognisedAs || null,
+    brand: res?.brand || null,
+    labels: Array.isArray(res?.labels) ? res.labels : [],
+    label: res?.recognisedAs || res?.brand || (Array.isArray(res?.labels) ? res.labels[0] : null) || null,
+    bestMatch: res?.bestMatch || null,
+    matches: Array.isArray(res?.matches) ? res.matches : [],
+  };
+}
+
 export async function getRamOptions() {
   return unwrap(await masterApi.get('/master/ram-options'));
 }
@@ -134,6 +167,15 @@ export async function getModel(modelId) {
  * Used by the Home "Sell This Device" card to show the proper marketing name
  * and device image for whatever phone the app is running on.
  */
+// IMEI → catalogue device, via the existing master-data proxy (same endpoint
+// the Partner app uses). Never throws: { matched, configured, device?, error? }.
+export async function lookupImei(imei) {
+  const digits = String(imei || '').replace(/[^0-9]/g, '');
+  if (digits.length < 14 || digits.length > 17) return { imei: digits, matched: false, error: 'INVALID_IMEI' };
+  return await masterApi.get('/master/imei-lookup', { query: { imei: digits } })
+    .catch(() => ({ imei: digits, matched: false, error: 'REQUEST_FAILED' }));
+}
+
 export async function getModelByNumber(number) {
   const num = String(number || '').trim();
   if (!num) return null;
@@ -211,7 +253,13 @@ export async function getModelOptions(modelId) {
     }
   }
 
-  return { colors, specs, allColors, allRams, allStorages };
+  return {
+    colors, specs, allColors, allRams, allStorages,
+    // For hooks/useDeviceSpecForm (same as the Partner app): the model's own
+    // category and its raw RAM/storage strings.
+    categoryId: model?.categoryId || null,
+    ramStorage: rawSpecs,
+  };
 }
 
 // Repair categories
@@ -251,6 +299,39 @@ export async function getFunctionalIssues(deviceCategoryId) {
 // Content
 export async function getBanners() {
   return unwrap(await masterApi.get('/master/banners'));
+}
+
+// Admin "Category Menu" rows (BUY / SELL / REPAIR) — tile artwork per category.
+export async function getCategoryMenu(categoryType) {
+  return unwrap(await masterApi.get('/master/category-menu', { query: { categoryType } }));
+}
+
+/**
+ * Key that lines a Category Menu row up with a device category by name:
+ * drops the "Buy / Sell / Repair" prefix, punctuation and a plural ending, so
+ * "Buy Smartwatch" meets "Smartwatches" and "Buy Audio Device" meets "Audio Device".
+ */
+export function categoryMenuKey(name) {
+  return String(name || '')
+    .toLowerCase()
+    .replace(/^\s*(buy|sell|repair)\s+/, '')
+    .replace(/[^a-z0-9]/g, '')
+    .replace(/(es|s)$/, '');
+}
+
+/**
+ * { categoryMenuKey: imageUrl } for one menu type. Never rejects. Active rows
+ * win over inactive ones with the same key; inactive rows are used only when
+ * `includeInactive` (art for categories the screen lists anyway).
+ */
+export async function getCategoryMenuImages(categoryType, { includeInactive = false } = {}) {
+  const rows = await getCategoryMenu(categoryType).catch(() => []);
+  const out = {};
+  (Array.isArray(rows) ? rows : [])
+    .filter((m) => m && (includeInactive || m.isActive === true) && m.imageUrl && String(m.imageUrl).trim())
+    .sort((a, b) => Number(a.isActive === true) - Number(b.isActive === true))
+    .forEach((m) => { out[categoryMenuKey(m.menuName)] = String(m.imageUrl).trim(); });
+  return out;
 }
 export async function getFaqItems() {
   return unwrap(await masterApi.get('/master/faq-items'));

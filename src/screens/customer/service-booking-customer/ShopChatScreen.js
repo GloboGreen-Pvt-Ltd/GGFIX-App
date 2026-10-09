@@ -8,11 +8,10 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import PageHeader, { HeaderIconButton, HEADER } from '../../../components/PageHeader';
 import {
-  ChevronLeft,
   Phone,
-  MoreVertical,
   Send,
   Paperclip,
   Smile,
@@ -25,9 +24,16 @@ import {
   Check,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { Audio } from 'expo-av';
+import { RecordingPresets, createAudioPlayer, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder } from 'expo-audio';
 import { Loader, EmptyState, Badge } from '../../../components/rnr';
 import { notify } from '../../../components/confirm';
+import { BRAND } from '../../../theme/brand';
+
+// Brand palette (09AD2A · 1E1E1E · F8F8F8 · F3F3F3).
+const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
+const MINT = '#EAF8EC';
+const GREEN_LINE = 'rgba(9,173,42,0.45)';
+const MUTED = '#6B6B6B';
 import {
   openChat,
   getChatMessages,
@@ -90,51 +96,51 @@ function lastSeenLabel(online, lastSeenAt) {
 }
 
 function useVoiceRecorder() {
-  const [recording, setRecording] = useState(null);
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef(null);
 
   const start = useCallback(async () => {
     try {
-      const perm = await Audio.requestPermissionsAsync();
+      const perm = await requestRecordingPermissionsAsync();
       if (!perm.granted) return null;
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-      const r = new Audio.Recording();
-      await r.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      await r.startAsync();
-      setRecording(r);
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
+      setRecording(true);
       setElapsed(0);
       timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
-      return r;
+      return audioRecorder;
     } catch {
       return null;
     }
-  }, []);
+  }, [audioRecorder]);
 
   const stop = useCallback(async () => {
     if (!recording) return null;
     try {
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
+      await audioRecorder.stop();
+      const uri = audioRecorder.uri;
       if (timerRef.current) clearInterval(timerRef.current);
       timerRef.current = null;
-      setRecording(null);
+      setRecording(false);
       const dur = elapsed;
       setElapsed(0);
       return { uri, durationSec: dur };
     } catch {
       return null;
     }
-  }, [recording, elapsed]);
+  }, [recording, elapsed, audioRecorder]);
 
   const cancel = useCallback(async () => {
     if (!recording) return;
-    try { await recording.stopAndUnloadAsync(); } catch {}
+    try { await audioRecorder.stop(); } catch {}
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
-    setRecording(null);
+    setRecording(false);
     setElapsed(0);
-  }, [recording]);
+  }, [recording, audioRecorder]);
 
   return { recording, elapsed, start, stop, cancel };
 }
@@ -145,18 +151,22 @@ function AudioBubbleRow({ url, mine }) {
   const toggle = useCallback(async () => {
     try {
       if (playing) {
-        await soundRef.current?.stopAsync();
-        await soundRef.current?.unloadAsync();
+        const player = soundRef.current;
         soundRef.current = null;
         setPlaying(false);
+        if (player) { try { player.pause(); } catch {} try { player.remove(); } catch {} }
         return;
       }
-      const { sound } = await Audio.Sound.createAsync({ uri: url });
-      soundRef.current = sound;
-      sound.setOnPlaybackStatusUpdate((st) => {
-        if (st?.didJustFinish) { setPlaying(false); sound.unloadAsync().catch(() => {}); soundRef.current = null; }
+      const player = createAudioPlayer(url);
+      soundRef.current = player;
+      player.addListener('playbackStatusUpdate', (st) => {
+        if (st?.didJustFinish) {
+          setPlaying(false);
+          soundRef.current = null;
+          try { player.remove(); } catch {}
+        }
       });
-      await sound.playAsync();
+      player.play();
       setPlaying(true);
     } catch {
       setPlaying(false);
@@ -165,10 +175,10 @@ function AudioBubbleRow({ url, mine }) {
   return (
     <View className="flex-row items-center px-1 py-1 min-w-[160px]">
       <Pressable onPress={toggle} className="h-8 w-8 rounded-full items-center justify-center"
-                 style={{ backgroundColor: mine ? 'rgba(255,255,255,0.25)' : '#DCFCE7' }}>
+                 style={{ backgroundColor: mine ? 'rgba(255,255,255,0.25)' : MINT }}>
         {playing
-          ? <StopCircle size={18} color={mine ? '#fff' : '#004C40'} />
-          : <Mic size={16} color={mine ? '#fff' : '#004C40'} />}
+          ? <StopCircle size={18} color={mine ? '#fff' : GREEN_TEXT} />
+          : <Mic size={16} color={mine ? '#fff' : GREEN_TEXT} />}
       </Pressable>
       <Text className={`ml-2 ${mine ? 'text-white/90' : 'text-text-muted'}`} style={{ fontSize: rf(11) }}>
         {playing ? 'Playing voice note…' : 'Voice message · tap to play'}
@@ -359,49 +369,28 @@ export default function ShopChatScreen({ navigation, route }) {
     : lastSeenLabel(online, thread?.counterpartLastSeenAt);
 
   return (
-    <View className="flex-1 bg-background">
-      {/* Custom header (replaces default stack header) */}
-      <SafeAreaView edges={['top']} style={{ backgroundColor: '#FFFFFF' }}>
-        <View className="flex-row items-center px-3 py-2 bg-card border-b border-border"
-              style={{ shadowColor: '#0F172A', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 }}>
-          <Pressable
-            onPress={() => navigation.goBack()}
-            className="h-9 w-9 rounded-full bg-background items-center justify-center active:opacity-70"
-          >
-            <ChevronLeft size={20} color="#0F172A" />
-          </Pressable>
-          <View className="h-10 w-10 rounded-full bg-primary items-center justify-center ml-2">
-            <Text className="text-white font-extrabold" style={{ fontSize: rf(14) }}>{shopName.slice(0, 1).toUpperCase()}</Text>
-          </View>
-          <View className="flex-1 ml-2.5">
-            <Text className="font-extrabold text-text" style={{ fontSize: rf(14) }} numberOfLines={1}>{shopName}</Text>
-            <View className="flex-row items-center mt-0.5">
-              {online ? <View className="h-1.5 w-1.5 rounded-full bg-success mr-1" /> : null}
-              <Text className={` ${typing ? 'italic font-semibold text-success' : 'text-text-muted'}`} style={{ fontSize: rf(10) }} numberOfLines={1}>
-                {subtitle}
-              </Text>
-            </View>
-          </View>
-          <Pressable
+    <View className="flex-1" style={{ backgroundColor: BRAND.bg }}>
+      <PageHeader
+        title={shopName}
+        subtitle={subtitle}
+        onBack={() => navigation.goBack()}
+        right={(
+          <HeaderIconButton
+            icon={Phone}
+            label="Call shop"
+            color={HEADER.action}
+            size={16}
             onPress={() => (shop?.mobile || shop?.phone) && notify('Call shop', `Dial ${shop.mobile || shop.phone}`)}
-            className="h-9 w-9 rounded-full bg-success/10 items-center justify-center ml-1 active:opacity-70"
-          >
-            <Phone size={16} color="#004C40" />
-          </Pressable>
-          <Pressable
-            onPress={() => {}}
-            className="h-9 w-9 rounded-full bg-background items-center justify-center ml-1 active:opacity-70"
-          >
-            <MoreVertical size={16} color="#64748B" />
-          </Pressable>
-        </View>
-
+          />
+        )}
+      />
+      <View>
         {/* Mode banner */}
         {isEnquiry ? (
-          <View className="bg-success/10 border-b border-success/20 px-4 py-2 flex-row items-center">
-            <MessageCircle size={12} color="#004C40" />
-            <Text className="font-bold text-success ml-1.5" style={{ fontSize: rf(11) }}>ENQUIRY MODE</Text>
-            <Text className="text-text-muted ml-2 flex-1" style={{ fontSize: rf(11) }} numberOfLines={1}>
+          <View className="px-4 py-2 flex-row items-center" style={{ backgroundColor: MINT, borderBottomWidth: 1, borderBottomColor: GREEN_LINE }}>
+            <MessageCircle size={12} color={GREEN_TEXT} />
+            <Text className="font-bold ml-1.5" style={{ fontSize: rf(11), color: GREEN_TEXT }}>ENQUIRY MODE</Text>
+            <Text className="ml-2 flex-1" style={{ fontSize: rf(11), color: MUTED }} numberOfLines={1}>
               Free chat · No booking yet
             </Text>
           </View>
@@ -425,7 +414,7 @@ export default function ShopChatScreen({ navigation, route }) {
             </Pressable>
           </View>
         ) : null}
-      </SafeAreaView>
+      </View>
 
       <View className="flex-1">
         <ScrollView
@@ -436,8 +425,8 @@ export default function ShopChatScreen({ navigation, route }) {
           onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
         >
           {/* Encryption notice */}
-          <View className="self-center bg-card border border-border rounded-full px-3 py-1 mb-3 flex-row items-center">
-            <ShieldCheck size={11} color="#004C40" />
+          <View className="self-center rounded-full px-3 py-1 mb-3 flex-row items-center" style={{ backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E6E6E6' }}>
+            <ShieldCheck size={11} color={GREEN_TEXT} />
             <Text className="text-text-muted ml-1" style={{ fontSize: rf(10) }}>
               Encrypted via ggfix · Booking-safe chat
             </Text>
@@ -446,7 +435,9 @@ export default function ShopChatScreen({ navigation, route }) {
           {showWelcome ? (
             <View className="flex-1 items-center">
               <EmptyState
-                icon={<MessageCircle size={28} color="#00008B" />}
+                icon={<MessageCircle size={28} color={BRAND.green} />}
+                accent={BRAND.green}
+                accentSoft={MINT}
                 title={`Chat with ${shopName}`}
                 description="Send a message to start the conversation. The shop typically replies within 10 minutes."
               />
@@ -458,9 +449,10 @@ export default function ShopChatScreen({ navigation, route }) {
                     <Pressable
                       key={q}
                       onPress={() => send(q)}
-                      className="bg-card border border-primary/30 rounded-full px-4 py-2 mb-2 active:opacity-80"
+                      className="rounded-full px-4 mb-2 active:opacity-80"
+                      style={{ paddingVertical: 7, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: GREEN_LINE }}
                     >
-                      <Text className="font-bold text-primary" style={{ fontSize: rf(12) }}>{q}</Text>
+                      <Text className="font-bold" style={{ fontSize: rf(12), color: GREEN_TEXT }}>{q}</Text>
                     </Pressable>
                   ))}
                 </View>
@@ -486,11 +478,13 @@ export default function ShopChatScreen({ navigation, route }) {
                   : 'bg-card border border-border rounded-2xl rounded-bl-sm';
               const txtColor = m.failed ? 'text-danger' : mine ? 'text-white' : 'text-text';
               const metaColor = m.failed ? 'text-danger/70' : mine ? 'text-white/70' : 'text-text-muted';
+              // Palette fill for the customer's own bubbles (overrides bg-primary).
+              const bubbleStyle = !m.failed && mine ? { backgroundColor: m.pending ? 'rgba(9,173,42,0.7)' : BRAND.green } : null;
               const isImage = m.attachmentType === 'IMAGE' && m.attachmentUrl;
               const isAudio = m.attachmentType === 'AUDIO' && m.attachmentUrl;
               return (
                 <View key={m.id || idx} className={`${mine ? 'items-end' : 'items-start'} mb-1.5`}>
-                  <View className={`max-w-[82%] px-3 py-2 ${bubbleBg}`}>
+                  <View className={`max-w-[82%] px-3 py-2 ${bubbleBg}`} style={bubbleStyle}>
                     {isImage ? (
                       <Image
                         source={{ uri: m.attachmentUrl }}
@@ -506,7 +500,7 @@ export default function ShopChatScreen({ navigation, route }) {
                       </Text>
                       {mine && !m.pending && !m.failed ? (
                         (m.read || m.readAt)
-                          ? <CheckCheck size={11} color="#A7F3D0" style={{ marginLeft: 4 }} />
+                          ? <CheckCheck size={11} color="#FFFFFF" style={{ marginLeft: 4 }} />
                           : <Check size={11} color="rgba(255,255,255,0.7)" style={{ marginLeft: 4 }} />
                       ) : null}
                     </View>
@@ -533,7 +527,7 @@ export default function ShopChatScreen({ navigation, route }) {
             sits just above the nav buttons. When open, the keyboard covers that
             area, so only a little breathing room is needed. */}
         <View className="px-3 pt-2 bg-card border-t border-border"
-              style={{ paddingBottom: keyboardOpen ? 10 : bottomInset, shadowColor: '#0F172A', shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: -3 }, elevation: 8 }}>
+              style={{ paddingBottom: keyboardOpen ? 10 : bottomInset, shadowColor: BRAND.ink, shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: -3 }, elevation: 8 }}>
           {voice.recording ? (
             <View className="flex-row items-center bg-danger/10 border border-danger/30 rounded-2xl px-3 py-2">
               <View className="h-2.5 w-2.5 rounded-full bg-danger mr-2" />
@@ -543,19 +537,19 @@ export default function ShopChatScreen({ navigation, route }) {
               <Pressable onPress={voice.cancel} className="px-2 py-1 mr-1 active:opacity-70">
                 <Text className="font-bold text-text-muted" style={{ fontSize: rf(11) }}>Cancel</Text>
               </Pressable>
-              <Pressable onPress={toggleVoice} className="h-9 w-9 rounded-full items-center justify-center bg-primary">
+              <Pressable onPress={toggleVoice} className="h-9 w-9 rounded-full items-center justify-center" style={{ backgroundColor: BRAND.green }}>
                 <Send size={16} color="#fff" />
               </Pressable>
             </View>
           ) : (
             <View className="flex-row items-end">
-              <View className="flex-1 bg-background border border-border rounded-3xl flex-row items-center px-2 py-1">
+              <View className="flex-1 rounded-3xl flex-row items-center px-2 py-1" style={{ backgroundColor: BRAND.bg, borderWidth: 1, borderColor: '#E6E6E6' }}>
                 <Pressable onPress={() => pickImage(false)} disabled={attaching} className="h-9 w-9 items-center justify-center active:opacity-70">
-                  <Paperclip size={18} color="#64748B" />
+                  <Paperclip size={18} color={MUTED} />
                 </Pressable>
                 <TextInput
                   placeholder="Type a message..."
-                  placeholderTextColor="#94A3B8"
+                  placeholderTextColor={BRAND.muted}
                   value={text}
                   onChangeText={onChangeText}
                   multiline
@@ -564,25 +558,26 @@ export default function ShopChatScreen({ navigation, route }) {
                   style={{ fontSize: rf(14), maxHeight: 100 }}
                 />
                 <Pressable className="h-9 w-9 items-center justify-center active:opacity-70 mr-0.5">
-                  <Smile size={18} color="#64748B" />
+                  <Smile size={18} color={MUTED} />
                 </Pressable>
                 <Pressable onPress={() => pickImage(true)} disabled={attaching} className="h-9 w-9 items-center justify-center active:opacity-70 mr-0.5">
-                  <Camera size={18} color="#64748B" />
+                  <Camera size={18} color={MUTED} />
                 </Pressable>
               </View>
               {text.trim() ? (
                 <Pressable
                   onPress={() => send()}
                   disabled={sending}
-                  className="h-12 w-12 rounded-full ml-2 items-center justify-center bg-primary"
-                  style={{ shadowColor: '#00008B', shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 4 }}
+                  className="h-12 w-12 rounded-full ml-2 items-center justify-center"
+                  style={{ backgroundColor: BRAND.green, shadowColor: BRAND.green, shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 4 }}
                 >
                   <Send size={18} color="#fff" style={{ marginLeft: -2 }} />
                 </Pressable>
               ) : (
                 <Pressable
                   onPress={toggleVoice}
-                  className="h-12 w-12 rounded-full ml-2 items-center justify-center bg-primary"
+                  className="h-12 w-12 rounded-full ml-2 items-center justify-center"
+                  style={{ backgroundColor: BRAND.green }}
                 >
                   <Mic size={18} color="#fff" />
                 </Pressable>

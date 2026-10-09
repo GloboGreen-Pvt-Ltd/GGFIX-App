@@ -17,5 +17,8 @@ import { resolveDeviceImageSource } from '../utils/images';
 export default function DeviceImage({ url, base64, style, contentFit = 'contain', transition, ...rest }) {
   const uri = resolveDeviceImageSource({ url, base64 });
   if (!uri) return null;
-  return <Image source={{ uri }} style={style} resizeMode={contentFit} {...rest} />;
+  // Catalogue photos are often ~1300 px PNGs shown at thumbnail size; "resize"
+  // makes Android decode them at the view size (KBs instead of ~6 MB each), so
+  // a grid of them can't exhaust image memory and render blank.
+  return <Image resizeMethod="resize" source={{ uri }} style={style} resizeMode={contentFit} {...rest} />;
 }

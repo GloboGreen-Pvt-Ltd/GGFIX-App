@@ -1,75 +1,66 @@
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CheckCircle2, Home, ListChecks, Sparkles } from 'lucide-react-native';
-import { Button } from '../../../components/rnr';
+import { ScrollView, Text, View } from 'react-native';
+import { Home, FileCheck, Store, Pointer, ChevronRight, BadgeCheck, Smartphone, MapPin, ClipboardList } from 'lucide-react-native';
 import { rf } from '../../../utils/responsive';
+import { BRAND } from '../../../theme/brand';
+import { SuccessHero, SuccessCard, InfoRow, NextSteps, SuccessActions, MUTED } from '../../../components/SuccessChrome';
 
-export default function SellSuccessScreen({ navigation }) {
-  const insets = useSafeAreaInsets();
+// Static "what happens next" steps (unchanged content).
+const STEPS = [
+  { icon: FileCheck, state: 'done', title: 'Request created', sub: 'Shops have been notified' },
+  { icon: Store, state: 'wait', title: 'Awaiting quotes', sub: 'Usually within 15 mins' },
+  { icon: Pointer, state: 'todo', title: 'Pick your best offer', sub: 'Then schedule free pickup' },
+];
+
+export default function SellSuccessScreen({ navigation, route }) {
+  // The real POST /sell-orders response, passed by SellCompleteScreen (plus the
+  // device + pickup address the customer just submitted, for the summary).
+  const sellOrder = route?.params?.sellOrder || {};
+  const device = route?.params?.device || null;
+  const address = route?.params?.address || null;
+  const statusLabel = sellOrder.status ? String(sellOrder.status).replace(/_/g, ' ') : null;
+  // The backend's sellNumber may already start with "#".
+  const sellNo = sellOrder.sellNumber ? String(sellOrder.sellNumber).replace(/^#+/, '') : null;
+
+  const deviceSpecs = device
+    ? [device.customModel ? device.brandName : null, device.color, [device.ramLabel, device.storageLabel].filter(Boolean).join(' / ')].filter(Boolean).join(' · ')
+    : '';
+  const addrRest = address ? [address.area || address.locality, address.district || address.city, address.state, address.pincode].filter(Boolean).join(', ') : '';
+
   return (
-    <View className="flex-1 bg-background">
-      <SafeAreaView edges={['top']} style={{ backgroundColor: '#004C40' }}>
-        <LinearGradient
-          colors={['#004C40', '#004C40']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{ paddingTop: 24, paddingBottom: 36, borderBottomLeftRadius: 24, borderBottomRightRadius: 24, alignItems: 'center' }}
-        >
-          <View className="h-16 w-16 rounded-full bg-white/20 items-center justify-center mb-2">
-            <View className="h-12 w-12 rounded-full bg-white items-center justify-center">
-              <CheckCircle2 size={26} color="#004C40" />
-            </View>
-          </View>
-          <Text className="text-white font-extrabold" style={{ fontSize: rf(18) }}>Sale Request Submitted!</Text>
-          <Text className="text-white/85 mt-1 text-center px-8" style={{ fontSize: rf(11) }} numberOfLines={3}>
-            Verified shops will respond with quotes within minutes. We'll notify you the moment a quote arrives.
+    <View style={{ flex: 1, backgroundColor: BRAND.bg }}>
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+        <SuccessHero
+          title="Sale Request Submitted!"
+          subtitle="Verified shops will respond with quotes within minutes. We'll notify you the moment a quote arrives."
+          chips={[
+            sellNo ? { icon: BadgeCheck, text: `Sell Number: #${sellNo}`, selectable: true } : null,
+            statusLabel ? { text: `Status: ${statusLabel}` } : null,
+          ].filter(Boolean)}
+        />
+
+        {/* Cards overlap the hero's lower edge */}
+        <View style={{ paddingHorizontal: 14, marginTop: -30 }}>
+          {device || address ? (
+            <SuccessCard raised icon={ClipboardList} title="Request Summary">
+              {device ? <InfoRow icon={Smartphone} label="Device" value={device.modelName || 'Device'} sub={deviceSpecs || null} last={!address} /> : null}
+              {address ? <InfoRow icon={MapPin} label="Pickup Address" value={address.addressLine || addrRest} sub={address.addressLine ? addrRest : null} last /> : null}
+            </SuccessCard>
+          ) : null}
+
+          <NextSteps steps={STEPS} />
+
+          <Text style={{ fontSize: rf(11), color: MUTED, textAlign: 'center', paddingHorizontal: 12, lineHeight: rf(16) }}>
+            Compare quotes in My Orders and accept the one you like — pickup is free.
           </Text>
-        </LinearGradient>
-      </SafeAreaView>
-
-      <View className="flex-1 px-4 -mt-4">
-        <View className="bg-card border border-border rounded-2xl p-3"
-              style={{ shadowColor: '#0F172A', shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3 }}>
-          {[
-            { icon: ListChecks, color: '#00008B', bg: 'bg-primary/10', title: 'Request created', sub: 'Shops have been notified' },
-            { icon: Sparkles,    color: '#F59E0B', bg: 'bg-warning/10', title: 'Awaiting quotes', sub: 'Usually within 15 mins' },
-            { icon: CheckCircle2,color: '#004C40', bg: 'bg-success/10', title: 'Pick your best offer', sub: 'Then schedule free pickup' },
-          ].map((s, i, arr) => {
-            const Icon = s.icon;
-            return (
-              <View key={s.title} className={`flex-row items-center ${i < arr.length - 1 ? 'border-b border-border pb-2 mb-2' : ''}`}>
-                <View className={`h-8 w-8 rounded-full items-center justify-center mr-2.5 ${s.bg}`}>
-                  <Icon size={14} color={s.color} />
-                </View>
-                <View className="flex-1">
-                  <Text className="font-extrabold text-text" style={{ fontSize: rf(12) }}>{s.title}</Text>
-                  <Text className="text-text-muted mt-0.5" style={{ fontSize: rf(10) }}>{s.sub}</Text>
-                </View>
-              </View>
-            );
-          })}
         </View>
-      </View>
+      </ScrollView>
 
-      <View className="px-4 pt-3 bg-card border-t border-border flex-row"
-            style={{ paddingBottom: Math.max(insets.bottom, 12) + 8, shadowColor: '#0F172A', shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: -4 }, elevation: 12 }}>
-        <Button
-          variant="outline"
-          className="flex-1 mr-2"
-          onPress={() => navigation.popToTop()}
-          leftIcon={<Home size={14} color="#00008B" />}
-        >
-          Home
-        </Button>
-        <Button
-          className="flex-1 ml-2"
-          onPress={() => { navigation.popToTop(); navigation.navigate('MyOrders'); }}
-        >
-          View Order
-        </Button>
-      </View>
+      {/* Sticky actions — same handlers as before. */}
+      <SuccessActions
+        secondary={{ label: 'Home', icon: Home, onPress: () => navigation.popToTop() }}
+        primary={{ label: 'View Order', trailing: ChevronRight, onPress: () => { navigation.popToTop(); navigation.navigate('MyOrders', { initialTab: 'Sell' }); } }}
+      />
     </View>
   );
 }

@@ -1,7 +1,5 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { useSelector } from 'react-redux';
 import {
@@ -12,37 +10,46 @@ import {
   Tag,
   Crosshair,
   Navigation,
-  ArrowLeft,
+  AlertTriangle,
+  ChevronRight,
 } from 'lucide-react-native';
 import { BottomActionBar, useBottomBarInset } from '../../../components/rnr';
 import { notify } from '../../../components/confirm';
 import { createAddress, updateAddress } from '../../../api/customer';
 import { selectSession } from '../../../store/authSlice';
+import { forceRelogin } from '../../../auth/session';
 import { rf } from '../../../utils/responsive';
+import PageHeader from '../../../components/PageHeader';
+import { BRAND } from '../../../theme/brand';
 
-const GREEN = '#004C40';
-const GREEN_LIGHT = '#00695C';
-const GREEN_DARK = '#003830';
+// Palette: 09AD2A · 1E1E1E · F8F8F8 · F3F3F3 · F3BF23 · F84141.
+const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
+const MINT = '#EAF8EC';
+const LINE = '#E6E6E6';
+const GREEN_LINE = 'rgba(9,173,42,0.45)';
+const MUTED = '#6B6B6B';
 
 const LABEL_OPTIONS = [
-  { value: 'Home',   icon: Home,       color: GREEN_DARK, tint: '#DCFCE7' },
-  { value: 'Office', icon: Briefcase,  color: '#7C3AED',  tint: '#F5F3FF' },
-  { value: 'Other',  icon: Tag,        color: '#C2410C',  tint: '#FFEDD5' },
+  { value: 'Home',   icon: Home },
+  { value: 'Office', icon: Briefcase },
+  { value: 'Other',  icon: Tag },
 ];
+
+// Server field names → form fields (legacy mirrors map back to what's shown).
+const FIELD_ALIASES = { locality: 'area', city: 'district' };
 
 function SectionCard({ icon: Icon, iconColor, iconBg, title, subtitle, right, children }) {
   return (
     <View
-      className="bg-card border border-border rounded-2xl p-4 mb-3"
-      style={{ shadowColor: '#0F172A', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1 }}
+      style={{ backgroundColor: '#FFFFFF', borderRadius: 16, borderWidth: 1, borderColor: LINE, padding: 12, marginBottom: 10, shadowColor: BRAND.ink, shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1 }}
     >
-      <View className="flex-row items-center mb-3">
-        <View className="h-9 w-9 rounded-full items-center justify-center mr-2.5" style={{ backgroundColor: iconBg }}>
-          <Icon size={16} color={iconColor} />
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+        <View style={{ height: 30, width: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', marginRight: 9, backgroundColor: iconBg }}>
+          <Icon size={15} color={iconColor} />
         </View>
-        <View className="flex-1">
-          <Text className="font-extrabold text-text" style={{ fontSize: rf(14) }}>{title}</Text>
-          {subtitle ? <Text className="text-text-muted mt-0.5" style={{ fontSize: rf(11) }}>{subtitle}</Text> : null}
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: rf(13.5), fontWeight: '800', color: BRAND.ink }}>{title}</Text>
+          {subtitle ? <Text style={{ fontSize: rf(10.5), color: MUTED, marginTop: 1 }}>{subtitle}</Text> : null}
         </View>
         {right}
       </View>
@@ -53,12 +60,12 @@ function SectionCard({ icon: Icon, iconColor, iconBg, title, subtitle, right, ch
 
 function Field({ label, required, children, hint }) {
   return (
-    <View className="mb-3">
-      <Text className="font-semibold text-text-muted mb-1.5" style={{ fontSize: rf(12) }}>
-        {label}{required ? <Text className="text-danger"> *</Text> : null}
+    <View style={{ marginBottom: 10 }}>
+      <Text style={{ fontSize: rf(11.5), fontWeight: '700', color: MUTED, marginBottom: 5 }}>
+        {label}{required ? <Text style={{ color: BRAND.red }}> *</Text> : null}
       </Text>
       {children}
-      {hint ? <Text className="text-text-muted mt-1" style={{ fontSize: rf(10) }}>{hint}</Text> : null}
+      {hint ? <Text style={{ fontSize: rf(10), color: MUTED, marginTop: 3 }}>{hint}</Text> : null}
     </View>
   );
 }
@@ -71,20 +78,20 @@ function PlainInput({ error, multiline, ...props }) {
     <View
       style={{
         backgroundColor: '#fff', borderRadius: 12,
-        borderWidth: 1, borderColor: error ? '#EF4444' : '#E5E7EB',
-        paddingHorizontal: 14, paddingVertical: multiline ? 10 : 0,
+        borderWidth: 1, borderColor: error ? BRAND.red : LINE,
+        paddingHorizontal: 12, paddingVertical: multiline ? 9 : 0,
       }}
     >
       <TextInput
         {...props}
         multiline={multiline}
-        placeholderTextColor="#94A3B8"
-        style={{
-          fontSize: rf(14), color: '#0F172A',
-          paddingVertical: multiline ? 0 : 12,
-          minHeight: multiline ? 60 : undefined,
+        placeholderTextColor={BRAND.muted}
+        style={[{
+          fontSize: rf(13.5), color: BRAND.ink,
+          paddingVertical: multiline ? 0 : 10,
+          minHeight: multiline ? 50 : undefined,
           textAlignVertical: multiline ? 'top' : 'auto',
-        }}
+        }, Platform.OS === 'web' ? { outlineStyle: 'none' } : null]}
       />
     </View>
   );
@@ -92,43 +99,14 @@ function PlainInput({ error, multiline, ...props }) {
 
 function FormHeader({ navigation, isEdit }) {
   return (
-    <SafeAreaView edges={['top']} style={{ backgroundColor: GREEN_DARK }}>
-      <LinearGradient
-        colors={[GREEN_DARK, GREEN, GREEN_LIGHT]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={{
-          paddingTop: 12,
-          paddingBottom: 18,
-          borderBottomLeftRadius: 24,
-          borderBottomRightRadius: 24,
-        }}
-      >
-        <View style={{ paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center' }}>
-          <Pressable
-            onPress={() => navigation.goBack()}
-            style={{
-              height: 36, width: 36, borderRadius: 18,
-              backgroundColor: 'rgba(255,255,255,0.18)',
-              alignItems: 'center', justifyContent: 'center',
-              marginRight: 10,
-            }}
-          >
-            <ArrowLeft size={18} color="#fff" />
-          </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: '#fff', fontSize: rf(12.5), fontWeight: '800', letterSpacing: 0.6 }}>
-              {isEdit ? 'EDIT ADDRESS' : 'ADD ADDRESS'}
-            </Text>
-            <Text style={{ color: '#fff', fontSize: rf(19), fontWeight: '800', marginTop: 2, letterSpacing: -0.2 }}>
-              {isEdit ? 'Update your address' : 'Where should we deliver?'}
-            </Text>
-          </View>
-        </View>
-      </LinearGradient>
-    </SafeAreaView>
+    <PageHeader
+      title={isEdit ? 'Edit Address' : 'Add Address'}
+      subtitle={isEdit ? 'Update your address' : 'Where should we deliver?'}
+      onBack={() => navigation.goBack()}
+    />
   );
 }
+
 
 export default function AddressFormScreen({ navigation, route }) {
   const bottomSpace = useBottomBarInset(96);
@@ -155,10 +133,13 @@ export default function AddressFormScreen({ navigation, route }) {
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [saveError, setSaveError] = useState(null);
+  const scrollRef = useRef(null);
 
   const setField = (k, v) => {
     setData((d) => ({ ...d, [k]: v }));
     if (errors[k]) setErrors((e) => ({ ...e, [k]: undefined }));
+    if (saveError) setSaveError(null);
   };
 
   const save = async () => {
@@ -177,15 +158,31 @@ export default function AddressFormScreen({ navigation, route }) {
       return;
     }
     setSaving(true);
+    setSaveError(null);
+    // Trim everything; optional fields left empty go as null ("not given")
+    // rather than "" — an empty string fails server-side length/format checks
+    // that a missing value passes.
+    const t = (v) => String(v ?? '').trim();
+    const opt = (v) => t(v) || null;
     // Send the legacy mirrors (locality, city) alongside the new canonical
     // fields (area, district). Belt-and-braces — works against the new backend
     // (dual-write logic prefers explicit locality/city when sent), AND against
     // an older user-service that hasn't been restarted yet and only knows
     // about the legacy field names.
     const payload = {
-      ...data,
-      locality: data.area || data.locality || '',
-      city: data.district || data.city || '',
+      label: data.label,
+      fullName: t(data.fullName),
+      mobile: t(data.mobile),
+      pincode: t(data.pincode),
+      addressLine: t(data.addressLine),
+      area: opt(data.area),
+      taluk: opt(data.taluk),
+      district: t(data.district),
+      state: t(data.state),
+      latitude: data.latitude,
+      longitude: data.longitude,
+      locality: opt(data.area),
+      city: t(data.district),
       // Preserve the default flag on edit. A full-replace PUT that omits it would
       // reset the currently-default address back to non-default.
       ...(existing?.id ? { isDefault: existing.isDefault ?? existing.default ?? false } : {}),
@@ -196,7 +193,17 @@ export default function AddressFormScreen({ navigation, route }) {
       navigation.goBack();
     } catch (e) {
       const msg = e?.message || 'Could not save the address.';
-      notify('Save failed', msg);
+      // Field-level errors from the server (Spring style) highlight the field.
+      const list = Array.isArray(e?.payload?.errors) ? e.payload.errors : [];
+      const fieldErrs = {};
+      list.forEach((x) => { const f = FIELD_ALIASES[x?.field] || x?.field; if (f && f in data) fieldErrs[f] = x.defaultMessage || x.message || 'Invalid'; });
+      if (Object.keys(fieldErrs).length) setErrors((cur) => ({ ...cur, ...fieldErrs }));
+      setSaveError(e?.authRejected
+        ? { text: 'Your login has expired or is no longer accepted, so the server refused to save. Please log in again and re-add this address.', relogin: true }
+        : { text: e?.status ? `${msg} (HTTP ${e.status})` : msg });
+      // Bring the reason (last item in the form) into view above the Save bar.
+      setTimeout(() => scrollRef.current?.scrollToEnd?.({ animated: true }), 120);
+      notify('Save failed', e?.authRejected ? 'Please log in again.' : msg);
     } finally {
       setSaving(false);
     }
@@ -311,14 +318,15 @@ export default function AddressFormScreen({ navigation, route }) {
     >
       <FormHeader navigation={navigation} isEdit={!!existing} />
       <ScrollView
+        ref={scrollRef}
         keyboardShouldPersistTaps="always"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ padding: 14, paddingBottom: bottomSpace }}
       >
         <SectionCard
           icon={User}
-          iconColor={GREEN_DARK}
-          iconBg="#DCFCE7"
+          iconColor={GREEN_TEXT}
+          iconBg={MINT}
           title="Contact"
           subtitle="Who should the delivery agent call?"
         >
@@ -346,8 +354,8 @@ export default function AddressFormScreen({ navigation, route }) {
 
         <SectionCard
           icon={MapPin}
-          iconColor={GREEN_DARK}
-          iconBg="#DCFCE7"
+          iconColor={BRAND.red}
+          iconBg="#FEECEC"
           title="Address"
           subtitle="House, street, area & PIN code"
         >
@@ -356,22 +364,22 @@ export default function AddressFormScreen({ navigation, route }) {
             disabled={locating}
             style={{
               flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-              borderRadius: 12, paddingVertical: 12, marginBottom: 12,
-              backgroundColor: locating ? '#F6F7F9' : '#DCFCE7',
-              borderWidth: 1, borderColor: locating ? '#E5E7EB' : '#BBF7D0',
+              borderRadius: 12, paddingVertical: 10, marginBottom: 10,
+              backgroundColor: locating ? BRAND.bg : MINT,
+              borderWidth: 1, borderColor: locating ? LINE : GREEN_LINE,
             }}
           >
             {locating ? (
-              <ActivityIndicator size="small" color={GREEN_DARK} />
+              <ActivityIndicator size="small" color={GREEN_TEXT} />
             ) : (
-              <Navigation size={15} color={GREEN_DARK} />
+              <Navigation size={15} color={GREEN_TEXT} />
             )}
-            <Text style={{ marginLeft: 8, fontSize: rf(13), fontWeight: '800', color: locating ? '#64748B' : GREEN_DARK }}>
+            <Text style={{ marginLeft: 8, fontSize: rf(13), fontWeight: '800', color: locating ? MUTED : GREEN_TEXT }}>
               {locating ? 'Detecting your location…' : 'Use my current location'}
             </Text>
-            {!locating ? <Crosshair size={13} color={GREEN_DARK} style={{ marginLeft: 6 }} /> : null}
+            {!locating ? <Crosshair size={13} color={GREEN_TEXT} style={{ marginLeft: 6 }} /> : null}
           </Pressable>
-          <Text style={{ fontSize: rf(10.5), color: '#64748B', marginTop: -4, marginBottom: 10, textAlign: 'center' }}>
+          <Text style={{ fontSize: rf(10.5), color: MUTED, marginTop: -4, marginBottom: 10, textAlign: 'center' }}>
             Autofills empty fields only — you can edit any field by typing.
           </Text>
 
@@ -391,7 +399,9 @@ export default function AddressFormScreen({ navigation, route }) {
               placeholder="e.g. Anna Nagar"
               value={data.area}
               onChangeText={(v) => setField('area', v)}
+              error={errors.area}
             />
+            {errors.area ? <Text style={{ color: BRAND.red, marginTop: 3, fontSize: rf(10) }}>{errors.area}</Text> : null}
           </Field>
 
           <Field label="Taluk">
@@ -399,7 +409,9 @@ export default function AddressFormScreen({ navigation, route }) {
               placeholder="Taluk"
               value={data.taluk}
               onChangeText={(v) => setField('taluk', v)}
+              error={errors.taluk}
             />
+            {errors.taluk ? <Text style={{ color: BRAND.red, marginTop: 3, fontSize: rf(10) }}>{errors.taluk}</Text> : null}
           </Field>
 
           <Field label="District" required>
@@ -438,8 +450,8 @@ export default function AddressFormScreen({ navigation, route }) {
         {/* Save as */}
         <SectionCard
           icon={Tag}
-          iconColor="#F59E0B"
-          iconBg="#FEF3C7"
+          iconColor={BRAND.yellow}
+          iconBg="#FEF6DA"
           title="Save as"
           subtitle="Pick a label so you can find it later"
         >
@@ -451,14 +463,13 @@ export default function AddressFormScreen({ navigation, route }) {
                 <View key={l.value} className="px-1 flex-1">
                   <Pressable
                     onPress={() => setField('label', l.value)}
-                    className={`rounded-xl border py-3 px-2 items-center flex-row justify-center ${active ? '' : 'bg-card border-border'}`}
-                    style={active ? { backgroundColor: l.tint, borderColor: l.color } : null}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: active }}
+                    className="active:opacity-80"
+                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 12, paddingVertical: 9, paddingHorizontal: 6, borderWidth: active ? 1.5 : 1, borderColor: active ? BRAND.green : LINE, backgroundColor: active ? MINT : '#FFFFFF' }}
                   >
-                    <Icon size={15} color={active ? l.color : '#64748B'} />
-                    <Text
-                      className={` font-extrabold ml-1.5 ${active ? '' : 'text-text'}`}
-                      style={[active ? { color: l.color } : null, { fontSize: rf(13) }]}
-                    >
+                    <Icon size={15} color={active ? GREEN_TEXT : MUTED} />
+                    <Text style={{ marginLeft: 6, fontSize: rf(12.5), fontWeight: '800', color: active ? GREEN_TEXT : BRAND.ink }}>
                       {l.value}
                     </Text>
                   </Pressable>
@@ -467,13 +478,46 @@ export default function AddressFormScreen({ navigation, route }) {
             })}
           </View>
         </SectionCard>
+
+        {saveError ? (
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', borderRadius: 14, padding: 10, backgroundColor: '#FEECEC', borderWidth: 1, borderColor: 'rgba(248,65,65,0.35)' }}>
+            <AlertTriangle size={16} color={BRAND.red} style={{ marginTop: 1 }} />
+            <View style={{ flex: 1, marginLeft: 8 }}>
+              <Text style={{ fontSize: rf(12.5), fontWeight: '800', color: BRAND.ink }}>Couldn't save this address</Text>
+              <Text style={{ fontSize: rf(11.5), color: BRAND.ink, marginTop: 2, lineHeight: rf(16) }} selectable>{saveError.text}</Text>
+              {saveError.relogin ? (
+                <Pressable
+                  onPress={forceRelogin}
+                  accessibilityRole="button"
+                  accessibilityLabel="Log in again"
+                  className="active:opacity-85"
+                  style={{ alignSelf: 'flex-start', marginTop: 8, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, backgroundColor: BRAND.green }}
+                >
+                  <Text style={{ fontSize: rf(12), fontWeight: '800', color: '#FFFFFF' }}>Log in again</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+        ) : null}
       </ScrollView>
 
-      <BottomActionBar
-        title={existing ? 'Update Address' : 'Save Address'}
-        onPress={save}
-        loading={saving}
-      />
+      <BottomActionBar>
+        <Pressable
+          onPress={save}
+          disabled={saving}
+          accessibilityRole="button"
+          accessibilityLabel={existing ? 'Update Address' : 'Save Address'}
+          className="active:opacity-90"
+          style={{ height: 48, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: BRAND.green, opacity: saving ? 0.75 : 1, shadowColor: BRAND.green, shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3 }}
+        >
+          {saving ? <ActivityIndicator color="#FFFFFF" /> : (
+            <>
+              <Text style={{ fontSize: rf(15), fontWeight: '800', color: '#FFFFFF', marginRight: 4 }}>{existing ? 'Update Address' : 'Save Address'}</Text>
+              <ChevronRight size={18} color="#FFFFFF" />
+            </>
+          )}
+        </Pressable>
+      </BottomActionBar>
     </KeyboardAvoidingView>
   );
 }
