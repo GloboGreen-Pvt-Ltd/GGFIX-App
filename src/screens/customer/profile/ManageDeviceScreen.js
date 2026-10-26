@@ -13,6 +13,8 @@ import { resolveDeviceImageSource } from '../../../utils/images';
 import { BRAND } from '../../../theme/brand';
 import { tintFor } from '../../../theme/categoryTints';
 import { rf } from '../../../utils/responsive';
+import { resolveSpecCategory } from '../../../utils/deviceSpecs';
+import { imeiApplies } from '../../../utils/imeiPolicy';
 
 const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
 const LINE = '#E6E6E6';
@@ -287,7 +289,7 @@ export default function ManageDeviceScreen({ navigation }) {
                                 <Text style={{ fontSize: rf(10.5), color: BRAND.muted, marginLeft: 3 }}>{specs}</Text>
                               </View>
                             ) : null}
-                            {d.imei ? (
+                            {d.imei && imeiApplies(resolveSpecCategory(d.categoryCode, catById[d.categoryId]?.code, catById[d.categoryId]?.name)) ? (
                               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                 <Hash size={10} color={BRAND.muted} />
                                 <Text numberOfLines={1} style={{ fontSize: rf(10.5), color: BRAND.muted, marginLeft: 3 }}>{d.imei}</Text>

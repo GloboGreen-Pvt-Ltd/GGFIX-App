@@ -19,6 +19,8 @@ import { Button } from '../components/rnr';
 import { notify } from '../components/confirm';
 import { tokens } from '../theme/colors';
 import { rf, rlh, rs } from '../utils/responsive';
+import LegalAgreement from '../legal/LegalAgreement';
+import { setLegalAgreed } from '../legal/legalConsent';
 
 /**
  * Customer sign-up: mobile number → OTP → name. Three steps in ONE screen (local
@@ -78,6 +80,7 @@ export default function CreateAccountScreen({ navigation, onLogin }) {
   const [note, setNote] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [agreed, setAgreed] = useState(false);
   const otpRef = useRef(null);
   // Guards the auto-submit that fires when the 6th digit lands, so a slow
   // request can't be double-sent by another keystroke (or by paste + tap).
@@ -205,6 +208,11 @@ export default function CreateAccountScreen({ navigation, onLogin }) {
       setError('Enter your name');
       return;
     }
+    if (!agreed) {
+      setError('Please agree to the Terms & Conditions and Privacy Policy to continue.');
+      return;
+    }
+    setLegalAgreed(true);
     try {
       setLoading(true);
       // Same code the verify step checked — the server re-verifies here and
@@ -304,6 +312,9 @@ export default function CreateAccountScreen({ navigation, onLogin }) {
               error={error}
               onBack={backFromDetails}
               onSubmit={createAccount}
+              agreed={agreed}
+              onAgreedChange={(v) => { setAgreed(v); setError(null); }}
+              onOpenLegal={(type) => navigation?.navigate(type === 'PRIVACY' ? 'PrivacyPolicy' : 'Terms')}
             />
           ) : null}
         </View>
@@ -415,7 +426,7 @@ function OtpStep({
 
 /* ------------------------------------------------------------------ step 3 */
 
-function DetailsStep({ fullName, setFullName, email, setEmail, mobile, loading, error, onBack, onSubmit }) {
+function DetailsStep({ fullName, setFullName, email, setEmail, mobile, loading, error, onBack, onSubmit, agreed, onAgreedChange, onOpenLegal }) {
   return (
     <View>
       <BackButton onPress={onBack} />
@@ -455,6 +466,14 @@ function DetailsStep({ fullName, setFullName, email, setEmail, mobile, loading, 
       </View>
 
       <ErrorBox msg={error} />
+
+      <LegalAgreement
+        checked={agreed}
+        onChange={onAgreedChange}
+        onOpen={onOpenLegal}
+        color={GREEN}
+        style={{ marginTop: rs(14) }}
+      />
 
       <PrimaryButton label="CREATE ACCOUNT" loading={loading} onPress={onSubmit} />
     </View>

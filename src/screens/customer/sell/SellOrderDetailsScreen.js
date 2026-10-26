@@ -12,6 +12,8 @@ import { confirm, notify } from '../../../components/confirm';
 import { rf, rlh } from '../../../utils/responsive';
 import { splitTypedSummary } from '../../../utils/typedDevice';
 import { sellProgress } from '../../../utils/sellStatus';
+import { resolveSpecCategory } from '../../../utils/deviceSpecs';
+import { imeiApplies } from '../../../utils/imeiPolicy';
 import { goToTab } from '../../../navigation/goToTab';
 
 const GREEN = '#09AD2A';
@@ -352,7 +354,7 @@ export default function SellOrderDetailsScreen({ navigation, route }) {
               {order.color ? <Text style={styles.small}>Color: {order.color}</Text> : null}
               {storageLine ? <Text style={styles.small}>Storage: {storageLine}</Text> : null}
               {conditionText ? <Text style={styles.small}>Condition: {conditionText}</Text> : null}
-              {order.imei ? <Text style={styles.small}>IMEI: {order.imei}</Text> : null}
+              {order.imei && imeiApplies(resolveSpecCategory(meta.categoryCode, meta.categoryName)) ? <Text style={styles.small}>IMEI: {order.imei}</Text> : null}
             </View>
             {meta.image ? <Image source={{ uri: meta.image }} style={styles.thumb} resizeMode="contain" /> : <View style={styles.thumb} />}
           </View>

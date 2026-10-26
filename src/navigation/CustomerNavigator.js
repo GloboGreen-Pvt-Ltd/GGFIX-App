@@ -29,7 +29,7 @@ import AddressFormScreen from '../screens/customer/profile/AddressFormScreen';
 import ManageDeviceScreen from '../screens/customer/profile/ManageDeviceScreen';
 import CustomerSupportScreen from '../screens/customer/profile/CustomerSupportScreen';
 import AboutUsScreen from '../screens/customer/profile/AboutUsScreen';
-import TermsScreen from '../screens/customer/profile/TermsScreen';
+import LegalDocumentScreen from '../legal/LegalDocumentScreen';
 import FaqScreen from '../screens/customer/profile/FaqScreen';
 import MyOrdersScreen from '../screens/customer/profile/MyOrdersScreen';
 import MyCartScreen from '../screens/customer/profile/MyCartScreen';
@@ -260,7 +260,8 @@ export default function CustomerNavigator({ session, onLogout }) {
       <Stack.Screen name="ManageDevice" component={ManageDeviceScreen} options={{ title: 'Manage My Device' }} />
       <Stack.Screen name="CustomerSupport" component={CustomerSupportScreen} options={{ headerShown: false }} />
       <Stack.Screen name="AboutUs" component={AboutUsScreen} options={{ title: 'About Us' }} />
-      <Stack.Screen name="Terms" component={TermsScreen} options={{ title: 'Terms & Conditions' }} />
+      <Stack.Screen name="Terms" component={LegalDocumentScreen} initialParams={{ type: 'TERMS' }} options={{ headerShown: false }} />
+      <Stack.Screen name="PrivacyPolicy" component={LegalDocumentScreen} initialParams={{ type: 'PRIVACY' }} options={{ headerShown: false }} />
       <Stack.Screen name="Faq" component={FaqScreen} options={{ title: 'FAQ' }} />
       {/* MyOrders renders its own AppHeader (title + subtitle + back) — hide
           the stack header to avoid the duplicate "My Orders" bar above it. */}

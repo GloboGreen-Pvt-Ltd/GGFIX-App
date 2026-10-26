@@ -99,17 +99,29 @@ export async function getModelsBySeries(seriesId) {
  * endpoint as the Partner app's product scanner. Matches keep the raw shape
  * { id, brand, model, modelCode, categoryName, imageUrl, similarity }.
  */
-export async function identifyDevice(photo, { limit = 8 } = {}) {
+export async function identifyDevice(photo, { limit = 8, ocrText, source } = {}) {
   const res = await masterApi.upload('/master/device-identify', {
     uri: photo.uri,
     name: photo.fileName || 'scan.jpg',
     type: photo.mimeType || 'image/jpeg',
-    fields: { limit },
+    // Optional hints: the phone's own OCR text and CAMERA | GALLERY. Undefined
+    // fields aren't sent, so older servers behave as before.
+    fields: { limit, ocrText: ocrText ? String(ocrText).slice(0, 4000) : undefined, source: source || undefined },
   });
   return {
     configured: res?.configured !== false,
     error: res?.error || null,
+    retryAfterSeconds: res?.retryAfterSeconds ?? null,
+    // groq | google | vector | ocr — "groq" marks an AI guess (core.js).
+    provider: res?.provider || null,
     confidence: res?.confidence || 'low',
+    // Newer servers (additive): EXACT | POSSIBLE | NONE, the exact model when
+    // verified, calibrated P(best is right), and the scan id for feedback.
+    identification: res?.identification || null,
+    exactMatch: res?.exactMatch || null,
+    confidenceScore: typeof res?.confidenceScore === 'number' ? res.confidenceScore : null,
+    calibrated: res?.calibrated === true,
+    scanId: res?.scanId || null,
     recognisedAs: res?.recognisedAs || null,
     brand: res?.brand || null,
     labels: Array.isArray(res?.labels) ? res.labels : [],
@@ -117,6 +129,17 @@ export async function identifyDevice(photo, { limit = 8 } = {}) {
     bestMatch: res?.bestMatch || null,
     matches: Array.isArray(res?.matches) ? res.matches : [],
   };
+}
+
+/**
+ * Tells master-data which model the user picked for a scan (rank = its index
+ * in the server's matches, -1 = picked some other way). Fire-and-forget.
+ */
+export function sendDeviceIdentifyFeedback(scanId, { modelId, rank } = {}) {
+  if (!scanId || !modelId) return;
+  masterApi
+    .post(`/master/device-identify/${encodeURIComponent(scanId)}/feedback`, { body: { modelId, rank: Number.isInteger(rank) ? rank : -1 } })
+    .catch(() => {});
 }
 
 export async function getRamOptions() {

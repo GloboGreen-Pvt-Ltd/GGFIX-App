@@ -12,7 +12,7 @@ import { BRAND } from '../../../theme/brand';
 import { resolveDeviceImageSource } from '../../../utils/images';
 import { classifyScan, findOrderByCode, orderRoute, phoneKey } from '../../../utils/scanCode';
 import { loadCatalog, modelRouteParams, norm } from '../../../utils/searchCatalog';
-import { getModelByNumber, lookupImei } from '../../../api/masterData';
+import { getModelByNumber, lookupImei, sendDeviceIdentifyFeedback } from '../../../api/masterData';
 import { listMyOrders, getServiceTicket } from '../../../api/orders';
 import { listShops, getShopBySlug } from '../../../api/shops';
 import { detectProductFromPhoto, warmProductDetect } from '../../../lib/productDetect';
@@ -169,31 +169,48 @@ export default function ScanScreen({ navigation, route }) {
     }
   }
 
-  // Product mode: identify the actual device in a photo (visual search), then
-  // offer Repair / Sell / Buy for the best match or a close alternative.
-  const identify = async (photo) => {
+  // Product mode: identify the actual device in a photo, then offer Repair /
+  // Sell / Buy for the model the user confirms.
+  const identify = async (photo, source) => {
     lockRef.current = true;
     setResult({ state: 'identifying' });
     try {
-      // Shared detector (lib/productDetect, same as the Partner app): OCR model
-      // number → catalogue name → Google Vision / visual ranking, with a
-      // confidence; only a clear high match is auto-selected, else the top 3.
-      const r = await detectProductFromPhoto(photo.uri, { width: photo.width, height: photo.height });
+      // Shared detector (lib/productDetect, same as the Partner app): printed
+      // model number → the model's whole name in the photo's text → the
+      // server's genuine matches (look, AI, OCR). Only a VERIFIED model is
+      // shown as the exact model; anything less is a list the user picks from.
+      const r = await detectProductFromPhoto(photo.uri, { width: photo.width, height: photo.height }, { source });
       if (r.status === 'none') {
-        if (r.label) {
-          // Recognised (e.g. "Samsung Galaxy S23") but no confident catalogue
-          // match — search that name instead of guessing a device.
-          lockRef.current = false;
-          return navigation.replace('Search', { q: String(r.label) });
-        }
-        return setResult({ state: 'notFound', typeOnly: true, message: "Couldn't recognise this product. Fill the frame with the device (or its box label) in good light and try again, or type its name." });
+        // Never a guess and never a jump: say so, and offer manual search
+        // (prefilled with what was recognised — a brand, a name).
+        const busy = r.serverError === 'RATE_LIMITED';
+        return setResult({
+          state: 'notIdentified',
+          q: r.label ? String(r.label) : '',
+          message: busy
+            ? `Product recognition is busy right now${r.retryAfterSeconds ? ` — try again in ${r.retryAfterSeconds}s` : ' — try again in a moment'}, or search for your model.`
+            : r.label
+              ? `Looks like ${r.label}, but the exact model couldn't be confirmed. Search for your model, or retake the photo showing the back cameras or the box label.`
+              : 'Fill the frame with the device (the back with the cameras, or its box label) in good light and try again, or search for your model.',
+        });
       }
       const items = await Promise.all(r.candidates.map(async (c) => ({
         match: { id: c.id, model: c.name, brand: c.brand, imageUrl: c.ref?.imageUrl || null },
         score: c.confidence,
         ...(await deviceFrom(c.ref)),
       })));
-      return setResult({ state: 'product', confidence: r.status === 'exact' ? 'high' : 'medium', items, pick: 0 });
+      const exact = r.status === 'exact';
+      return setResult({
+        state: 'product',
+        exact,
+        confidence: exact ? 'high' : 'medium',
+        items,
+        // Exact: that one model is shown (still a tap to continue). Possible
+        // matches: nothing is pre-picked — the user chooses.
+        pick: exact ? 0 : null,
+        scanId: r.scanId || null,
+        q: r.label ? String(r.label) : '',
+      });
     } catch (_) {
       return setResult({
         state: 'notFound',
@@ -210,7 +227,7 @@ export default function ScanScreen({ navigation, route }) {
     try {
       const pic = await camRef.current.takePictureAsync({ quality: 0.6 });
       if (!pic?.uri) throw new Error('no photo');
-      await identify({ uri: pic.uri, mimeType: 'image/jpeg', width: pic.width, height: pic.height });
+      await identify({ uri: pic.uri, mimeType: 'image/jpeg', width: pic.width, height: pic.height }, 'CAMERA');
     } catch (_) {
       setResult({ state: 'notFound', typeOnly: true, message: "Couldn't take the photo. Please try again." });
     }
@@ -226,7 +243,7 @@ export default function ScanScreen({ navigation, route }) {
     try {
       const pick = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.8 });
       if (pick.canceled || !pick.assets?.[0]?.uri) return;
-      if (isProduct) return identify({ uri: pick.assets[0].uri, mimeType: pick.assets[0].mimeType, width: pick.assets[0].width, height: pick.assets[0].height });
+      if (isProduct) return identify({ uri: pick.assets[0].uri, mimeType: pick.assets[0].mimeType, width: pick.assets[0].width, height: pick.assets[0].height }, 'GALLERY');
       lockRef.current = true;
       setResult({ state: 'resolving', raw: '' });
       const found = await scanFromURLAsync(pick.assets[0].uri, BARCODE_TYPES).catch(() => []);
@@ -271,22 +288,69 @@ export default function ScanScreen({ navigation, route }) {
       </View>
     );
     if (r.state === 'product') {
-      const cur = r.items[r.pick] || r.items[0];
+      const fullName = (it) => {
+        const n = it.model.name || it.match.model;
+        const b = it.params.brandName || it.match.brand;
+        return b && !String(n).toLowerCase().startsWith(String(b).toLowerCase()) ? `${b} ${n}` : n;
+      };
+      // The pick goes back to the server (metrics / confidence calibration),
+      // then the existing booking flow continues unchanged.
+      const go = (it, i, name, params) => {
+        sendDeviceIdentifyFeedback(r.scanId, { modelId: it.match.id, rank: i });
+        open(name, params);
+      };
+      const cur = r.pick == null ? null : r.items[r.pick];
+      const manual = (
+        <Pressable onPress={() => open('Search', { q: r.q || '' })} accessibilityRole="button" className="active:opacity-80" style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 6 }}>
+          <Search size={13} color={GREEN_TEXT} />
+          <Text style={{ marginLeft: 5, fontSize: rf(12), fontWeight: '800', color: GREEN_TEXT }}>Not listed? Search manually</Text>
+        </Pressable>
+      );
+      // Possible matches, nothing picked yet: the genuine candidates, each with
+      // its catalogue image and how sure the scan is.
+      if (!cur) {
+        return (
+          <>
+            <Head icon={SearchX} title="Exact model not identified" sub="Possible matches — tap yours to continue" />
+            {r.items.map((it, i) => (
+              <Pressable
+                key={it.match.id}
+                onPress={() => setResult({ ...r, pick: i })}
+                accessibilityRole="button"
+                accessibilityLabel={`Choose ${fullName(it)}`}
+                className="active:opacity-80"
+                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 10, marginBottom: 6, borderRadius: 12, borderWidth: 1, borderColor: LINE }}
+              >
+                {it.params.modelImageUrl || it.match.imageUrl
+                  ? <Image source={{ uri: it.params.modelImageUrl || it.match.imageUrl }} style={{ width: 38, height: 38, marginRight: 10 }} resizeMode="contain" />
+                  : <Smartphone size={22} color={GREEN_TEXT} style={{ marginRight: 10 }} />}
+                <Text style={{ flex: 1, fontSize: rf(13), fontWeight: '800', color: BRAND.ink }} numberOfLines={2}>{fullName(it)}</Text>
+                <Text style={{ marginLeft: 8, fontSize: rf(11.5), fontWeight: '800', color: MUTED }}>{Math.round((it.score || 0) * 100)}%</Text>
+              </Pressable>
+            ))}
+            {manual}
+          </>
+        );
+      }
       const p = cur.params;
       const name = cur.model.name || cur.match.model;
-      const brand = p.brandName || cur.match.brand;
-      const sure = r.confidence === 'high' && r.pick === 0;
+      const verified = r.exact && r.pick === 0;
       return (
         <>
-          <Head icon={Smartphone} title={brand && !String(name).toLowerCase().startsWith(String(brand).toLowerCase()) ? `${brand} ${name}` : name} sub={`${sure ? 'Product found' : r.items.length > 1 ? 'Pick your device — closest matches' : 'Best match — check this is your device'} · ${Math.round((cur.score || 0) * 100)}% match`} img={p.modelImageUrl || cur.match.imageUrl} />
+          <Head
+            icon={Smartphone}
+            title={fullName(cur)}
+            sub={verified ? 'Exact model identified · Verified' : `You picked this · ${Math.round((cur.score || 0) * 100)}% match`}
+            img={p.modelImageUrl || cur.match.imageUrl}
+          />
           <View style={{ flexDirection: 'row', marginHorizontal: -4 }}>
-            <SheetButton primary icon={Wrench} label="Repair" onPress={() => open('SelectVariant', { flow: 'REPAIR', ...p })} />
-            {cur.model.sellActive !== false ? <SheetButton icon={Tag} label="Sell" onPress={() => open('SelectVariant', { flow: 'SELL', ...p })} /> : null}
-            <SheetButton icon={ShoppingBag} label="Buy" onPress={() => open('BuyListing', { title: name, q: name, categoryId: p.categoryId, categoryCode: p.categoryCode })} />
+            <SheetButton primary icon={Wrench} label="Repair" onPress={() => go(cur, r.pick, 'SelectVariant', { flow: 'REPAIR', ...p })} />
+            {cur.model.sellActive !== false ? <SheetButton icon={Tag} label="Sell" onPress={() => go(cur, r.pick, 'SelectVariant', { flow: 'SELL', ...p })} /> : null}
+            <SheetButton icon={ShoppingBag} label="Buy" onPress={() => go(cur, r.pick, 'BuyListing', { title: name, q: name, categoryId: p.categoryId, categoryCode: p.categoryCode })} />
           </View>
           {r.items.length > 1 ? (
             <>
-              <Text style={{ marginTop: 12, marginBottom: 6, fontSize: rf(11), fontWeight: '700', color: MUTED }}>Not this one? Other close matches</Text>
+              <Text style={{ marginTop: 12, marginBottom: 6, fontSize: rf(11), fontWeight: '700', color: MUTED }}>{verified ? 'Not this one?' : 'Other possible matches'}</Text>
               <View style={{ flexDirection: 'row', marginHorizontal: -3 }}>
                 {r.items.map((it, i) => (i === r.pick ? null : (
                   <Pressable
@@ -304,6 +368,18 @@ export default function ScanScreen({ navigation, route }) {
               </View>
             </>
           ) : null}
+          {manual}
+        </>
+      );
+    }
+    if (r.state === 'notIdentified') {
+      return (
+        <>
+          <Head icon={SearchX} title="Exact model not identified" sub={r.message} />
+          {/* "Take another photo" sits under every result already. */}
+          <View style={{ flexDirection: 'row', marginHorizontal: -4 }}>
+            <SheetButton primary icon={Search} label="Search manually" onPress={() => open('Search', { q: r.q || '' })} />
+          </View>
         </>
       );
     }

@@ -42,6 +42,7 @@ import {
 } from '../../../components/rnr';
 import { getModelOptions } from '../../../api/masterData';
 import useDeviceSpecForm from '../../../hooks/useDeviceSpecForm';
+import { imeiApplies } from '../../../utils/imeiPolicy';
 import { formatSpecValue, normalizeCapacity } from '../../../utils/deviceSpecs';
 import { createSavedDevice, updateSavedDevice } from '../../../api/customer';
 import { rf } from '../../../utils/responsive';
@@ -146,7 +147,7 @@ export default function SelectVariantScreen({ navigation, route }) {
       : (route?.params?.categoryCode || '')
   ).toUpperCase();
   const NO_IMEI_KEYWORDS = ['LAPTOP', 'AUDIO', 'WATCH', 'HEADPHONE', 'EARBUD', 'TABLET'];
-  const noImei = NO_IMEI_KEYWORDS.some((k) => categoryCode.includes(k));
+  const noImeiByCode = NO_IMEI_KEYWORDS.some((k) => categoryCode.includes(k));
   // Smart watches & audio devices don't take RAM/Storage selections.
   const NO_RAM_STORAGE_KEYWORDS = ['WATCH', 'AUDIO', 'HEADPHONE', 'EARBUD'];
   const noRamStorage = NO_RAM_STORAGE_KEYWORDS.some((k) => categoryCode.includes(k));
@@ -217,6 +218,8 @@ export default function SelectVariantScreen({ navigation, route }) {
       storageLabel: route?.params?.storageLabel,
     },
   });
+  // IMEI is mobile-only; the spec hook also resolves UUID-only categories.
+  const noImei = noImeiByCode || !imeiApplies(spec.category);
   const deviceSpecFields = spec.fields.filter((f) => f.key !== 'color');
   const useDeviceSpecs = specFlow && !isCustomModel && spec.usesSpecs && deviceSpecFields.length > 0;
   const specsMissing = deviceSpecFields.some((f) => f.required && !spec.values[f.key]);
@@ -333,7 +336,7 @@ export default function SelectVariantScreen({ navigation, route }) {
       if (flow === 'SELL') {
         if (!noImei && !imei.trim()) return;
         navigation.navigate('SellScreening', {
-          device: { ...buildCustomDevice(), imei },
+          device: { ...buildCustomDevice(), imei: noImei ? undefined : imei },
           workingCondition: condition,
           editSellOrderId: route?.params?.editSellOrderId,
           editHints: route?.params?.editHints,
@@ -399,7 +402,7 @@ export default function SelectVariantScreen({ navigation, route }) {
     }
     if (flow === 'SELL') {
       navigation.navigate('SellScreening', {
-        device: { ...payload, modelName, imei },
+        device: { ...payload, modelName, imei: noImei ? undefined : imei },
         workingCondition: condition,
         editSellOrderId: route?.params?.editSellOrderId,
         editHints: route?.params?.editHints,

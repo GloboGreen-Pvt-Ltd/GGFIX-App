@@ -43,6 +43,7 @@ const SUPPORT = [
   { label: 'FAQ',                desc: 'Answers to common questions', icon: ion('help-circle'),        to: 'Faq',             tone: 'purple' },
   { label: 'About Us',           desc: 'Learn about GGFIX',           icon: ion('information-circle'), to: 'AboutUs',         tone: 'green' },
   { label: 'Terms & Conditions', desc: 'Policies & agreements',       icon: mci('script-text'),        to: 'Terms',           tone: 'blue' },
+  { label: 'Privacy Policy',     desc: 'How we handle your data',     icon: mci('shield-check'),       to: 'PrivacyPolicy',   tone: 'green' },
 ];
 
 // App version comes from the Expo app config (app.config.js `version`), with

@@ -3,6 +3,7 @@ import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { Smartphone, Skull, Cpu, HardDrive, Palette, ChevronRight, Check, ScanBarcode } from 'lucide-react-native';
 import { BottomActionBar, Input, Label, Badge, useBottomBarInset } from '../../../components/rnr';
 import { rf } from '../../../utils/responsive';
+import { useImeiApplies } from '../../../utils/imeiPolicy';
 import { FLOW, cardShadow, FlowCta, FlowDecor, FlowHeader, useHideStackHeader } from '../service-booking-customer/FlowChrome';
 
 const OPTIONS = [
@@ -16,9 +17,10 @@ export default function SellConditionScreen({ navigation, route }) {
   const device = route?.params?.device || {};
   const [condition, setCondition] = useState('WORKING');
   const [imei, setImei] = useState(device.imei || '');
+  const showImei = useImeiApplies(device);
 
   const onContinue = () => {
-    navigation.navigate('SellScreening', { device: { ...device, imei }, workingCondition: condition });
+    navigation.navigate('SellScreening', { device: { ...device, imei: showImei ? imei : undefined }, workingCondition: condition });
   };
 
   // ---- presentation-only values ----
@@ -66,7 +68,8 @@ export default function SellConditionScreen({ navigation, route }) {
           </View>
         </View>
 
-        {/* IMEI */}
+        {/* IMEI — mobile phones only */}
+        {showImei ? (
         <View style={{ backgroundColor: '#fff', borderRadius: 24, borderWidth: 1, borderColor: 'rgba(0,107,87,0.08)', padding: 14, marginBottom: 18, ...cardShadow }}>
           <Text style={{ fontSize: rf(16), fontWeight: '800', color: '#08162B', marginBottom: 10 }}>IMEI Number</Text>
           <Input
@@ -82,6 +85,7 @@ export default function SellConditionScreen({ navigation, route }) {
             className="py-2" style={{ fontSize: rf(13.5) }}
           />
         </View>
+        ) : null}
 
         {/* Condition picker */}
         <Text style={{ fontSize: rf(12), fontWeight: '800', color: '#687990', letterSpacing: 1.6, marginBottom: 10, paddingHorizontal: 2 }}>PHONE CONDITION</Text>
