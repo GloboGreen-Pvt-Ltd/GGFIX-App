@@ -19,6 +19,8 @@ import Svg, { Circle, Defs, Ellipse, LinearGradient as SvgGradient, Path, Stop }
 import { ArrowRight, CalendarClock, Phone, ShieldCheck, ShoppingCart } from 'lucide-react-native';
 import { customerLogin, requestOtp } from '../api/auth';
 import { AUTH_BASE } from '../api/config';
+import LegalAgreement from '../legal/LegalAgreement';
+import { hasDeviceAgreed, setLegalAgreed } from '../legal/legalConsent';
 
 /**
  * Customer sign-in: mobile number → OTP. Both steps live in this one screen
@@ -70,7 +72,15 @@ export default function LoginScreen({ onLogin, navigation }) {
   const [note, setNote] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  // Terms/Privacy checkbox: asked unticked the first time; once this device
+  // has agreed to the current versions it shows as a notice instead.
+  const [agreed, setAgreed] = useState(false);
+  const [deviceAgreed, setDeviceAgreed] = useState(false);
   const otpRef = useRef(null);
+
+  useEffect(() => {
+    hasDeviceAgreed().then(setDeviceAgreed);
+  }, []);
   // Guards the auto-submit that fires when the 6th digit lands, so a slow
   // request can't be double-sent by another keystroke (or by paste + tap).
   const verifyingRef = useRef(false);
@@ -111,6 +121,11 @@ export default function LoginScreen({ onLogin, navigation }) {
       setError(`Enter your ${MOBILE_DIGITS}-digit mobile number`);
       return;
     }
+    if (!deviceAgreed && !agreed) {
+      setError('Please agree to the Terms & Conditions and Privacy Policy to continue.');
+      return;
+    }
+    setLegalAgreed(agreed);
     try {
       setLoading(true);
       try {
@@ -225,6 +240,10 @@ export default function LoginScreen({ onLogin, navigation }) {
               error={error}
               onSubmit={sendOtp}
               onCreateAccount={() => navigation?.navigate('CreateAccount')}
+              agreed={agreed}
+              deviceAgreed={deviceAgreed}
+              onAgreedChange={(v) => { setAgreed(v); setError(null); }}
+              onOpenLegal={(type) => navigation?.navigate(type === 'PRIVACY' ? 'PrivacyPolicy' : 'Terms')}
             />
           ) : (
             <OtpStep
@@ -254,7 +273,7 @@ export default function LoginScreen({ onLogin, navigation }) {
 
 /* ------------------------------------------------------------------ step 1 */
 
-function MobileStep({ s, k, mobile, setMobile, loading, error, onSubmit, onCreateAccount }) {
+function MobileStep({ s, k, mobile, setMobile, loading, error, onSubmit, onCreateAccount, agreed, deviceAgreed, onAgreedChange, onOpenLegal }) {
   return (
     <View>
       <Text style={s.label}>Mobile number</Text>
@@ -276,6 +295,15 @@ function MobileStep({ s, k, mobile, setMobile, loading, error, onSubmit, onCreat
       </View>
 
       <ErrorBox s={s} msg={error} />
+
+      <LegalAgreement
+        checked={agreed}
+        accepted={deviceAgreed}
+        onChange={onAgreedChange}
+        onOpen={onOpenLegal}
+        color={GREEN_TEXT}
+        style={{ marginTop: 14 * k }}
+      />
 
       <PillButton s={s} k={k} label="LOGIN" loading={loading} onPress={onSubmit} />
 

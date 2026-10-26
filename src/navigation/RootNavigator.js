@@ -12,6 +12,8 @@ import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 import CustomerNavigator from './CustomerNavigator';
 import { setBootProgress, finishBoot } from '../boot/bootProgress';
 import AppLockGate from '../components/AppLockGate';
+import LegalDocumentScreen from '../legal/LegalDocumentScreen';
+import LegalConsentGate from '../legal/LegalConsentGate';
 
 const Stack = createNativeStackNavigator();
 
@@ -72,13 +74,17 @@ export default function RootNavigator() {
         <Stack.Screen name="ResetPassword">
           {(props) => <ResetPasswordScreen {...props} onLogin={handleLogin} />}
         </Stack.Screen>
+        <Stack.Screen name="Terms" component={LegalDocumentScreen} initialParams={{ type: 'TERMS' }} />
+        <Stack.Screen name="PrivacyPolicy" component={LegalDocumentScreen} initialParams={{ type: 'PRIVACY' }} />
       </Stack.Navigator>
     );
   }
 
   return (
     <AppLockGate onLogout={handleLogout}>
-      <CustomerNavigator session={session} onLogout={handleLogout} />
+      <LegalConsentGate accountId={session.userId} onLogout={handleLogout}>
+        <CustomerNavigator session={session} onLogout={handleLogout} />
+      </LegalConsentGate>
     </AppLockGate>
   );
 }

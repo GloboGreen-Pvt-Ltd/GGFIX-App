@@ -11,6 +11,7 @@ import { getSession } from '../../../auth/session';
 import { rf, rlh } from '../../../utils/responsive';
 import { BRAND } from '../../../theme/brand';
 import { withTypedDevice } from '../../../utils/typedDevice';
+import { useImeiApplies } from '../../../utils/imeiPolicy';
 
 const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
 const LINE = '#E6E6E6';
@@ -56,6 +57,7 @@ export default function SellCompleteScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const p = route.params || {};
   const device = p.device || {};
+  const showImei = useImeiApplies(device);
   const address = p.address || {};
   const images = p.images || {};
   const [saving, setSaving] = useState(false);
@@ -168,7 +170,7 @@ export default function SellCompleteScreen({ navigation, route }) {
               {device.color ? <Text style={styles.small}>Color: {device.color}</Text> : null}
               {storageLine ? <Text style={styles.small}>Storage: {storageLine}</Text> : null}
               <Text style={styles.small}>Device Condition: {p.deviceCondition || (p.workingCondition === 'DEAD' ? 'Unknown Condition' : 'Good')}</Text>
-              <Text style={styles.small}>IMEI Number : {device.imei || '-'}</Text>
+              {showImei ? <Text style={styles.small}>IMEI Number : {device.imei || '-'}</Text> : null}
             </View>
             {device.imageUrl ? (
               <Image source={{ uri: device.imageUrl }} style={styles.thumb} resizeMode="contain" />
