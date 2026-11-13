@@ -75,7 +75,9 @@ export default function BuyOrderSuccessScreen({ navigation, route }) {
 
       <SuccessActions
         secondary={{ label: 'Shop more', icon: ShoppingBag, onPress: () => goToTab(navigation, 'Buy') }}
-        primary={{ label: 'View My Orders', trailing: ChevronRight, onPress: () => navigation.replace('MyOrders', { initialTab: 'Buy', initialStatus: 'Pending' }) }}
+        primary={order.id
+          ? { label: 'Track Order', trailing: ChevronRight, onPress: () => navigation.replace(route?.params?.fixed ? 'BuyFixedOrder' : 'BuyOrderDetails', { orderId: order.id }) }
+          : { label: 'View My Orders', trailing: ChevronRight, onPress: () => navigation.replace('MyOrders', { initialTab: 'Buy', view: 'buy' }) }}
       />
     </View>
   );

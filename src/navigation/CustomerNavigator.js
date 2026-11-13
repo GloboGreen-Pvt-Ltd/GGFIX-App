@@ -1,18 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Pressable, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Home as HomeIcon, Tag, ShoppingBag, Wrench, User } from 'lucide-react-native';
 import colors from '../theme/colors';
 import PageHeader from '../components/PageHeader';
 import { HEADER_SUBTITLES } from './headerSubtitles';
-import { rf } from '../utils/responsive';
-
-// Brand palette: #078F23 active icon/label (#09AD2A shaded for legibility), #EAF8EC pill.
-const TAB_GREEN_DARK = '#078F23';
-const TAB_GREEN_SOFT = '#EAF8EC';
-const TAB_INACTIVE = '#8E8E8E';
+import CustomTabBar from './CustomTabBar';
 
 // Tab root screens
 import HomeScreen from '../screens/customer/HomeScreen';
@@ -75,17 +67,26 @@ import SellImagesScreen from '../screens/customer/sell/SellImagesScreen';
 import SellAddressScreen from '../screens/customer/sell/SellAddressScreen';
 import SellCompleteScreen from '../screens/customer/sell/SellCompleteScreen';
 import SellOrderDetailsScreen from '../screens/customer/sell/SellOrderDetailsScreen';
-import SellSuccessScreen from '../screens/customer/sell/SellSuccessScreen';
 import BuyOrderSuccessScreen from '../screens/customer/buy/BuyOrderSuccessScreen';
 import SearchScreen from '../screens/customer/search/SearchScreen';
 import ScanScreen from '../screens/customer/search/ScanScreen';
 import SellQuotationScreen from '../screens/customer/sell/SellQuotationScreen';
 import SellSelectShopScreen from '../screens/customer/sell/SellSelectShopScreen';
+import SellQuoteRequestsScreen from '../screens/customer/sell/SellQuoteRequestsScreen';
+import SellBuyerEnquiriesScreen from '../screens/customer/sell/SellBuyerEnquiriesScreen';
+import SellQuotesReceivedScreen from '../screens/customer/sell/SellQuotesReceivedScreen';
+import SellQuoteDetailsScreen from '../screens/customer/sell/SellQuoteDetailsScreen';
+import SellFinalOfferScreen from '../screens/customer/sell/SellFinalOfferScreen';
+import SellSchedulePickupScreen from '../screens/customer/sell/SellSchedulePickupScreen';
+import SellOrderTrackingScreen from '../screens/customer/sell/SellOrderTrackingScreen';
 
 // Buy flow
 import BuyCategoryScreen from '../screens/customer/buy/BuyCategoryScreen';
 import BuyListingScreen from '../screens/customer/buy/BuyListingScreen';
 import BuyProductDetailsScreen from '../screens/customer/buy/BuyProductDetailsScreen';
+import BuyPlaceOrderScreen from '../screens/customer/buy/BuyPlaceOrderScreen';
+import BuyOrderDetailsScreen from '../screens/customer/buy/BuyOrderDetailsScreen';
+import BuyFixedOrderScreen from '../screens/customer/buy/BuyFixedOrderScreen';
 
 // Shop browse
 import NearbyShopsScreen from '../screens/customer/shop/NearbyShopsScreen';
@@ -93,112 +94,6 @@ import ShopDetailsScreen from '../screens/customer/shop/ShopDetailsScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
-
-const TAB_ICONS = {
-  Home: HomeIcon,
-  Repair: Wrench,
-  Sell: Tag,
-  Buy: ShoppingBag,
-  Profile: User,
-};
-
-const TAB_LABELS = {
-  Home: 'Home',
-  Repair: 'Repair',
-  Sell: 'Sell',
-  Buy: 'Buy',
-  Profile: 'Profile',
-};
-
-// Floating "glass" capsule bottom bar — mirrors the shop app's OwnerNavigator
-// GlassTabBar method: a rounded white capsule floating above the safe area with
-// a spring-animated pill that slides to the active tab. Themed green for the
-// customer brand (active icon/label green; pill green-soft).
-const TAB_HPAD = 6;      // capsule inner horizontal padding
-const TAB_PILL_INSET = 8; // gap between a slot edge and the pill
-
-function CustomTabBar({ state, navigation }) {
-  const insets = useSafeAreaInsets();
-  const routes = state.routes;
-  const [barW, setBarW] = useState(0);
-
-  const count = routes.length || 1;
-  const slot = barW > 0 ? (barW - TAB_HPAD * 2) / count : 0;
-  const activeIndex = state.index;
-
-  const anim = useRef(new Animated.Value(activeIndex)).current;
-  useEffect(() => {
-    Animated.spring(anim, { toValue: activeIndex, useNativeDriver: true, friction: 14, tension: 120 }).start();
-  }, [activeIndex, slot]);
-
-  const translateX = anim.interpolate({
-    inputRange: routes.map((_, i) => i),
-    outputRange: routes.map((_, i) => TAB_HPAD + i * slot + TAB_PILL_INSET),
-    extrapolate: 'clamp',
-  });
-
-  return (
-    <View style={{ backgroundColor: colors.background, paddingTop: 8, paddingBottom: insets.bottom || 10, paddingHorizontal: 14 }}>
-      {/* Floating rounded capsule */}
-      <View
-        onLayout={(e) => setBarW(e.nativeEvent.layout.width)}
-        style={{
-          flexDirection: 'row', alignItems: 'center',
-          backgroundColor: '#FFFFFF', borderRadius: 30,
-          paddingHorizontal: TAB_HPAD, height: 62,
-          borderWidth: 1, borderColor: 'rgba(30, 30, 30, 0.06)',
-          shadowColor: '#1E1E1E', shadowOpacity: 0.12, shadowRadius: 16,
-          shadowOffset: { width: 0, height: 8 }, elevation: 12,
-        }}
-      >
-        {/* Sliding green pill behind the active tab */}
-        {slot > 0 ? (
-          <Animated.View
-            pointerEvents="none"
-            style={{
-              position: 'absolute', top: 8, left: 0,
-              width: slot - TAB_PILL_INSET * 2, height: 46, borderRadius: 18,
-              backgroundColor: TAB_GREEN_SOFT,
-              borderWidth: 1, borderColor: 'rgba(9, 173, 42, 0.18)',
-              transform: [{ translateX }],
-            }}
-          />
-        ) : null}
-
-        {routes.map((route, index) => {
-          const focused = index === activeIndex;
-          const Icon = TAB_ICONS[route.name] || HomeIcon;
-          const label = TAB_LABELS[route.name] || route.name;
-          const onPress = () => {
-            const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
-            if (!focused && !event.defaultPrevented) navigation.navigate(route.name);
-          };
-          const onLongPress = () => navigation.emit({ type: 'tabLongPress', target: route.key });
-          return (
-            <Pressable
-              key={route.key}
-              accessibilityRole="button"
-              accessibilityLabel={label}
-              accessibilityState={focused ? { selected: true } : {}}
-              onPress={onPress}
-              onLongPress={onLongPress}
-              style={{ width: slot, height: 46, alignItems: 'center', justifyContent: 'center' }}
-            >
-              <Icon size={21} color={focused ? TAB_GREEN_DARK : TAB_INACTIVE} strokeWidth={2} />
-              <Text
-                numberOfLines={1}
-                allowFontScaling={false}
-                style={{ fontSize: rf(10.5), marginTop: 3, color: focused ? TAB_GREEN_DARK : TAB_INACTIVE, fontWeight: focused ? '800' : '600' }}
-              >
-                {label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
 
 // `onLogout` is passed in from RootNavigator so the Profile tab can call the
 // SAME callback that clears RootNavigator's local session state — without
@@ -311,17 +206,27 @@ export default function CustomerNavigator({ session, onLogout }) {
       <Stack.Screen name="SellAddress" component={SellAddressScreen} options={{ title: 'Select Address' }} />
       <Stack.Screen name="SellComplete" component={SellCompleteScreen} options={{ title: 'Complete Order' }} />
       <Stack.Screen name="SellOrderDetails" component={SellOrderDetailsScreen} options={{ title: 'Sell Device Details' }} />
-      <Stack.Screen name="SellSuccess" component={SellSuccessScreen} options={{ headerShown: false }} />
       <Stack.Screen name="BuyOrderSuccess" component={BuyOrderSuccessScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Search" component={SearchScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Scan" component={ScanScreen} options={{ headerShown: false }} />
       <Stack.Screen name="SellQuotation" component={SellQuotationScreen} options={{ title: 'View Quotation Report' }} />
       <Stack.Screen name="SellSelectShop" component={SellSelectShopScreen} options={{ title: 'Select Sell Shop' }} />
+      {/* Quote → pickup → tracking (Sell → My Listings → Listing Details → …) */}
+      <Stack.Screen name="SellBuyerEnquiries" component={SellBuyerEnquiriesScreen} options={{ title: 'Buyer Enquiries', subtitle: 'Enquiries for your listings' }} />
+      <Stack.Screen name="SellQuoteRequests" component={SellQuoteRequestsScreen} options={{ title: 'Quotation Requests', subtitle: 'Your devices waiting on offers' }} />
+      <Stack.Screen name="SellQuotesReceived" component={SellQuotesReceivedScreen} options={{ title: 'Quotations Received' }} />
+      <Stack.Screen name="SellQuoteDetails" component={SellQuoteDetailsScreen} options={{ title: 'Quote Details' }} />
+      <Stack.Screen name="SellSchedulePickup" component={SellSchedulePickupScreen} options={{ title: 'Schedule Pickup' }} />
+      <Stack.Screen name="SellOrderTracking" component={SellOrderTrackingScreen} options={{ title: 'Sell Order Details' }} />
+      <Stack.Screen name="SellFinalOffer" component={SellFinalOfferScreen} options={{ title: 'Final Price Request' }} />
 
       {/* Buy flow */}
       <Stack.Screen name="BuyCategory" component={BuyCategoryScreen} options={{ title: 'Smart Phones' }} />
       <Stack.Screen name="BuyListing" component={BuyListingScreen} options={{ title: 'Listings' }} />
       <Stack.Screen name="BuyProductDetails" component={BuyProductDetailsScreen} options={{ title: 'Product Details' }} />
+      <Stack.Screen name="BuyPlaceOrder" component={BuyPlaceOrderScreen} options={{ title: 'Place Order' }} />
+      <Stack.Screen name="BuyOrderDetails" component={BuyOrderDetailsScreen} options={{ title: 'Order Details' }} />
+      <Stack.Screen name="BuyFixedOrder" component={BuyFixedOrderScreen} options={{ title: 'Order Details' }} />
 
       {/* Shop browse */}
       <Stack.Screen name="NearbyShops" component={NearbyShopsScreen} options={{ title: 'Nearby Shops' }} />
