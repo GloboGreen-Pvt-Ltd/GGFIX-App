@@ -51,7 +51,7 @@ export default function SellSelectShopScreen({ navigation, route }) {
       <ScrollView>
         {items.length === 0 ? <Empty text="No quotations to choose from yet" /> : items.map((q, i) => (
           <TouchableOpacity key={q.id} style={styles.row} onPress={() => setSelectedId(q.id)}>
-            <Ionicons name={selectedId === q.id ? 'radio-button-on' : 'radio-button-off'} size={22} color={selectedId === q.id ? '#004C40' : colors.textSecondary} />
+            <Ionicons name={selectedId === q.id ? 'radio-button-on' : 'radio-button-off'} size={22} color={selectedId === q.id ? '#035C6C' : colors.textSecondary} />
             <View style={{ flex: 1, marginLeft: 10 }}>
               <Text style={{ fontWeight: '700', color: colors.text, fontSize: rf(14) }}>{i + 1}. {q.shopName} - {q.shopCity}</Text>
               <Text style={{ color: colors.textSecondary, fontSize: rf(12), marginTop: 2 }}>Quotation Price - ₹{Number(q.quotationPrice).toLocaleString()}</Text>

@@ -101,13 +101,13 @@ export default function CustomerChatInboxScreen({ navigation }) {
         subtitle={`${threads.length} shops${totalUnread > 0 ? ` · ${totalUnread} unread` : ''} · Encrypted`}
         onBack={() => navigation.goBack()}
       >
-        <View style={{ marginTop: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F3F3', borderRadius: 16, borderWidth: 1, borderColor: '#E6E6E6', paddingHorizontal: 12, height: 44 }}>
+        <View style={{ marginTop: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F4F6', borderRadius: 16, borderWidth: 1, borderColor: '#E8EAEE', paddingHorizontal: 12, height: 44 }}>
           <Search size={16} color={HEADER.action} />
           <TextInput
             value={q}
             onChangeText={setQ}
             placeholder="Search shop or message"
-            placeholderTextColor="#8E8E8E"
+            placeholderTextColor="#8E97A9"
             className="flex-1 text-text ml-2" style={{ fontSize: rf(13), outlineStyle: 'none' }}
             autoCorrect={false}
             autoCapitalize="none"
@@ -119,7 +119,7 @@ export default function CustomerChatInboxScreen({ navigation }) {
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 32 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#09AD2A" colors={['#09AD2A']} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#035C6C" colors={['#035C6C']} />}
       >
         {filtered.length > 0 ? (
           <>
@@ -136,7 +136,7 @@ export default function CustomerChatInboxScreen({ navigation }) {
                   key={t.id}
                   onPress={() => navigation.navigate('ShopChat', { shopId: t.shopId, threadId: t.id })}
                   className="flex-row items-center px-4 py-3 bg-card active:opacity-80"
-                  style={{ borderBottomWidth: idx === filtered.length - 1 ? 0 : 1, borderColor: '#E2E8F0' }}
+                  style={{ borderBottomWidth: idx === filtered.length - 1 ? 0 : 1, borderColor: '#E8EAEE' }}
                 >
                   <View>
                     <Avatar source={t.counterpartAvatarUrl} fallback={initial(t.counterpartName)} size={50} />
@@ -144,7 +144,7 @@ export default function CustomerChatInboxScreen({ navigation }) {
                       <View
                         style={{
                           position: 'absolute', right: -1, bottom: -1, height: 12, width: 12,
-                          borderRadius: 6, backgroundColor: '#004C40', borderWidth: 2, borderColor: '#FFFFFF',
+                          borderRadius: 6, backgroundColor: '#035C6C', borderWidth: 2, borderColor: '#FFFFFF',
                         }}
                       />
                     ) : null}
@@ -213,7 +213,7 @@ export default function CustomerChatInboxScreen({ navigation }) {
               key={s.id}
               onPress={() => openShopEnquiry(s.id)}
               className="flex-row items-center px-4 py-3 bg-card active:opacity-80"
-              style={{ borderBottomWidth: idx === filteredShops.length - 1 ? 0 : 1, borderColor: '#E2E8F0' }}
+              style={{ borderBottomWidth: idx === filteredShops.length - 1 ? 0 : 1, borderColor: '#E8EAEE' }}
             >
               <View
                 className="h-12 w-12 rounded-2xl items-center justify-center"
@@ -226,7 +226,7 @@ export default function CustomerChatInboxScreen({ navigation }) {
                   {s.name || 'Shop'}
                 </Text>
                 <View className="flex-row items-center mt-0.5">
-                  <MapPin size={11} color="#94A3B8" />
+                  <MapPin size={11} color="#8E97A9" />
                   <Text className="text-text-muted ml-1 flex-1" style={{ fontSize: rf(11.5) }} numberOfLines={1}>
                     {s.address || s.city || 'Nearby'}
                     {s.distanceKm != null ? ` · ${s.distanceKm.toFixed(1)} km` : ''}

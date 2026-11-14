@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Linking, Image } from 'react-native';
+import { normalizeDeviceImageUrl } from '../../../utils/images';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../../../theme/colors';
 import { Loader, PrimaryButton, OutlineButton } from '../../../components/ui';
@@ -10,8 +11,8 @@ import { rf } from '../../../utils/responsive';
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  hero: { height: 200, backgroundColor: '#E5E7EB' },
-  openTag: { position: 'absolute', left: 10, top: 10, backgroundColor: '#004C40', color: '#fff', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, fontSize: rf(11), fontWeight: '700' },
+  hero: { height: 200, backgroundColor: '#E8EAEE' },
+  openTag: { position: 'absolute', left: 10, top: 10, backgroundColor: '#035C6C', color: '#fff', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, fontSize: rf(11), fontWeight: '700' },
   body: { padding: 16 },
   name: { fontSize: rf(20), fontWeight: '800', color: colors.text },
   addr: { fontSize: rf(13), color: colors.text, marginTop: 8 },
@@ -57,10 +58,16 @@ export default function ShopDetailsScreen({ route, navigation }) {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.hero}>
+        {/* Shop photo (front, else banner) — the hero was a blank grey box. */}
+        {(shop?.frontImageUrl || shop?.bannerImageUrl) ? (
+          <Image source={{ uri: normalizeDeviceImageUrl(shop.frontImageUrl || shop.bannerImageUrl) }} style={{ width: '100%', height: 200 }} resizeMode="cover" />
+        ) : (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="storefront-outline" size={48} color="#035C6C" /></View>
+        )}
         {openState === true ? (
           <Text style={styles.openTag}>Open Now</Text>
         ) : openState === false ? (
-          <Text style={[styles.openTag, { backgroundColor: '#DC2626' }]}>Closed</Text>
+          <Text style={[styles.openTag, { backgroundColor: '#F32C26' }]}>Closed</Text>
         ) : null}
       </View>
       <View style={styles.body}>
@@ -105,7 +112,7 @@ export default function ShopDetailsScreen({ route, navigation }) {
         <View style={styles.serviceRow}>
           {(shop?.services || ['REPAIR', 'BUY', 'SELL', 'PICKUP']).map((s) => (
             <View key={s} style={styles.serviceTile}>
-              <Ionicons name="build-outline" size={18} color="#004C40" />
+              <Ionicons name="build-outline" size={18} color="#035C6C" />
               <Text style={styles.serviceText}>{s}</Text>
             </View>
           ))}

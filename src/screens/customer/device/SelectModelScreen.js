@@ -7,11 +7,11 @@ import {
   TapGestureHandler,
   State,
 } from 'react-native-gesture-handler';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Smartphone, Check, Pencil, X, Search, ArrowLeft, ChevronRight, Plus } from 'lucide-react-native';
-import { EmptyState, Loader, ScreenHeader } from '../../../components/rnr';
-import { HeaderIconButton } from '../../../components/PageHeader';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { Smartphone, Check, Pencil, X, Search, Plus, Laptop, Tablet, Watch, Headphones } from 'lucide-react-native';
+import { EmptyState, Loader } from '../../../components/rnr';
 import DeviceImage from '../../../components/DeviceImage';
+import { DP, DP_COLUMN, DevicePickerHeader, DPSection, PickedCard, PickerImage, DPGridTile, gridTileW, DPNextBar, goToPicker } from './DevicePickerChrome';
 import { getModelsByBrand, getSeriesForCategoryBrand } from '../../../api/masterData';
 import { resolveDeviceImageSource } from '../../../utils/images';
 import { rf } from '../../../utils/responsive';
@@ -20,23 +20,101 @@ import OtherNameDialog from './OtherNameDialog';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
-const LINE = '#E6E6E6';
-const MINT = '#EAF8EC';
-const YELLOW_SOFT = '#FEF6DA';
-const GREEN_LINE = 'rgba(9,173,42,0.45)';
-const cardShadow = { shadowColor: BRAND.ink, shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1 };
+const LINE = '#E8EAEE';
+const YELLOW_SOFT = '#FFF4D6';
 
-// Canonical "Select Product" picker used by all flows. Series chips at the top
-// FILTER the full model grid below (Cashify-style). Search is a header icon that
-// opens a full-screen results list (no persistent search box). Routes to
-// SelectVariant (sell/profile/repair).
+// Canonical model picker used by all flows, styled as the Partner "Device
+// Details" model step: picked Category / Brand cards (Change), a "Search model"
+// box, a SERIES filter grid ("All" first) that filters the model grid below,
+// and a pinned Next. Tap a tile to pick (→ SelectVariant); tap its image to
+// open the zoomable preview. Search spans every model of the brand.
 const HORIZONTAL_PAD = 16;
-const GRID_GAP = 12;
-function gridMetrics(screenWidth) {
-  const numColumns = screenWidth >= 600 ? 4 : 3;
-  const cardWidth = Math.floor((screenWidth - HORIZONTAL_PAD * 2 - GRID_GAP * (numColumns - 1)) / numColumns);
-  return { numColumns, cardWidth };
+const GRID_GAP = 8;
+
+// Category card fallback icon when the category has no image.
+function categoryIcon(code, name) {
+  const s = `${code || ''} ${name || ''}`.toLowerCase();
+  if (/laptop|notebook|macbook/.test(s)) return Laptop;
+  if (/tab|ipad/.test(s)) return Tablet;
+  if (/watch/.test(s)) return Watch;
+  if (/audio|head|ear|buds|speaker/.test(s)) return Headphones;
+  return Smartphone;
+}
+
+// SERIES filter tile (Partner OptionTile): selected = mint fill + teal border.
+function SeriesTile({ width, label, selected, onPress }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: !!selected }}
+      className="active:opacity-80"
+      style={{
+        width, minHeight: 46, paddingHorizontal: 6, paddingVertical: 6, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+        backgroundColor: selected ? DP.mint : '#FFFFFF', borderWidth: selected ? 1.5 : 1, borderColor: selected ? DP.teal : DP.line,
+      }}
+    >
+      <Text
+        style={{ fontSize: 12.5, lineHeight: 16, fontWeight: selected ? '800' : '600', color: selected ? DP.teal : DP.ink, textAlign: 'center' }}
+        numberOfLines={2}
+        adjustsFontSizeToFit
+        minimumFontScale={0.8}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+// Model tile (Partner GridTile): image (tap → preview) over a 2-line name.
+const modelSrc = (m) => resolveDeviceImageSource({ url: m.imageUrl, base64: m.imageBase64 });
+const MODEL_IMG_H = 70;
+function ModelTile({ m, width, selected, current, onPress, onImagePress }) {
+  const hasImg = !!(m.imageUrl || m.imageBase64);
+  const imgW = Math.max(40, Math.min(width - 12, 88));
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={m.name}
+      accessibilityState={{ selected: !!selected }}
+      className="active:opacity-80"
+      style={{
+        width, minHeight: 132, paddingHorizontal: 4, paddingVertical: 10, borderRadius: 14, alignItems: 'center', justifyContent: 'center',
+        backgroundColor: selected ? DP.mint : '#FFFFFF', borderWidth: selected ? 1.5 : 1, borderColor: selected ? DP.teal : DP.line,
+      }}
+    >
+      {selected ? (
+        <View style={{ position: 'absolute', top: 6, right: 6, height: 18, width: 18, borderRadius: 9, backgroundColor: DP.teal, alignItems: 'center', justifyContent: 'center', zIndex: 1 }}>
+          <Check size={11} color="#FFFFFF" strokeWidth={3} />
+        </View>
+      ) : null}
+      {hasImg ? (
+        <Pressable onPress={onImagePress} hitSlop={4} accessibilityRole="imagebutton" accessibilityLabel={`View ${m.name} image`}>
+          <PickerImage uri={modelSrc(m)} width={imgW} height={MODEL_IMG_H} fallback={<Smartphone size={40} color={DP.ink} strokeWidth={1.5} />} />
+        </Pressable>
+      ) : (
+        <View style={{ height: MODEL_IMG_H, alignItems: 'center', justifyContent: 'center' }}>
+          <Smartphone size={40} color={DP.ink} strokeWidth={1.5} />
+        </View>
+      )}
+      <Text
+        style={{ marginTop: 8, fontSize: 13, lineHeight: 16, fontWeight: selected ? '700' : '500', color: DP.ink, textAlign: 'center', width: '100%' }}
+        numberOfLines={2}
+        adjustsFontSizeToFit
+        minimumFontScale={0.85}
+      >
+        {m.name}
+      </Text>
+      {current ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: DP.teal }}>
+          <Check size={10} color={DP.teal} />
+          <Text style={{ marginLeft: 4, fontSize: 10, fontWeight: '800', color: DP.teal }}>Current</Text>
+        </View>
+      ) : null}
+    </Pressable>
+  );
 }
 
 // Full-screen gallery image viewer: two-finger pinch-to-zoom, one-finger pan while
@@ -128,7 +206,7 @@ function ZoomableImage({ url, base64, size, onSwipe }) {
         >
           <Animated.View collapsable={false} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
             <TapGestureHandler numberOfTaps={2} onHandlerStateChange={onDoubleTap}>
-              <Animated.View style={{ width: size, height: size, transform: [{ translateX: panX }, { translateY: panY }, { scale }] }}>
+              <Animated.View style={{ width: size, height: size, borderRadius: 16, overflow: 'hidden', backgroundColor: '#FFFFFF', transform: [{ translateX: panX }, { translateY: panY }, { scale }] }}>
                 <DeviceImage url={url} base64={base64} style={{ width: size, height: size }} contentFit="contain" />
               </Animated.View>
             </TapGestureHandler>
@@ -144,16 +222,16 @@ export default function SelectModelScreen({ navigation, route }) {
   const {
     categoryId, categoryCode, categoryName, deviceTypeId, deviceTypeName,
     brandId, brandName, seriesName: routeSeriesName, editSellOrderId, editHints,
+    categoryImage, brandImage,
   } = route?.params || {};
   const isEditing = !!editSellOrderId;
   const currentModelId = editHints?.modelId || null;
 
-  const insets = useSafeAreaInsets();
   const [models, setModels] = useState([]);
   const [series, setSeries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [pickedId, setPickedId] = useState(null); // last model picked here (Next re-opens it after Back)
   const [previewIndex, setPreviewIndex] = useState(null); // index into imageModels for the full-screen viewer
   const [selSeriesId, setSelSeriesId] = useState(
     route?.params?.seriesId || editHints?.seriesId || null,
@@ -169,10 +247,12 @@ export default function SelectModelScreen({ navigation, route }) {
   const [otherOpen, setOtherOpen] = useState(customBrand && allowOther);
   const [otherName, setOtherName] = useState('');
 
-  const { width: screenWidth } = useWindowDimensions();
-  const { cardWidth } = gridMetrics(screenWidth);
-  const imgBox = cardWidth - 16;   // image box / tap area (nearly the full card width)
-  const imgInner = imgBox;         // image fills the box → big images like the target screenshot
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const isTablet = screenWidth >= 600;
+  const colW = Math.min(screenWidth - HORIZONTAL_PAD * 2, 720); // DP_COLUMN content width
+  const seriesW = gridTileW(colW, isTablet ? 6 : 4, 0, GRID_GAP);
+  const modelW = gridTileW(colW, isTablet ? 5 : 3, 0, GRID_GAP);
+  const previewSize = Math.max(200, Math.min(screenWidth - 40, screenHeight - 300, 720));
 
   useEffect(() => {
     let cancelled = false;
@@ -205,8 +285,6 @@ export default function SelectModelScreen({ navigation, route }) {
     return (series || []).filter((s) => ids.has(s.id));
   }, [series, models]);
 
-  const selectedSeries = seriesWithModels.find((s) => s.id === selSeriesId) || null;
-
   // Grid (chips-filtered) vs search (spans all models).
   const gridModels = useMemo(() => {
     let list = selSeriesId ? models.filter((m) => m.seriesId === selSeriesId) : models;
@@ -223,11 +301,20 @@ export default function SelectModelScreen({ navigation, route }) {
     return models.filter((m) => (m.name || '').toLowerCase().includes(needle));
   }, [models, q]);
 
+  // What the grid shows: search results (all models) while typing, else the
+  // series-filtered grid.
+  const searching = !!q.trim();
+  const listModels = searching ? searchResults : gridModels;
+
+  // Model already chosen here (or the order's current model when editing) —
+  // highlighted in the grid and enables Next.
+  const chosen = models.find((m) => m.id === (pickedId || currentModelId)) || null;
+
   // Only models with an image can be opened in the gallery; prev/next moves through
   // this list so the viewer always shows a real image.
   const imageModels = useMemo(
-    () => gridModels.filter((m) => m.imageUrl || m.imageBase64),
-    [gridModels],
+    () => listModels.filter((m) => m.imageUrl || m.imageBase64),
+    [listModels],
   );
   const preview = previewIndex != null && previewIndex < imageModels.length ? imageModels[previewIndex] : null;
   const openPreview = (m) => {
@@ -244,10 +331,12 @@ export default function SelectModelScreen({ navigation, route }) {
   };
 
   const onPick = (m) => {
+    setPickedId(m.id);
     const pickedSeries = (series || []).find((s) => s.id === m.seriesId);
     const baseParams = {
       flow, categoryId, categoryCode, categoryName, deviceTypeId, deviceTypeName,
       brandId, brandName,
+      categoryImage, brandImage,
       seriesId: m.seriesId || selSeriesId || undefined,
       seriesName: pickedSeries?.name || routeSeriesName || undefined,
       modelId: m.id, modelName: m.name,
@@ -279,7 +368,6 @@ export default function SelectModelScreen({ navigation, route }) {
     if (!name) return;
     setOtherOpen(false);
     setOtherName('');
-    setSearchOpen(false);
     setQ('');
     navigation.navigate('SelectVariant', {
       ...(route?.params || {}),
@@ -303,138 +391,21 @@ export default function SelectModelScreen({ navigation, route }) {
       onSubmit={onPickOther}
     />
   );
-  const otherCard = allowOther ? (
-    <Pressable
-      onPress={() => setOtherOpen(true)}
-      className="active:opacity-80"
-      accessibilityRole="button"
-      accessibilityLabel="Other, type the model"
-      style={{
-        flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, marginBottom: 14,
-        borderRadius: 14, backgroundColor: '#FFFFFF', borderWidth: 1, borderStyle: 'dashed', borderColor: GREEN_LINE,
-      }}
-    >
-      <View style={{ height: 36, width: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: MINT, marginRight: 10 }}>
-        <Plus size={18} color={GREEN_TEXT} />
-      </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={{ fontSize: rf(13), fontWeight: '800', color: GREEN_TEXT }} numberOfLines={1}>Other — type the model</Text>
-        <Text style={{ fontSize: rf(11), color: BRAND.muted, marginTop: 1 }} numberOfLines={1}>For a device that isn’t in the list</Text>
-      </View>
-      <ChevronRight size={15} color={GREEN_TEXT} />
-    </Pressable>
-  ) : null;
+  // Change → back to an earlier picker; reuse its params when it's in the stack
+  // (popTo replaces params), else open it with what it needs.
+  const changeTo = (name, fallback) => {
+    const routes = navigation.getState?.()?.routes || [];
+    const existing = [...routes].reverse().find((r) => r.name === name);
+    goToPicker(navigation, name, existing?.params || fallback);
+  };
+  const catTitle = categoryName || deviceTypeName;
 
-  // ── Full-screen search mode ───────────────────────────────────────────────
-  if (searchOpen) {
-    return (
-      <View style={{ flex: 1, backgroundColor: BRAND.bg }}>
-        <View
-          style={{
-            flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingBottom: 8, paddingTop: insets.top + 8,
-            backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: LINE,
-          }}
-        >
-          <Pressable
-            onPress={() => { setSearchOpen(false); setQ(''); }}
-            className="active:opacity-70"
-            style={{ height: 40, width: 40, alignItems: 'center', justifyContent: 'center' }}
-            hitSlop={8}
-            accessibilityLabel="Close search"
-          >
-            <ArrowLeft size={22} color={BRAND.ink} />
-          </Pressable>
-          <View
-            style={{
-              flex: 1, flexDirection: 'row', alignItems: 'center', height: 42, paddingHorizontal: 12,
-              borderRadius: 12, backgroundColor: BRAND.line, borderWidth: 1, borderColor: LINE,
-            }}
-          >
-            <Search size={17} color={BRAND.green} />
-            <TextInput
-              autoFocus
-              value={q}
-              onChangeText={setQ}
-              placeholder={`Search ${brandName || 'model'}`}
-              placeholderTextColor={BRAND.muted}
-              // Web only: drop the browser focus ring inside the rounded field.
-              style={[{ flex: 1, marginLeft: 8, paddingVertical: 0, fontSize: rf(14), color: BRAND.ink }, Platform.OS === 'web' ? { outlineStyle: 'none' } : null]}
-              returnKeyType="search"
-            />
-            {q ? (
-              <Pressable onPress={() => setQ('')} hitSlop={8} accessibilityLabel="Clear search">
-                <X size={17} color={BRAND.muted} />
-              </Pressable>
-            ) : null}
-          </View>
-        </View>
-
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 12, paddingBottom: 24 }}>
-          {searchResults.length === 0 ? (
-            <EmptyState
-              icon={q ? <Smartphone size={28} color={BRAND.green} /> : <Search size={28} color={BRAND.green} />}
-              accent={BRAND.green}
-              accentSoft={MINT}
-              title={q ? 'No products found' : 'Search products'}
-              description={q ? `Nothing matches "${q.trim()}".` : `Type a model name to search ${brandName || 'products'}.`}
-            />
-          ) : null}
-          {searchResults.length === 0 && allowOther && q.trim() ? (
-            <Pressable
-              onPress={() => { setOtherName(q.trim()); setOtherOpen(true); }}
-              className="active:opacity-80"
-              accessibilityRole="button"
-              style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'center', marginTop: 4, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: BRAND.green, backgroundColor: '#FFFFFF' }}
-            >
-              <Plus size={15} color={GREEN_TEXT} />
-              <Text style={{ marginLeft: 6, fontSize: rf(12.5), fontWeight: '700', color: GREEN_TEXT }} numberOfLines={1}>Use "{q.trim()}" as Other model</Text>
-            </Pressable>
-          ) : null}
-          {searchResults.length === 0 ? null : (
-            <View style={{ backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1, borderColor: LINE, overflow: 'hidden', ...cardShadow }}>
-              {searchResults.map((m, i) => {
-                const hasImg = !!(m.imageUrl || m.imageBase64);
-                return (
-                  <Pressable
-                    key={m.id}
-                    onPress={() => onPick(m)}
-                    className="active:opacity-80"
-                    style={{
-                      flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8,
-                      borderTopWidth: i === 0 ? 0 : 1, borderTopColor: BRAND.line,
-                    }}
-                  >
-                    <View style={{ height: 52, width: 52, borderRadius: 10, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', marginRight: 10, backgroundColor: '#FFFFFF' }}>
-                      {hasImg ? (
-                        <DeviceImage url={m.imageUrl} base64={m.imageBase64} style={{ width: 52, height: 52 }} contentFit="contain" />
-                      ) : (
-                        <Smartphone size={24} color={BRAND.green} />
-                      )}
-                    </View>
-                    <Text style={{ flex: 1, fontSize: rf(13.5), fontWeight: '600', color: BRAND.ink }} numberOfLines={1}>{m.name}</Text>
-                    <ChevronRight size={15} color={BRAND.muted} />
-                  </Pressable>
-                );
-              })}
-            </View>
-          )}
-        </ScrollView>
-        {otherDialog}
-      </View>
-    );
-  }
-
-  // ── Normal mode: series chips + model grid ────────────────────────────────
   return (
-    <View style={{ flex: 1, backgroundColor: BRAND.bg }}>
-      <ScreenHeader
-        title="Select Product"
-        onBack={navigation.canGoBack() ? () => navigation.goBack() : undefined}
-        right={<HeaderIconButton icon={Search} label="Search models" onPress={() => setSearchOpen(true)} />}
-      />
+    <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+      <DevicePickerHeader navigation={navigation} onBack={() => { if (navigation.canGoBack()) navigation.goBack(); }} />
       {isEditing && editHints?.modelName ? (
         <View style={{ backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: LINE, paddingHorizontal: 16, paddingVertical: 10 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: YELLOW_SOFT, borderWidth: 1, borderColor: BRAND.yellowLine }}>
+          <View style={[{ flexDirection: 'row', alignItems: 'center', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: YELLOW_SOFT, borderWidth: 1, borderColor: BRAND.yellowLine }, DP_COLUMN]}>
             <Pencil size={13} color={BRAND.yellow} />
             <View style={{ flex: 1, marginLeft: 8 }}>
               <Text style={{ fontSize: rf(10), fontWeight: '800', color: BRAND.ink, letterSpacing: 0.8 }}>
@@ -448,168 +419,185 @@ export default function SelectModelScreen({ navigation, route }) {
         </View>
       ) : null}
 
-      {loading ? (
-        <Loader label="Loading products..." />
-      ) : (
-        <ScrollView
-          contentContainerStyle={{ paddingHorizontal: HORIZONTAL_PAD, paddingTop: 14, paddingBottom: 28 }}
-          showsVerticalScrollIndicator={false}
-        >
-          {otherCard}
-
-          {/* ── Series chips (compact) ────────────────────────────────── */}
-          {seriesWithModels.length > 0 ? (
-            <View style={{ marginBottom: 18 }}>
-              <Text style={{ fontSize: rf(15), fontWeight: '800', color: BRAND.ink, marginBottom: 10 }}>Select Series</Text>
-              {selectedSeries ? (
-                <View style={{ flexDirection: 'row' }}>
-                  <Pressable
-                    onPress={() => setSelSeriesId(null)}
-                    className="active:opacity-80"
-                    accessibilityLabel={`Clear ${selectedSeries.name} filter`}
-                    style={{ flexDirection: 'row', alignItems: 'center', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: BRAND.green, borderWidth: 1, borderColor: BRAND.green }}
-                  >
-                    <Text style={{ fontSize: rf(12.5), fontWeight: '700', color: '#FFFFFF', marginRight: 8 }} numberOfLines={1}>
-                      {selectedSeries.name}
-                    </Text>
-                    <X size={15} color="#FFFFFF" />
-                  </Pressable>
-                </View>
-              ) : (
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP }}>
-                  {seriesWithModels.map((s) => (
-                    <Pressable
-                      key={s.id}
-                      onPress={() => setSelSeriesId(s.id)}
-                      className="active:opacity-80"
-                      style={{
-                        width: cardWidth, minHeight: 40, paddingHorizontal: 8, paddingVertical: 8, borderRadius: 12,
-                        alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: LINE,
-                      }}
-                    >
-                      <Text style={{ fontSize: rf(12), fontWeight: '600', color: BRAND.ink, textAlign: 'center' }} numberOfLines={2}>
-                        {s.name}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-            </View>
+      <ScrollView
+        style={{ flex: 1 }}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingHorizontal: HORIZONTAL_PAD, paddingBottom: 24 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={DP_COLUMN}>
+          {catTitle ? (
+            <>
+              <DPSection title="Category" />
+              <PickedCard
+                image={resolveDeviceImageSource({ url: categoryImage })}
+                icon={categoryIcon(categoryCode, catTitle)}
+                title={catTitle}
+                onChange={() => changeTo('SelectCategory', { flow, editSellOrderId, editHints })}
+              />
+            </>
+          ) : null}
+          {brandName ? (
+            <>
+              <DPSection title="Brand" />
+              <PickedCard
+                image={resolveDeviceImageSource({ url: brandImage })}
+                initial={brandName}
+                title={brandName}
+                subtitle={customBrand ? 'Not in list' : null}
+                onChange={() => changeTo('SelectBrand', {
+                  flow, categoryId, categoryCode, categoryName, deviceTypeId, deviceTypeName, categoryImage,
+                  editSellOrderId, editHints,
+                })}
+              />
+            </>
           ) : null}
 
-          {/* ── Models grid ───────────────────────────────────────────── */}
-          {gridModels.length === 0 && customBrand ? null : gridModels.length === 0 ? (
-            <EmptyState
-              icon={<Smartphone size={28} color={BRAND.green} />}
-              accent={BRAND.green}
-              accentSoft={MINT}
-              title="No products found"
-              description="No models published for this selection yet."
-            />
+          <DPSection title="Model" />
+          {loading ? (
+            <Loader inline label="Loading products..." className="justify-center py-6" />
           ) : (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP }}>
-              {gridModels.map((m) => {
-                const isCurrent = isEditing && m.id === currentModelId;
-                const hasImg = !!(m.imageUrl || m.imageBase64);
-                return (
-                  <Pressable
-                    key={m.id}
-                    onPress={() => onPick(m)}
-                    className="active:opacity-80"
-                    style={{
-                      width: cardWidth,
-                      padding: 8,
-                      alignItems: 'center',
-                      borderRadius: 16,
-                      backgroundColor: isCurrent ? MINT : '#FFFFFF',
-                      borderWidth: isCurrent ? 1.5 : 1,
-                      borderColor: isCurrent ? BRAND.green : LINE,
-                      ...cardShadow,
-                    }}
-                  >
-                    <Pressable
-                      onPress={() => openPreview(m)}
-                      disabled={!hasImg}
-                      style={{ height: imgBox, width: imgBox, marginBottom: 8, borderRadius: 12, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}
-                    >
-                      {hasImg ? (
-                        <DeviceImage
-                          url={m.imageUrl}
-                          base64={m.imageBase64}
-                          style={{ width: imgInner, height: imgInner }}
-                          contentFit="contain"
-                        />
-                      ) : (
-                        <Smartphone size={Math.round(imgBox * 0.4)} color={BRAND.green} />
-                      )}
+            <>
+              {/* Search spans every model of the brand; series filter hides while typing. */}
+              {models.length > 0 ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', height: 48, paddingHorizontal: 14, marginBottom: 12, borderRadius: 14, borderWidth: 1, borderColor: DP.line, backgroundColor: '#FFFFFF' }}>
+                  <Search size={20} color={DP.muted} />
+                  <TextInput
+                    value={q}
+                    onChangeText={setQ}
+                    placeholder="Search model"
+                    placeholderTextColor="#9CA3AF"
+                    cursorColor={DP.teal}
+                    returnKeyType="search"
+                    accessibilityLabel="Search model"
+                    // Web only: drop the browser focus ring inside the rounded field.
+                    style={[{ flex: 1, marginLeft: 10, paddingVertical: 0, fontSize: 15, color: DP.ink }, Platform.OS === 'web' ? { outlineStyle: 'none' } : null]}
+                  />
+                  {q ? (
+                    <Pressable onPress={() => setQ('')} hitSlop={12} accessibilityRole="button" accessibilityLabel="Clear search">
+                      <X size={18} color={DP.muted} />
                     </Pressable>
-                    <Text
-                      numberOfLines={2}
-                      style={{ fontSize: rf(11), fontWeight: '800', color: BRAND.ink, textAlign: 'center', width: '100%' }}
-                    >
-                      {m.name}
-                    </Text>
-                    {isCurrent ? (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: BRAND.greenLine }}>
-                        <Check size={10} color={GREEN_TEXT} />
-                        <Text style={{ marginLeft: 4, fontSize: rf(9.5), fontWeight: '800', color: GREEN_TEXT }}>Current</Text>
-                      </View>
-                    ) : null}
-                  </Pressable>
-                );
-              })}
-            </View>
-          )}
-        </ScrollView>
-      )}
+                  ) : null}
+                </View>
+              ) : null}
 
-      {/* Full-screen gallery image viewer (pinch / pan / double-tap + swipe) */}
-      <Modal visible={!!preview} transparent animationType="fade" onRequestClose={closePreview}>
-        {/* RN Modal renders in its own window; gesture-handler needs a local root here (Android). */}
-        <GestureHandlerRootView style={{ flex: 1 }}>
-          <View style={{ flex: 1, backgroundColor: 'rgba(30,30,30,0.95)' }}>
-            {/* Header: gesture hint + close button */}
-            <View style={{ paddingTop: insets.top + 8, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={{ fontSize: rf(11), fontWeight: '600', color: 'rgba(255,255,255,0.6)' }}>🤏 Pinch · double-tap · swipe</Text>
-              <Pressable
-                onPress={closePreview}
-                hitSlop={12}
-                accessibilityLabel="Close preview"
-                style={{ height: 42, width: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center' }}
-              >
-                <X size={22} color="#FFFFFF" />
-              </Pressable>
-            </View>
-            {/* Zoomable image with swipe navigation */}
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-              {preview && (preview.imageUrl || preview.imageBase64) ? (
-                <ZoomableImage
-                  key={preview.id}
-                  url={preview.imageUrl}
-                  base64={preview.imageBase64}
-                  size={screenWidth - 40}
-                  onSwipe={swipePreview}
+              {/* ── SERIES filter: "All" + one tile per series with models ── */}
+              {seriesWithModels.length > 0 && !searching ? (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP, marginBottom: 14 }}>
+                  <SeriesTile width={seriesW} label="All" selected={!selSeriesId} onPress={() => setSelSeriesId(null)} />
+                  {seriesWithModels.map((s) => (
+                    <SeriesTile key={s.id} width={seriesW} label={s.name} selected={selSeriesId === s.id} onPress={() => setSelSeriesId(s.id)} />
+                  ))}
+                </View>
+              ) : null}
+
+              {listModels.length === 0 && !searching && !customBrand ? (
+                <EmptyState
+                  icon={<Smartphone size={28} color={BRAND.green} />}
+                  accent={BRAND.green}
+                  accentSoft={DP.mint}
+                  title="No products found"
+                  description="No models published for this selection yet."
                 />
-              ) : (
-                <Smartphone size={140} color="#FFFFFF" />
-              )}
-            </View>
+              ) : null}
+              {listModels.length === 0 && searching ? (
+                <Text style={{ fontSize: 13, color: DP.muted, marginBottom: 10 }}>
+                  No model matches “{q.trim()}”{allowOther ? ' — tap Other to type it.' : '.'}
+                </Text>
+              ) : null}
 
-            {/* Footer: name + select */}
-            <View style={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 16 }}>
-              <Text style={{ fontSize: rf(15), fontWeight: '800', color: '#FFFFFF', textAlign: 'center', marginBottom: 12 }} numberOfLines={2}>
-                {preview?.name}
-              </Text>
-              <Pressable
-                onPress={() => { const m = preview; closePreview(); if (m) onPick(m); }}
-                className="active:opacity-80"
-                style={{ borderRadius: 16, paddingVertical: 15, alignItems: 'center', backgroundColor: BRAND.green }}
-              >
-                <Text style={{ fontSize: rf(15), fontWeight: '800', color: '#FFFFFF' }}>Select this product</Text>
-              </Pressable>
-            </View>
-          </View>
-        </GestureHandlerRootView>
+              {/* ── Model grid (3 per row; 5 on tablets) + Other ── */}
+              {listModels.length > 0 || allowOther ? (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP }}>
+                  {listModels.map((m) => (
+                    <ModelTile
+                      key={m.id}
+                      m={m}
+                      width={modelW}
+                      selected={chosen?.id === m.id}
+                      current={isEditing && m.id === currentModelId}
+                      onPress={() => onPick(m)}
+                      onImagePress={() => openPreview(m)}
+                    />
+                  ))}
+                  {allowOther ? (
+                    <DPGridTile
+                      width={modelW}
+                      icon={Plus}
+                      imageSize={60}
+                      minHeight={132}
+                      label="Other"
+                      accessibilityLabel="Other, type the model"
+                      onPress={() => { setOtherName(q.trim()); setOtherOpen(true); }}
+                    />
+                  ) : null}
+                </View>
+              ) : null}
+            </>
+          )}
+        </View>
+      </ScrollView>
+
+
+      {/* Full-screen model preview (Partner image viewer): pinch / pan / double-tap + swipe */}
+      <Modal visible={!!preview} transparent animationType="fade" onRequestClose={closePreview} statusBarTranslucent navigationBarTranslucent>
+        {/* A Modal is its own window: give it its own safe-area + gesture-handler roots (Android). */}
+        <SafeAreaProvider>
+          <GestureHandlerRootView style={{ flex: 1 }}>
+            <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1, backgroundColor: 'rgba(17,17,17,0.94)' }}>
+              {/* Header: gesture hint + close button */}
+              <View style={{ paddingTop: 8, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={{ flexShrink: 1, marginRight: 12, fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.6)' }} numberOfLines={1}>
+                  {imageModels.length > 1 ? 'Pinch · double-tap · swipe' : 'Pinch · double-tap'}
+                </Text>
+                <Pressable
+                  onPress={closePreview}
+                  hitSlop={12}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close preview"
+                  style={{ height: 44, width: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <X size={22} color="#FFFFFF" />
+                </Pressable>
+              </View>
+              {/* Zoomable image card with swipe navigation */}
+              <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                {preview && (preview.imageUrl || preview.imageBase64) ? (
+                  <ZoomableImage
+                    key={preview.id}
+                    url={preview.imageUrl}
+                    base64={preview.imageBase64}
+                    size={previewSize}
+                    onSwipe={swipePreview}
+                  />
+                ) : (
+                  <Smartphone size={140} color="#FFFFFF" />
+                )}
+              </View>
+
+              {/* Footer: name · i / N · Select this model */}
+              <View style={[{ paddingHorizontal: 16, paddingBottom: 18, alignItems: 'center' }, DP_COLUMN]}>
+                <Text style={{ fontSize: 13, fontWeight: '800', color: '#FFFFFF', textAlign: 'center' }} numberOfLines={2}>
+                  {preview?.name}
+                </Text>
+                {preview && imageModels.length > 1 ? (
+                  <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 4 }}>
+                    {previewIndex + 1} / {imageModels.length}
+                  </Text>
+                ) : null}
+                <Pressable
+                  onPress={() => { const m = preview; closePreview(); if (m) onPick(m); }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Select this model"
+                  className="active:opacity-80"
+                  style={{ marginTop: 14, height: 48, alignSelf: 'stretch', borderRadius: 12, backgroundColor: DP.teal, alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#FFFFFF' }}>Select this model</Text>
+                </Pressable>
+              </View>
+            </SafeAreaView>
+          </GestureHandlerRootView>
+        </SafeAreaProvider>
       </Modal>
 
       {otherDialog}

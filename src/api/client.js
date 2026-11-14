@@ -21,7 +21,7 @@ import { File, UploadType } from 'expo-file-system';
 const REQUEST_TIMEOUT_MS = 20000;
 const UPLOAD_TIMEOUT_MS = 60000;
 
-// Behind the TLS edge a base carries a routing prefix (`https://api.ggfix.in/auth`).
+// Behind the TLS edge a base carries a routing prefix (`https://api.neargfix.com/auth`).
 // `new URL(path, base)` would treat a leading-"/" path as root-relative and throw
 // that prefix away, so join the two by CONCATENATION instead. Bases are stored
 // without a trailing slash (see config.js); normalise here so a stray one from a

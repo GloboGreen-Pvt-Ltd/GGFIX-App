@@ -8,16 +8,16 @@ import { Loader, Empty } from '../../../components/ui';
 import { getSellOrder, getSellOrderQuotations } from '../../../api/orders';
 import { rf } from '../../../utils/responsive';
 
-const GREEN = '#004C40';
-const MINT = '#E8F7F2';
-const BORDER = '#DCE7E2';
+const GREEN = '#035C6C';
+const MINT = '#E5F3F5';
+const BORDER = '#C7E6EA';
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   title: { fontSize: rf(15), fontWeight: '800', color: colors.text, marginBottom: 2 },
   sub: { fontSize: rf(12), color: colors.textSecondary, marginBottom: 10 },
   card: { backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: BORDER, padding: 14, marginBottom: 10 },
-  cardChosen: { borderColor: GREEN, borderWidth: 2, backgroundColor: '#F4FBF8' },
+  cardChosen: { borderColor: GREEN, borderWidth: 2, backgroundColor: '#F0F8F9' },
   row: { flexDirection: 'row', alignItems: 'center' },
   shop: { fontSize: rf(15), fontWeight: '800', color: colors.text, flex: 1 },
   price: { fontSize: rf(17), fontWeight: '900', color: GREEN },
@@ -71,7 +71,7 @@ export default function SellQuotationScreen({ navigation, route }) {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
         <Text style={styles.title}>Total Quotation : {items.length}</Text>
-        <Text style={styles.sub}>{order?.sellNumber ? `Sell order #${String(order.sellNumber).replace(/^#+/, '')}` : 'Offers from verified shops'}</Text>
+        <Text style={styles.sub}>Offers from verified shops</Text>
 
         {chosen ? (
           <View style={styles.banner}>

@@ -14,12 +14,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { rf, rlh } from '../utils/responsive';
 
 // Shared design tokens for the auth screens (Login / CreateAccount / forgot-password).
-export const GREEN = '#004C40';
-export const MUTED = '#64748B';
-export const INK = '#0F172A';
-export const SCREEN_BG = '#F6F7F9';
+export const GREEN = '#035C6C';
+export const MUTED = '#606E87';
+export const INK = '#1C3053';
+export const SCREEN_BG = '#F3F4F6';
 export const FIELD_BG = '#FFFFFF';
-export const FIELD_BORDER = '#E5E7EB';
+export const FIELD_BORDER = '#E8EAEE';
 
 /** Standard auth layout shell: gradient header, optional back arrow, centered scroll content. */
 export function AuthShell({ onBack, children }) {
@@ -27,9 +27,9 @@ export function AuthShell({ onBack, children }) {
   const isWide = width >= 600;
   return (
     <View style={{ flex: 1, backgroundColor: SCREEN_BG }}>
-      <StatusBar barStyle="dark-content" backgroundColor="#DCFCE7" />
+      <StatusBar barStyle="dark-content" backgroundColor="#E5F3F5" />
       <LinearGradient
-        colors={['#DCFCE7', '#F0FDF4', SCREEN_BG]}
+        colors={['#E5F3F5', '#F0F8F9', SCREEN_BG]}
         locations={[0, 0.45, 1]}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 320 }}
       />
@@ -49,7 +49,7 @@ export function AuthShell({ onBack, children }) {
             alignItems: 'center',
             justifyContent: 'center',
             borderWidth: 1,
-            borderColor: '#DCFCE7',
+            borderColor: '#E5F3F5',
           }}
         >
           <ArrowLeft size={20} color={GREEN} />
@@ -88,8 +88,8 @@ export function ErrorBox({ msg }) {
   return (
     <View
       style={{
-        backgroundColor: '#FEF2F2',
-        borderColor: '#FECACA',
+        backgroundColor: '#FEEBEA',
+        borderColor: '#FEEBEA',
         borderWidth: 1,
         borderRadius: 12,
         paddingHorizontal: 12,
@@ -97,7 +97,7 @@ export function ErrorBox({ msg }) {
         marginTop: 8,
       }}
     >
-      <Text style={{ fontSize: rf(12.5), color: '#B91C1C', lineHeight: rlh(18) }}>{msg}</Text>
+      <Text style={{ fontSize: rf(12.5), color: '#F32C26', lineHeight: rlh(18) }}>{msg}</Text>
     </View>
   );
 }

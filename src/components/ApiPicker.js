@@ -11,7 +11,7 @@ export function ApiPicker({ label, items, loading, error, value, onSelect, place
       {label ? <Text style={styles.label}>{label}</Text> : null}
       <TouchableOpacity style={styles.trigger} onPress={() => setOpen(true)} disabled={loading}>
         {loading ? (
-          <ActivityIndicator size="small" color="#09AD2A" />
+          <ActivityIndicator size="small" color="#035C6C" />
         ) : (
           <Text style={[styles.triggerText, !selected && styles.placeholder]}>
             {selected ? labelExtractor(selected) : placeholder}
@@ -46,13 +46,13 @@ export function ApiPicker({ label, items, loading, error, value, onSelect, place
 
 const styles = StyleSheet.create({
   wrap: { marginBottom: 12 },
-  label: { fontSize: rf(14), marginBottom: 4, color: '#9AA0A6' },
-  trigger: { borderWidth: 1, borderColor: '#3C4043', borderRadius: 8, padding: 12, minHeight: 48, justifyContent: 'center' },
-  triggerText: { fontSize: rf(16), color: '#F8FAFC' },
-  placeholder: { color: '#80868B' },
-  error: { fontSize: rf(12), color: '#DC2626', marginTop: 4 },
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modal: { backgroundColor: '#282A2D', borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: 400 },
-  option: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#3C4043' },
-  optionText: { fontSize: rf(16), color: '#F8FAFC' },
+  label: { fontSize: rf(14), marginBottom: 4, color: '#606E87' },
+  trigger: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#D2D6DD', borderRadius: 8, padding: 12, minHeight: 48, justifyContent: 'center' },
+  triggerText: { fontSize: rf(16), color: '#111111' },
+  placeholder: { color: '#8E97A9' },
+  error: { fontSize: rf(12), color: '#F32C26', marginTop: 4 },
+  overlay: { flex: 1, backgroundColor: 'rgba(17,17,17,0.5)', justifyContent: 'flex-end' },
+  modal: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: 400 },
+  option: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#E8EAEE' },
+  optionText: { fontSize: rf(16), color: '#111111' },
 });

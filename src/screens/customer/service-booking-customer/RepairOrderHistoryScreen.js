@@ -7,9 +7,9 @@ import { ServiceHistoryTimeline, getCurrentPhaseLabel } from '../../common/servi
 import { rf } from '../../../utils/responsive';
 import { BRAND } from '../../../theme/brand';
 
-const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
-const MINT = '#EAF8EC';
-const LINE = '#E6E6E6';
+const GREEN_TEXT = '#035C6C'; // #035C6C shaded for text on white
+const MINT = '#E5F3F5';
+const LINE = '#E8EAEE';
 const cardStyle = { padding: 12, marginBottom: 10, borderRadius: 16, borderWidth: 1, borderColor: LINE, shadowColor: BRAND.ink, shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1 };
 
 const hashed = (n) => (n ? (String(n).startsWith('#') ? n : `#${n}`) : '');
@@ -46,7 +46,7 @@ export default function RepairOrderHistoryScreen({ route }) {
       className="flex-1"
       style={{ backgroundColor: BRAND.bg }}
       contentContainerStyle={{ padding: 12, paddingBottom: 28 }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#09AD2A" colors={['#09AD2A']} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#035C6C" colors={['#035C6C']} />}
     >
       <Card className="rounded-2xl" style={cardStyle}>
         <Text className="uppercase tracking-widest" style={{ fontSize: rf(9.5), color: GREEN_TEXT, fontWeight: '800' }}>Tracking ID</Text>

@@ -5,11 +5,11 @@ import { rf } from '../utils/responsive';
 import { BRAND } from '../theme/brand';
 
 // Compact address picker pieces shared by the Sell and Repair "Select Address"
-// pages (palette: 09AD2A · 1E1E1E · F8F8F8 · F3F3F3).
-const GREEN_TEXT = '#078F23';
-const MINT = '#EAF8EC';
-const LINE = '#E6E6E6';
-const GREEN_LINE = 'rgba(9,173,42,0.45)';
+// pages (palette: 035C6C · 111111 · F3F4F6 · F3F4F6).
+const GREEN_TEXT = '#035C6C';
+const MINT = '#E5F3F5';
+const LINE = '#E8EAEE';
+const GREEN_LINE = 'rgba(3,92,108,0.45)';
 const cardShadow = { shadowColor: BRAND.ink, shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1 };
 
 function iconFor(label) {
@@ -36,7 +36,7 @@ export function AddAddressRow({ onPress, subtitle = 'Save a new address' }) {
       accessibilityRole="button"
       accessibilityLabel="Add new address"
       style={{
-        flexDirection: 'row', alignItems: 'center', backgroundColor: '#F4FBF5',
+        flexDirection: 'row', alignItems: 'center', backgroundColor: '#F0F8F9',
         borderWidth: 1, borderStyle: 'dashed', borderColor: GREEN_LINE, borderRadius: 14,
         paddingVertical: 8, paddingHorizontal: 10, marginBottom: 9,
       }}
@@ -65,7 +65,7 @@ export function AddressOptionCard({ a, active, onPress }) {
       accessibilityLabel={a.label || 'Address'}
       style={{
         flexDirection: 'row', alignItems: 'flex-start',
-        backgroundColor: active ? '#F7FCF8' : '#FFFFFF', borderRadius: 14, paddingVertical: 10, paddingHorizontal: 10, marginBottom: 8,
+        backgroundColor: active ? '#F0F8F9' : '#FFFFFF', borderRadius: 14, paddingVertical: 10, paddingHorizontal: 10, marginBottom: 8,
         borderWidth: active ? 1.5 : 1, borderColor: active ? BRAND.green : LINE,
         ...cardShadow,
       }}
@@ -89,7 +89,7 @@ export function AddressOptionCard({ a, active, onPress }) {
           <Text style={{ fontSize: rf(11.5), color: BRAND.body, marginTop: 2, lineHeight: rf(16) }} numberOfLines={2}>{line}</Text>
         ) : null}
       </View>
-      <View style={{ height: 18, width: 18, borderRadius: 9, borderWidth: 2, borderColor: active ? BRAND.green : '#C9C9C9', alignItems: 'center', justifyContent: 'center', marginLeft: 8, marginTop: 7 }}>
+      <View style={{ height: 18, width: 18, borderRadius: 9, borderWidth: 2, borderColor: active ? BRAND.green : '#D2D6DD', alignItems: 'center', justifyContent: 'center', marginLeft: 8, marginTop: 7 }}>
         {active ? <View style={{ height: 9, width: 9, borderRadius: 5, backgroundColor: BRAND.green }} /> : null}
       </View>
     </Pressable>

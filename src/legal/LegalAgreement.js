@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
  * When `accepted` (this device already agreed to the current versions) it
  * shows the links as a plain notice instead of asking again.
  */
-export default function LegalAgreement({ checked, onChange, onOpen, accepted = false, color = '#12A02F', style }) {
+export default function LegalAgreement({ checked, onChange, onOpen, accepted = false, color = '#035C6C', style }) {
   const link = [styles.link, { color }];
   const links = (
     <>
@@ -33,7 +33,7 @@ export default function LegalAgreement({ checked, onChange, onOpen, accepted = f
         accessibilityRole="checkbox"
         accessibilityState={{ checked }}
         accessibilityLabel="I agree to the Terms & Conditions and Privacy Policy"
-        style={[styles.box, { borderColor: checked ? color : '#B8BCC2' }, checked && { backgroundColor: color }]}
+        style={[styles.box, { borderColor: checked ? color : '#8E97A9' }, checked && { backgroundColor: color }]}
       >
         {checked ? <Ionicons name="checkmark" size={15} color="#FFFFFF" /> : null}
       </Pressable>
@@ -58,7 +58,7 @@ const styles = StyleSheet.create({
     marginTop: 1,
     backgroundColor: '#FFFFFF',
   },
-  text: { fontSize: 13.5, lineHeight: 20, color: '#4A4F55' },
+  text: { fontSize: 13.5, lineHeight: 20, color: '#606E87' },
   notice: { textAlign: 'center' },
   link: { fontWeight: '700', textDecorationLine: 'underline' },
 });

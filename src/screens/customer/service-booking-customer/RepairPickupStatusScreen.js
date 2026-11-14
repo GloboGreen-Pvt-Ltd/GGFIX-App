@@ -87,7 +87,7 @@ export default function RepairPickupStatusScreen({ navigation, route }) {
       <AppHeader title="Pickup Status" subtitle="Live progress" onBack={() => navigation.goBack()} />
       <ScrollView
         contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#09AD2A" colors={['#09AD2A']} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#035C6C" colors={['#035C6C']} />}
       >
         <Card>
           <View className="flex-row items-center">

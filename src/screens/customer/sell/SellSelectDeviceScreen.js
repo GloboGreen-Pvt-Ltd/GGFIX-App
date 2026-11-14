@@ -12,23 +12,23 @@ import { getBrands, getModelsByBrand, getRamOptions, getStorageOptions } from '.
 import { rf } from '../../../utils/responsive';
 import { BRAND } from '../../../theme/brand';
 
-// Palette: 09AD2A · 1E1E1E · F8F8F8 · F3F3F3 · F3BF23 · F84141.
-const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
-const MINT = '#EAF8EC';
-const LINE = '#E6E6E6';
-const GREEN_LINE = 'rgba(9,173,42,0.45)';
-const MUTED = '#6B6B6B';
+// Palette: 035C6C · 111111 · F3F4F6 · F3F4F6 · FAA700 · F32C26.
+const GREEN_TEXT = '#035C6C'; // #035C6C shaded for text on white
+const MINT = '#E5F3F5';
+const LINE = '#E8EAEE';
+const GREEN_LINE = 'rgba(3,92,108,0.45)';
+const MUTED = '#606E87';
 const cardShadow = { shadowColor: BRAND.ink, shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1 };
 const ACTION = { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 4 };
 
 // Friendly names + per-category icon (palette tints) for the banner / rows.
 const CATEGORY_META = {
-  SMARTPHONE: { name: 'Smartphones',   icon: Smartphone, color: '#078F23', tint: '#EAF8EC' },
-  LAPTOP:     { name: 'Laptops',       icon: Laptop,     color: '#1E1E1E', tint: '#F3F3F3' },
-  SMARTWATCH: { name: 'Smartwatches',  icon: Watch,      color: '#1E1E1E', tint: '#FEF6DA' },
-  TABLET:     { name: 'Tablets',       icon: Tablet,     color: '#078F23', tint: '#EAF8EC' },
-  AUDIO:      { name: 'Audio Devices', icon: Headphones, color: '#F84141', tint: '#FEECEC' },
-  SPEAKER:    { name: 'Speakers',      icon: Volume2,    color: '#078F23', tint: '#EAF8EC' },
+  SMARTPHONE: { name: 'Smartphones',   icon: Smartphone, color: '#035C6C', tint: '#E5F3F5' },
+  LAPTOP:     { name: 'Laptops',       icon: Laptop,     color: '#111111', tint: '#F3F4F6' },
+  SMARTWATCH: { name: 'Smartwatches',  icon: Watch,      color: '#111111', tint: '#FFF4D6' },
+  TABLET:     { name: 'Tablets',       icon: Tablet,     color: '#035C6C', tint: '#E5F3F5' },
+  AUDIO:      { name: 'Audio Devices', icon: Headphones, color: '#F32C26', tint: '#FEEBEA' },
+  SPEAKER:    { name: 'Speakers',      icon: Volume2,    color: '#035C6C', tint: '#E5F3F5' },
 };
 
 export default function SellSelectDeviceScreen({ navigation, route }) {
@@ -101,7 +101,7 @@ export default function SellSelectDeviceScreen({ navigation, route }) {
   // Brand) instead of showing an empty page — same as the repair flow.
   useEffect(() => {
     if (!loading && presetCategoryId && items.length === 0) {
-      navigation.replace('SelectBrand', {
+      navigation.replace('DeviceDetails', {
         flow: 'SELL',
         categoryId: presetCategoryId,
         categoryName: presetCategoryName,
@@ -152,14 +152,14 @@ export default function SellSelectDeviceScreen({ navigation, route }) {
   // the brand step for the current category (skips the device-type step).
   const selectOtherDevice = () => {
     if (presetCategoryId) {
-      navigation.navigate('SelectBrand', {
+      navigation.navigate('DeviceDetails', {
         flow: 'SELL',
         categoryId: presetCategoryId,
         categoryName: presetCategoryName,
         categoryCode,
       });
     } else {
-      navigation.navigate('SelectCategory', { flow: 'SELL' });
+      navigation.navigate('DeviceDetails', { flow: 'SELL' });
     }
   };
 
@@ -219,7 +219,7 @@ export default function SellSelectDeviceScreen({ navigation, route }) {
                 accessibilityLabel={deviceName(d)}
                 className="active:opacity-90"
                 style={{
-                  backgroundColor: active ? '#F7FCF8' : '#FFFFFF', borderRadius: 14, padding: 10, marginBottom: 8,
+                  backgroundColor: active ? '#F0F8F9' : '#FFFFFF', borderRadius: 14, padding: 10, marginBottom: 8,
                   borderWidth: active ? 1.5 : 1, borderColor: active ? BRAND.green : LINE, ...cardShadow,
                 }}
               >
@@ -242,7 +242,7 @@ export default function SellSelectDeviceScreen({ navigation, route }) {
                     </View>
                     {spec ? <Text style={{ fontSize: rf(10.5), color: MUTED, marginTop: 1 }} numberOfLines={1}>{spec}</Text> : null}
                   </View>
-                  <View style={{ height: 18, width: 18, borderRadius: 9, marginLeft: 8, borderWidth: 2, borderColor: active ? BRAND.green : '#C9C9C9', alignItems: 'center', justifyContent: 'center' }}>
+                  <View style={{ height: 18, width: 18, borderRadius: 9, marginLeft: 8, borderWidth: 2, borderColor: active ? BRAND.green : '#D2D6DD', alignItems: 'center', justifyContent: 'center' }}>
                     {active ? <View style={{ height: 9, width: 9, borderRadius: 5, backgroundColor: BRAND.green }} /> : null}
                   </View>
                 </View>
@@ -314,7 +314,7 @@ export default function SellSelectDeviceScreen({ navigation, route }) {
           className="active:opacity-85"
           style={{
             flexDirection: 'row', alignItems: 'center', marginTop: items.length ? 0 : 10,
-            backgroundColor: '#F4FBF5', borderRadius: 14, borderWidth: 1, borderStyle: 'dashed', borderColor: GREEN_LINE,
+            backgroundColor: '#F0F8F9', borderRadius: 14, borderWidth: 1, borderStyle: 'dashed', borderColor: GREEN_LINE,
             paddingVertical: 9, paddingHorizontal: 10,
           }}
         >

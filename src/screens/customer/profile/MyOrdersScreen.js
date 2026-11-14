@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Image, Linking, Pressable, ScrollView, Text, View, FlatList, RefreshControl, useWindowDimensions,
+  Image, Linking, Platform, Pressable, Share, ScrollView, Text, View, FlatList, RefreshControl, useWindowDimensions,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,8 +9,18 @@ import {
   FileText, Clock, Receipt, Package, Truck, MessageCircle,
   ShoppingBag, Tag, Wrench, Store, CheckCircle2, ReceiptText,
   ChevronRight, CalendarClock, IndianRupee, Bell, Settings, CalendarDays, MapPin, XCircle,
-  ArrowLeft, Phone, Smartphone, Crown, MessageSquareText,
+  ArrowLeft, Phone, Smartphone, Crown, MessageSquareText, Copy,
 } from 'lucide-react-native';
+
+// Copy text: browser clipboard on web; native falls back to the share sheet
+// (no clipboard module is installed in this app).
+async function copyText(text) {
+  if (!text) return;
+  try {
+    if (Platform.OS === 'web' && navigator?.clipboard?.writeText) { await navigator.clipboard.writeText(text); window.alert(`Copied: ${text}`); return; }
+  } catch (_) { /* fall through */ }
+  Share.share({ message: text }).catch(() => {});
+}
 import { SQ, ago } from '../sell/useSellOrder';
 import { getSeenQuotes, markQuotesSeen, notifyNewSellQuotes } from '../../../utils/sellQuoteSeen';
 import {
@@ -34,6 +44,7 @@ import { goToTab } from '../../../navigation/goToTab';
 import { StaticTabBar } from '../../../navigation/CustomTabBar';
 import EnquiryNearbyShops from './EnquiryNearbyShops';
 import PageHeader, { HeaderIconButton } from '../../../components/PageHeader';
+import { shopNumber } from '../../../utils/shopNumber';
 import { useFocusPolling } from '../../../hooks/useFocusPolling';
 
 const TABS = [
@@ -216,6 +227,50 @@ function repairScope(o) {
   if (/COMPLETE|DELIVERED\b|CLOSED/.test(s)) return 'COMPLETED';
   return 'ACTIVE';
 }
+// Partner Jobs card status line (JobsScreen STATUS_VARIANT): same short
+// labels + tone colours, so the customer card reads exactly like the Partner App.
+const PARTNER_STATUS = {
+  CREATED: ['Service Accepted', '#B45309'], SERVICE_ACCEPTED: ['Service Accepted', '#B45309'],
+  ASSIGNED: ['Technician Assigned', '#035C6C'], ASSIGNED_TO_TECHNICIAN: ['Technician Assigned', '#035C6C'],
+  IN_DIAGNOSIS: ['In Diagnosis', '#035C6C'], IN_REPAIR: ['In Service Process', '#035C6C'],
+  QUOTED: ['Re-Estimated', '#B45309'], RE_ESTIMATED_CONFIRMED: ['Re-Estimated', '#B45309'],
+  APPROVED: ['Customer Approved', '#035C6C'], CUSTOMER_APPROVED: ['Customer Approved', '#035C6C'],
+  READY: ['Ready for Delivery', '#035C6C'],
+  INVOICE_GENERATED: ['Invoice Generated', '#B45309'], INVOICE_READY: ['Invoice Ready', '#B45309'],
+  DELIVERED_PROCESSING: ['Out for Delivery', '#B45309'], OUT_FOR_DELIVERY: ['Out for Delivery', '#B45309'],
+  DELIVERED: ['Delivered', '#035C6C'], COMPLETED: ['Delivered', '#035C6C'],
+  CANCELLED: ['Cancelled', '#B91C1C'], RETURNED: ['Returned', '#B91C1C'], CUSTOMER_REJECTED: ['Rejected', '#B91C1C'],
+};
+const A = '#B45309', T = '#035C6C', R = '#B91C1C';
+const PARTNER_PICKUP_STATUS = {
+  ORDER_PLACED: ['New Request', A], PICKUP_REQUESTED: ['Pickup Requested', A], PICKUP_BOOKING_CREATED: ['Pickup Requested', A],
+  PICKUP_ACCEPTED: ['Pickup Accepted', T], ORDER_SERVICE_CONFIRMED: ['Confirmed', T],
+  PICKUP_PERSON_ASSIGNED: ['Pickup Assigned', T], PICKUP_ASSIGNED: ['Pickup Assigned', T], PICKUP_REASSIGNED: ['Pickup Assigned', T],
+  PICKUP_ON_THE_WAY: ['On The Way', T], REACHED_CUSTOMER_LOCATION: ['At Customer', T],
+  REPAIR_ESTIMATE_PROCESSING: ['Estimate Submitted', A], DEVICE_PICKED_UP: ['Device Picked Up', T], PICKED_UP: ['Device Picked Up', T],
+  REACHED_SHOP: ['Reached Shop', T], RECEIVED_AT_SHOP: ['Reached Shop', T], ACCEPTED: ['Accepted', T], IN_TRANSIT: ['In Transit', T],
+  COMPLETED: ['Completed', T], CANCELLED: ['Cancelled', R], PICKUP_CANCELLED: ['Cancelled', R], REJECTED: ['Rejected', R],
+  RESCHEDULED: ['Rescheduled', A], PICKUP_RESCHEDULED: ['Rescheduled', A],
+};
+function partnerStatus(o, pickup) {
+  if (pickup) {
+    const p = PARTNER_PICKUP_STATUS[String(o.phaseStatus || '').toUpperCase()] || PARTNER_PICKUP_STATUS[String(o.status || '').toUpperCase()];
+    if (p) return { label: p[0], color: p[1] };
+  }
+  const hit = PARTNER_STATUS[String(o.phaseStatus || '').toUpperCase()] || null;
+  if (hit) return { label: hit[0], color: hit[1] };
+  if (o.phaseLabel) return { label: o.phaseLabel, color: ribbonColor(o.phaseLabel) };
+  const st = PARTNER_STATUS[String(o.status || '').toUpperCase()];
+  return st ? { label: st[0], color: st[1] } : { label: humanizeStatus(o.status) || 'Pending', color: ribbonColor(o.status) };
+}
+
+// The number the shop and Booking Details show (#GTS-181): the ticket's own
+// tracking id first, never the customer-order row number.
+function listNumber(o, d) {
+  const p = o?.payload || {};
+  return shopNumber(p.trackingId || d?.trackingId || p.bookingNumber || d?.bookingNumber || o?.orderNumber);
+}
+
 // Ribbon colour — the Partner TONE_STYLE foregrounds (amber / red / teal).
 function ribbonColor(status) {
   const t = pillTone(status);
@@ -255,8 +310,11 @@ export default function MyOrdersScreen({ navigation, route }) {
   const tabKeys = isRepairList ? REPAIR_TAB_KEYS : COMMERCE_TABS;
   const shownTabs = TABS.filter((t) => tabKeys.includes(t.key));
   // Opened from the Buy module: Buy orders only, in the Buy layout (see buyView below).
-  const buyView = !isRepairList && route?.params?.view === 'buy';
-  const presetTab = buyView ? 'Buy' : tabKeys.includes(route?.params?.initialTab) ? route.params.initialTab : tabKeys[0];
+  // Any Buy entry (Buy page tile, Home quick tool, notifications) opens the
+  // Buy-only page — no Buy / Sell switch.
+  const buyOnly = !isRepairList && (route?.params?.view === 'buy' || route?.params?.initialTab === 'Buy');
+  const buyView = false; // old chip page retired — Buy uses the Service-style rail layout
+  const presetTab = buyOnly ? 'Buy' : tabKeys.includes(route?.params?.initialTab) ? route.params.initialTab : tabKeys[0];
   const { width: screenW } = useWindowDimensions();
 
   const [tab, setTab] = useState(presetTab);
@@ -302,6 +360,15 @@ export default function MyOrdersScreen({ navigation, route }) {
       if (!ok.length) throw settled[0]?.reason || new Error('Failed to load orders');
       const byId = {};
       ok.flatMap((r) => r.value || []).forEach((o) => { if (o && o.id) byId[o.id] = o; });
+      // Service tab: a doorstep-pickup booking belongs to the Pickup tab until the
+      // shop has received the device and opened a service ticket for it.
+      if (tab === 'Service') {
+        Object.keys(byId).forEach((id) => {
+          const o = byId[id];
+          const isPickup = String(o.orderType || '').toUpperCase() === 'PICKUP' || String(o.payload?.serviceMode || '').toUpperCase() === 'PICKUP';
+          if (isPickup && !o.payload?.ticketId) delete byId[id];
+        });
+      }
       // Enquiry tab: an enquiry is a chat with a shop (GET /customer/chats),
       // not an order — list those threads too, newest message first.
       let chatRows = [];
@@ -525,8 +592,11 @@ export default function MyOrdersScreen({ navigation, route }) {
     : (sellFilter !== 'ALL' ? items.filter((o) => commerceScope(o) === sellFilter) : items);
 
   const openOrder = (o) => {
-    if (tab === 'Buy') {
-      navigation.navigate(o._fixed ? 'BuyFixedOrder' : 'BuyOrderDetails', { orderId: o.id });
+    // Route by the order's own type (not only the selected tab).
+    if (tab === 'Buy' || o?._fixed || String(o?.orderType || '').toUpperCase() === 'BUY') {
+      // Card → the order's View Details page.
+      if (o._fixed) navigation.navigate('BuyFixedOrder', { orderId: o.id, details: true });
+      else navigation.navigate('BuyOrderDetails', { orderId: o.id });
       return;
     }
     if (tab === 'Sell') {
@@ -536,7 +606,7 @@ export default function MyOrdersScreen({ navigation, route }) {
     }
     const ticketId = o.payload?.ticketId;
     if (tab === 'Service' && ticketId) {
-      navigation.navigate('ServiceTicketDetails', { ticketId, fromOrders: true });
+      navigation.navigate('ServiceTicketDetails', { ticketId, fromOrders: true, bookingId: o.payload?.bookingId || o.referenceId });
       return;
     }
     const ref = o.payload?.bookingId || o.referenceId;
@@ -549,7 +619,7 @@ export default function MyOrdersScreen({ navigation, route }) {
   const openTimeline = (o) => {
     const ref = o.payload?.bookingId || o.referenceId;
     if (!ref) return;
-    const isPickup = tab === 'Pickup' || o.payload?.serviceMode === 'PICKUP' || details[o.id]?.isPickup;
+    const isPickup = tab !== 'Service' && (tab === 'Pickup' || o.payload?.serviceMode === 'PICKUP' || details[o.id]?.isPickup);
     navigation.navigate(isPickup ? 'RepairPickupStatus' : 'RepairOrderHistory', { bookingId: ref });
   };
 
@@ -649,7 +719,7 @@ export default function MyOrdersScreen({ navigation, route }) {
         ) : null}
 
         <Text numberOfLines={1} style={{ marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#F1F2F4', fontSize: rf(11.5), color: SQ.muted }}>
-          {[hashed(d.sellNumber || o.orderNumber), dateTxt].filter(Boolean).join('  ·  ')}
+          {dateTxt || ''}
         </Text>
 
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
@@ -745,7 +815,7 @@ export default function MyOrdersScreen({ navigation, route }) {
               <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 5 }}>
                 <CalendarDays size={11} color={BRAND.green} />
                 <Text style={{ flex: 1, color: BRAND.muted, fontSize: rf(10.5), marginLeft: 4 }} numberOfLines={1}>
-                  {[hashed((tab === 'Sell' && d.sellNumber) || o.orderNumber), whenLabel].filter(Boolean).join('  ·  ')}
+                  {[isRepairList ? hashed(shopNumber(o.orderNumber)) : null, whenLabel].filter(Boolean).join('  ·  ')}
                 </Text>
               </View>
             </View>
@@ -942,12 +1012,18 @@ export default function MyOrdersScreen({ navigation, route }) {
     const d = details[o.id] || {};
     const title = d.name || p.deviceName || p.title || o.orderType;
     const liveStatus = o.phaseLabel || o.status;
-    const amount = Number(o.totalAmount) || 0;
+    const amount = (tab === 'Sell' && d.sell?.amount != null ? Number(d.sell.amount) : Number(o.totalAmount)) || 0;
     const shopName = d.shopName || p.shopName;
     const services = d.services?.length ? d.services : null;
     const live = String(o.phaseStatus || o.status || '').toUpperCase();
     const reschedulable = !live || ['PENDING', 'ORDER_PLACED', 'PICKUP_REQUESTED', 'PICKUP_ACCEPTED', 'ORDER_SERVICE_CONFIRMED', 'SERVICE_ACCEPTED'].includes(live);
-    const FallbackIcon = tab === 'Pickup' ? Truck : tab === 'Enquiry' ? MessageCircle : Smartphone;
+    // Service + Pickup cards: Partner-style live status bar (list re-polls every 15 s).
+    const liveTab = tab === 'Service' || tab === 'Pickup' || tab === 'Buy' || tab === 'Sell';
+    // Sell: the live sell-journey label (e.g. Quotes received / Pickup scheduled / Sold).
+    const tileStatus = tab === 'Sell' && d.sell
+      ? { label: d.sell.label, color: d.sell.cancelled ? '#B91C1C' : d.sell.sold ? '#035C6C' : '#B45309' }
+      : partnerStatus(o, tab === 'Pickup');
+    const FallbackIcon = tab === 'Pickup' ? Truck : tab === 'Enquiry' ? MessageCircle : tab === 'Buy' ? ShoppingBag : tab === 'Sell' ? Tag : Smartphone;
     const dateStr = jobDate(o.createdAt);
     const timeStr = jobTime(o.createdAt);
     return (
@@ -957,9 +1033,10 @@ export default function MyOrdersScreen({ navigation, route }) {
         className="active:opacity-90"
         style={{
           flex: 1, marginBottom: 12, borderRadius: 16, backgroundColor: '#FFFFFF', overflow: 'hidden',
-          borderWidth: 1, borderColor: JOB_LINE, ...(jobRow ? { flexDirection: 'row' } : null),
+          borderWidth: 1, borderColor: JOB_LINE,
         }}
       >
+       <View style={jobRow ? { flexDirection: 'row' } : null}>
         <View
           className="items-center justify-center overflow-hidden"
           style={jobRow
@@ -972,11 +1049,11 @@ export default function MyOrdersScreen({ navigation, route }) {
             <FallbackIcon size={40} color={JOB_TEAL} />
           )}
           {/* Status ribbon, top-left corner. */}
-          <View style={{ position: 'absolute', top: 0, left: 0, maxWidth: '78%', backgroundColor: ribbonColor(liveStatus), paddingHorizontal: 8, paddingVertical: 4, borderBottomRightRadius: 12 }}>
-            <Text style={{ color: '#FFFFFF', fontSize: 9.5, fontWeight: '800' }} numberOfLines={1}>{humanizeStatus(liveStatus) || 'Unknown'}</Text>
+          <View style={{ position: 'absolute', top: 0, left: 0, maxWidth: '78%', backgroundColor: liveTab ? tileStatus.color : ribbonColor(liveStatus), paddingHorizontal: 8, paddingVertical: 4, borderBottomRightRadius: 12 }}>
+            <Text style={{ color: '#FFFFFF', fontSize: 9.5, fontWeight: '800' }} numberOfLines={1}>{liveTab ? tileStatus.label : (humanizeStatus(liveStatus) || 'Unknown')}</Text>
           </View>
-          {/* VIEW, bottom-right — the whole tile opens the details too. */}
-          <View
+          {/* VIEW, bottom-right — the whole tile opens the details too (not on Service cards). */}
+          {!liveTab ? <View
             pointerEvents="none"
             style={{
               position: 'absolute', backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: JOB_TEAL, borderRadius: 10,
@@ -984,13 +1061,13 @@ export default function MyOrdersScreen({ navigation, route }) {
             }}
           >
             <Text style={{ color: JOB_TEAL, fontSize: jobRow ? 11 : 12, fontWeight: '800' }}>VIEW</Text>
-          </View>
+          </View> : null}
         </View>
 
         <View style={jobRow ? { flex: 1, minWidth: 0, paddingHorizontal: 10, paddingBottom: 8 } : { paddingHorizontal: 8, paddingBottom: 8 }}>
           {/* Order number (left) · amount (right). */}
           <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
-            <Text style={{ flex: 1, fontSize: 11, fontWeight: '800', color: JOB_TEAL }} numberOfLines={1}>{hashed(o.orderNumber) || '—'}</Text>
+            <Text style={{ flex: 1, fontSize: 11, fontWeight: '800', color: JOB_TEAL }} numberOfLines={1}>{isRepairList ? (hashed(listNumber(o, details[o.id])) || '—') : ''}</Text>
             <View style={{ marginLeft: 6, backgroundColor: JOB_TEAL, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }}>
               <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '800' }} numberOfLines={1}>₹{amount.toLocaleString('en-IN')}</Text>
             </View>
@@ -1009,15 +1086,10 @@ export default function MyOrdersScreen({ navigation, route }) {
               <Text style={{ fontSize: 11, color: '#6B7280', marginLeft: 6 }} numberOfLines={1}>{timeStr}</Text>
             </View>
           ) : null}
-          {/* Actions (left) · call the shop (right). */}
+          {/* Actions (left) · call the shop (right). Service cards use the status bar below. */}
+          {!liveTab ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
-            {tab === 'Service' ? (
-              <>
-                <JobAction icon={Clock} label="History" onPress={() => openTimeline(o)} />
-                <JobAction icon={Receipt} label="Receipt" onPress={() => openReceipt(o)} />
-                <JobAction icon={ReceiptText} label="Invoice" onPress={() => openInvoice(o)} disabled={String(o.status || '').toUpperCase() !== 'COMPLETED'} />
-              </>
-            ) : (
+            {(
               <>
                 <JobAction icon={MapPin} label="Track" onPress={() => openTimeline(o)} />
                 {tab === 'Pickup' && reschedulable ? (
@@ -1032,7 +1104,27 @@ export default function MyOrdersScreen({ navigation, route }) {
               <JobAction icon={Phone} label={`Call ${shopName || 'shop'}`} onPress={() => Linking.openURL(`tel:${d.shopPhone}`)} />
             ) : null}
           </View>
+          ) : null}
         </View>
+       </View>
+        {/* Live status bar (Partner Jobs design): latest shop update · call · copy.
+            The list re-polls in the background, so this follows the Partner App live. */}
+        {liveTab ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: JOB_LINE, paddingHorizontal: 12, paddingVertical: 8 }}>
+            <Text style={{ flex: 1, fontSize: 11, fontWeight: '800', color: tileStatus.color }} numberOfLines={1}>
+              {tileStatus.label}
+            </Text>
+            {tab === 'Pickup' && reschedulable ? (
+              <JobAction icon={CalendarClock} label="Re-Schedule" onPress={() => onReschedule(o)} />
+            ) : null}
+            {d.shopPhone ? (
+              <JobAction icon={Phone} label={`Call ${shopName || 'shop'}`} onPress={() => Linking.openURL(`tel:${d.shopPhone}`)} />
+            ) : null}
+            {d.shopPhone ? (
+              <JobAction icon={Copy} label="Copy shop mobile number" onPress={() => copyText(String(d.shopPhone))} />
+            ) : null}
+          </View>
+        ) : null}
       </Pressable>
     );
   };
@@ -1068,7 +1160,7 @@ export default function MyOrdersScreen({ navigation, route }) {
           </View>
           <View style={{ flex: 1, minWidth: 0, marginLeft: 12 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Text numberOfLines={1} style={{ flex: 1, fontSize: rf(13.5), fontWeight: '800', color: '#111111' }}>{o.orderNumber || 'Order'}</Text>
+              <Text numberOfLines={1} style={{ flex: 1, fontSize: rf(13.5), fontWeight: '800', color: '#111111' }}>{name || 'Order'}</Text>
               <View style={{ borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3, backgroundColor: pill.bg }}>
                 <Text style={{ fontSize: rf(10.5), fontWeight: '800', color: pill.fg }}>{pill.text}</Text>
               </View>
@@ -1107,7 +1199,7 @@ export default function MyOrdersScreen({ navigation, route }) {
           <FlatList
             data={visibleItems}
             keyExtractor={(o) => String(o.id)}
-            renderItem={({ item }) => renderBuyRow(item)}
+            renderItem={({ item }) => renderJobTile(item)} // Service-page card design
             contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 16, flexGrow: 1 }}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={SQ.primary} colors={[SQ.primary]} />}
             ListEmptyComponent={<EmptyState title="No orders here" description="Your buy orders will show up here." />}
@@ -1173,7 +1265,8 @@ export default function MyOrdersScreen({ navigation, route }) {
           </View>
         </View>
 
-        {/* Service / Pickup / Enquiry switch (kept from the old screen). */}
+        {/* Service / Pickup / Enquiry switch — hidden on the Service orders screen. */}
+        {!isRepairList && !buyOnly ? (
         <View style={{ paddingTop: 8, borderBottomWidth: 1, borderBottomColor: JOB_LINE }}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 6 }}>
             {shownTabs.map((t) => (
@@ -1181,6 +1274,7 @@ export default function MyOrdersScreen({ navigation, route }) {
             ))}
           </ScrollView>
         </View>
+        ) : null}
 
         {/* Left: status rail · Right: orders list. */}
         <View style={{ flex: 1, flexDirection: 'row' }}>
@@ -1202,19 +1296,18 @@ export default function MyOrdersScreen({ navigation, route }) {
                   accessibilityLabel={`${s.label}, ${counts[s.key] ?? 0}`}
                   className="active:opacity-80"
                   style={{
-                    marginVertical: 4, borderRadius: 14, backgroundColor: '#FFFFFF',
-                    shadowColor: tone, shadowOpacity: active ? 0.12 : 0.06, shadowRadius: 4,
-                    shadowOffset: { width: 0, height: 2 }, elevation: active ? 2 : 1,
+                    marginVertical: 4, borderRadius: 8, backgroundColor: '#FFFFFF',
+                    shadowOpacity: 0, elevation: 0, // flat tile — no shade
                   }}
                 >
-                  {/* White at the top fading to a light tint of the tile's colour. */}
+                  {/* Plain white tile (Partner Jobs rail); active = teal outline. */}
                   <LinearGradient
-                    colors={['#FFFFFF', `${tone}${active ? '24' : '10'}`]}
+                    colors={['#FFFFFF', '#FFFFFF']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 0, y: 1 }}
                     style={{
-                      alignItems: 'center', paddingVertical: 9, paddingHorizontal: 3, borderRadius: 14,
-                      borderWidth: active ? 1.5 : 1, borderColor: active ? tone : `${tone}22`,
+                      alignItems: 'center', paddingVertical: 9, paddingHorizontal: 3, borderRadius: 8,
+                      borderWidth: active ? 2 : 1, borderColor: active ? '#035C6C' : '#E5E7EB',
                     }}
                   >
                     <View>
@@ -1226,7 +1319,7 @@ export default function MyOrdersScreen({ navigation, route }) {
                       </View>
                     </View>
                     <Text
-                      style={{ marginTop: 5, fontSize: rz.font, lineHeight: rz.line, fontWeight: active ? '800' : '700', color: tone, textAlign: 'center' }}
+                      style={{ marginTop: 5, fontSize: rz.font, lineHeight: rz.line, fontWeight: active ? '800' : '700', color: '#111111', textAlign: 'center' }}
                       numberOfLines={2}
                       adjustsFontSizeToFit
                       minimumFontScale={0.85}
@@ -1258,7 +1351,7 @@ export default function MyOrdersScreen({ navigation, route }) {
                 numColumns={numCols}
                 columnWrapperStyle={numCols > 1 ? { gap: 12 } : undefined}
                 keyExtractor={(o) => o.id}
-                renderItem={({ item }) => (isRepairList ? renderJobTile(item) : renderCard(item))}
+                renderItem={({ item }) => ((isRepairList || tab === 'Buy' || tab === 'Sell') ? renderJobTile(item) : renderCard(item))}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={JOB_TEAL} colors={[JOB_TEAL]} />}
                 contentContainerStyle={{
                   paddingHorizontal: 10, paddingTop: 10, paddingBottom: insets.bottom + 16,

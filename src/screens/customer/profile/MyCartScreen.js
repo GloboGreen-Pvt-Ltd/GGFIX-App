@@ -10,22 +10,16 @@ import {
   useBottomBarInset,
 } from '../../../components/rnr';
 import { confirm, notify } from '../../../components/confirm';
-import { getCart, removeCartItem, updateCartItem, clearCart } from '../../../api/marketplace';
-import { createBuyOrder } from '../../../api/orders';
-import { useSelector } from 'react-redux';
-import { selectSession } from '../../../store/authSlice';
-import { notifyShopsOfBuyOrder } from '../../../utils/buyOrderNotify';
+import { getCart, removeCartItem, updateCartItem } from '../../../api/marketplace';
 import { goToTab } from '../../../navigation/goToTab';
 import { resolveDeviceImageSource } from '../../../utils/images';
 import { BRAND } from '../../../theme/brand';
 import { rf } from '../../../utils/responsive';
 
-const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
-const LINE = '#E6E6E6';
+const GREEN_TEXT = '#035C6C'; // #035C6C shaded for text on white
+const LINE = '#E8EAEE';
 const cardShadow = { shadowColor: BRAND.ink, shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 2 };
 
-const cartTotal = (list) =>
-  list.reduce((sum, it) => sum + (Number(it.product?.price) || 0) * (it.quantity || 1), 0);
 
 function Chip({ label }) {
   return (
@@ -56,7 +50,6 @@ export default function MyCartScreen({ navigation }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [placing, setPlacing] = useState(false);
-  const session = useSelector(selectSession);
 
   const load = useCallback(async () => {
     try { setItems(await getCart()); } finally { setLoading(false); }
@@ -77,43 +70,11 @@ export default function MyCartScreen({ navigation }) {
     try { await updateCartItem(it.id, next); } catch (e) { notify('Error', e.message || 'Could not update quantity'); load(); }
   };
 
-  const onCheckout = async () => {
+  // Checkout → Place Order (pickup choice + price details); it places the
+  // order, messages the shop and clears the cart.
+  const onCheckout = () => {
     if (placing || !items.length) return;
-    setPlacing(true);
-    try {
-      const payloadItems = items.map((it) => ({
-        productId: it.product?.id || it.productId,
-        title: it.product?.title,
-        price: Number(it.product?.price) || 0,
-        quantity: it.quantity || 1,
-      }));
-      // Snapshot for the "Order Placed" page before the cart is cleared.
-      const snapshot = items.map((it) => ({
-        id: it.id,
-        title: it.product?.title,
-        price: Number(it.product?.price) || 0,
-        quantity: it.quantity || 1,
-        imageUrl: resolveDeviceImageSource({ url: it.product?.imageUrl }) || null,
-        storageLabel: it.product?.storageLabel,
-        color: it.product?.color,
-      }));
-      const total = cartTotal(items);
-      const created = await createBuyOrder({ items: payloadItems, totalAmount: total });
-      // Send the order + buyer name / phone / address to the seller's chat
-      // (Partner app inbox). Best-effort; never blocks the order.
-      const notifiedShops = await notifyShopsOfBuyOrder({
-        order: created,
-        cartItems: items,
-        buyer: { fullName: session?.fullName, mobile: session?.mobile },
-      });
-      await clearCart().catch(() => {});
-      setItems([]);
-      navigation.replace('BuyOrderSuccess', { order: created || {}, items: snapshot, total, notifiedShops });
-    } catch (e) {
-      notify('Checkout failed', e.message || 'Could not place order. Please try again.');
-    } finally {
-      setPlacing(false);
-    }
+    navigation.navigate('BuyPlaceOrder', { items, fromCart: true });
   };
 
   if (loading) return <Loader label="Loading your cart..." />;
@@ -123,7 +84,7 @@ export default function MyCartScreen({ navigation }) {
         <EmptyState
           icon={<ShoppingCart size={30} color={BRAND.green} />}
           accent={BRAND.green}
-          accentSoft="#EAF8EC"
+          accentSoft="#E5F3F5"
           title="Your cart is empty"
           description="Browse our refurbished collection to get started."
           actionLabel="Start shopping"
@@ -220,8 +181,8 @@ export default function MyCartScreen({ navigation }) {
 
         <View style={{ flexDirection: 'row' }}>
           {[
-            { icon: ShieldCheck, label: '6-month warranty', color: BRAND.green, bg: '#EAF8EC' },
-            { icon: Truck, label: 'Free delivery', color: BRAND.yellow, bg: '#FEF6DA' },
+            { icon: ShieldCheck, label: '6-month warranty', color: BRAND.green, bg: '#E5F3F5' },
+            { icon: Truck, label: 'Free delivery', color: BRAND.yellow, bg: '#FFF4D6' },
           ].map((t, i) => {
             const Icon = t.icon;
             return (

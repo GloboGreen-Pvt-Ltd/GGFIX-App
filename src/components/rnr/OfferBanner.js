@@ -6,11 +6,11 @@ import { cn } from './cn';
 import { rf } from '../../utils/responsive';
 
 const palettes = {
-  primary: ['#00008B', '#2563EB'],
-  emerald: ['#004C40', '#004C40'],
-  amber: ['#F59E0B', '#FB923C'],
-  rose: ['#EC4899', '#F43F5E'],
-  violet: ['#7C3AED', '#A855F7'],
+  primary: ['#0788C9', '#0788C9'],
+  emerald: ['#035C6C', '#035C6C'],
+  amber: ['#FAA700', '#FAA700'],
+  rose: ['#0788C9', '#F32C26'],
+  violet: ['#0788C9', '#0788C9'],
 };
 
 export function OfferBanner({

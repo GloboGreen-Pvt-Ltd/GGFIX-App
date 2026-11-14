@@ -29,6 +29,7 @@ import NotificationsScreen from '../screens/customer/profile/NotificationsScreen
 
 // Device wizard (shared by Profile / Sell / Repair)
 import SelectCategoryScreen from '../screens/customer/device/SelectCategoryScreen';
+import DeviceDetailsScreen from '../screens/customer/device/DeviceDetailsScreen';
 import SelectBrandScreen from '../screens/customer/device/SelectBrandScreen';
 import SelectSeriesScreen from '../screens/customer/device/SelectSeriesScreen';
 import SelectModelScreen from '../screens/customer/device/SelectModelScreen';
@@ -45,10 +46,10 @@ import RepairSelectAddressScreen from '../screens/customer/service-booking-custo
 import RepairPickupSlotScreen from '../screens/customer/service-booking-customer/RepairPickupSlotScreen';
 import RepairCompleteOrderScreen from '../screens/customer/service-booking-customer/RepairCompleteOrderScreen';
 import RepairConfirmationScreen from '../screens/customer/service-booking-customer/RepairConfirmationScreen';
-import RepairOrderDetailsScreen from '../screens/customer/service-booking-customer/RepairOrderDetailsScreen';
+import PickupDetailsScreen from '../screens/customer/service-booking-customer/PickupDetailsScreen';
 import ServiceTicketDetailsScreen from '../screens/customer/service-booking-customer/ServiceTicketDetailsScreen';
-import RepairOrderHistoryScreen from '../screens/customer/service-booking-customer/RepairOrderHistoryScreen';
 import RepairPickupStatusScreen from '../screens/customer/service-booking-customer/RepairPickupStatusScreen';
+import RepairOrderHistoryScreen from '../screens/customer/service-booking-customer/RepairOrderHistoryScreen';
 import RepairEstimateScreen from '../screens/customer/service-booking-customer/RepairEstimateScreen';
 import ServiceReceiptScreen from '../screens/customer/service-booking-customer/ServiceReceiptScreen';
 import InvoiceReceiptScreen from '../screens/customer/service-booking-customer/InvoiceReceiptScreen';
@@ -85,14 +86,22 @@ import BuyCategoryScreen from '../screens/customer/buy/BuyCategoryScreen';
 import BuyListingScreen from '../screens/customer/buy/BuyListingScreen';
 import BuyProductDetailsScreen from '../screens/customer/buy/BuyProductDetailsScreen';
 import BuyPlaceOrderScreen from '../screens/customer/buy/BuyPlaceOrderScreen';
+import BuyFulfillmentScreen from '../screens/customer/buy/BuyFulfillmentScreen';
+import BuyDevicesScreen from '../screens/customer/buy/BuyDevicesScreen';
 import BuyOrderDetailsScreen from '../screens/customer/buy/BuyOrderDetailsScreen';
 import BuyFixedOrderScreen from '../screens/customer/buy/BuyFixedOrderScreen';
 
 // Shop browse
 import NearbyShopsScreen from '../screens/customer/shop/NearbyShopsScreen';
 import ShopDetailsScreen from '../screens/customer/shop/ShopDetailsScreen';
+import { screenRefreshLayout } from '../components/ScreenRefresh';
+import { withScreenErrorBoundary } from '../components/ScreenErrorBoundary';
+import DeliveryInvoiceReportScreen from '../screens/owner/AllBooking/DeliveryInvoiceReportScreen';
 
 const Stack = createNativeStackNavigator();
+// Buy order screens: a render error shows the message + Retry instead of closing.
+const BuyOrderDetailsSafe = withScreenErrorBoundary(BuyOrderDetailsScreen, 'BuyOrderDetails');
+const BuyFixedOrderSafe = withScreenErrorBoundary(BuyFixedOrderScreen, 'BuyFixedOrder');
 const Tab = createBottomTabNavigator();
 
 // `onLogout` is passed in from RootNavigator so the Profile tab can call the
@@ -103,6 +112,7 @@ const Tab = createBottomTabNavigator();
 function CustomerTabs({ onLogout }) {
   return (
     <Tab.Navigator
+      screenLayout={screenRefreshLayout}
       screenOptions={{ headerShown: false }}
       tabBar={(props) => <CustomTabBar {...props} />}
     >
@@ -120,6 +130,7 @@ function CustomerTabs({ onLogout }) {
 export default function CustomerNavigator({ session, onLogout }) {
   return (
     <Stack.Navigator
+      screenLayout={screenRefreshLayout}
       screenOptions={{
         // Every stack page gets the same header: back · title + subtitle · action.
         // Screens can set `subtitle`, `headerRight` and `headerBackAction`
@@ -168,6 +179,7 @@ export default function CustomerNavigator({ session, onLogout }) {
 
       {/* Device wizard */}
       <Stack.Screen name="SelectCategory" component={SelectCategoryScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="DeviceDetails" component={DeviceDetailsScreen} options={{ headerShown: false }} />
       <Stack.Screen name="SelectBrand" component={SelectBrandScreen} options={{ title: 'Select Brand' }} />
       <Stack.Screen name="SelectSeries" component={SelectSeriesScreen} options={{ title: 'Select Series' }} />
       <Stack.Screen name="SelectModel" component={SelectModelScreen} options={{ headerShown: false }} />
@@ -184,13 +196,14 @@ export default function CustomerNavigator({ session, onLogout }) {
       <Stack.Screen name="RepairPickupSlot" component={RepairPickupSlotScreen} options={{ title: 'Select Pickup Slot' }} />
       <Stack.Screen name="RepairCompleteOrder" component={RepairCompleteOrderScreen} options={{ title: 'Complete Order' }} />
       <Stack.Screen name="RepairConfirmation" component={RepairConfirmationScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="RepairOrderDetails" component={RepairOrderDetailsScreen} options={{ title: 'View Details' }} />
-      <Stack.Screen name="ServiceTicketDetails" component={ServiceTicketDetailsScreen} options={{ title: 'View Details' }} />
-      <Stack.Screen name="RepairOrderHistory" component={RepairOrderHistoryScreen} options={{ title: 'Service History' }} />
+      <Stack.Screen name="RepairOrderDetails" component={PickupDetailsScreen} options={{ title: 'Pickup Details' }} />
       <Stack.Screen name="RepairPickupStatus" component={RepairPickupStatusScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="ServiceTicketDetails" component={ServiceTicketDetailsScreen} options={{ title: 'Booking Details' }} />
+      <Stack.Screen name="RepairOrderHistory" component={RepairOrderHistoryScreen} options={{ title: 'Service History' }} />
       <Stack.Screen name="RepairEstimate" component={RepairEstimateScreen} options={{ headerShown: false }} />
       <Stack.Screen name="ServiceReceipt" component={ServiceReceiptScreen} options={{ title: 'Receipt' }} />
       <Stack.Screen name="InvoiceReceipt" component={InvoiceReceiptScreen} options={{ title: 'Invoice Receipt' }} />
+      <Stack.Screen name="CustomerInvoice" component={DeliveryInvoiceReportScreen} options={{ headerShown: false }} />
       <Stack.Screen name="ShopChat" component={ShopChatScreen} options={{ headerShown: false }} />
       <Stack.Screen name="ChatInbox" component={CustomerChatInboxScreen} options={{ headerShown: false }} />
 
@@ -224,9 +237,11 @@ export default function CustomerNavigator({ session, onLogout }) {
       <Stack.Screen name="BuyCategory" component={BuyCategoryScreen} options={{ title: 'Smart Phones' }} />
       <Stack.Screen name="BuyListing" component={BuyListingScreen} options={{ title: 'Listings' }} />
       <Stack.Screen name="BuyProductDetails" component={BuyProductDetailsScreen} options={{ title: 'Product Details' }} />
+      <Stack.Screen name="BuyDevices" component={BuyDevicesScreen} options={{ title: 'Buy Devices' }} />
+      <Stack.Screen name="BuyFulfillment" component={BuyFulfillmentScreen} options={{ title: 'Select Fulfillment' }} />
       <Stack.Screen name="BuyPlaceOrder" component={BuyPlaceOrderScreen} options={{ title: 'Place Order' }} />
-      <Stack.Screen name="BuyOrderDetails" component={BuyOrderDetailsScreen} options={{ title: 'Order Details' }} />
-      <Stack.Screen name="BuyFixedOrder" component={BuyFixedOrderScreen} options={{ title: 'Order Details' }} />
+      <Stack.Screen name="BuyOrderDetails" component={BuyOrderDetailsSafe} options={{ title: 'Order Details' }} />
+      <Stack.Screen name="BuyFixedOrder" component={BuyFixedOrderSafe} options={{ title: 'Track Order' }} />
 
       {/* Shop browse */}
       <Stack.Screen name="NearbyShops" component={NearbyShopsScreen} options={{ title: 'Nearby Shops' }} />

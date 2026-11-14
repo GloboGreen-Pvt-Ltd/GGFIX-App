@@ -9,18 +9,18 @@ import { rf } from '../utils/responsive';
 // right. Title/subtitle use Inter (loaded in App.js; system font until then).
 export const HEADER = {
   bg: '#FFFFFF',
-  border: '#DCE7E2',
-  title: '#111827',
-  subtitle: '#667085',
-  button: '#F4FBF8',
-  action: '#09AD2A',
+  border: '#C7E6EA',
+  title: '#111111',
+  subtitle: '#606e87',
+  button: '#F0F8F9',
+  action: '#035C6C',
 };
 export const HEADER_FONT = { title: 'Inter_800ExtraBold', subtitle: 'Inter_400Regular' };
 const BTN = 36;
 
 // NOTE: Pressables take plain style objects only — NativeWind's cssInterop
 // drops function-form `style={({ pressed }) => ...}` on native.
-export function HeaderIconButton({ icon: Icon, onPress, label, color = HEADER.title, fill, size = 19, badge = 0, badgeColor = '#F84141', badgeText = '#FFFFFF' }) {
+export function HeaderIconButton({ icon: Icon, onPress, label, color = HEADER.title, fill, size = 19, badge = 0, badgeColor = '#F32C26', badgeText = '#FFFFFF' }) {
   return (
     <Pressable
       onPress={onPress}

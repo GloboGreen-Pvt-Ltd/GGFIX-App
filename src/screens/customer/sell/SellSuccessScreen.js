@@ -34,7 +34,6 @@ export default function SellSuccessScreen({ navigation, route }) {
           title="Sale Request Submitted!"
           subtitle="Verified shops will respond with quotes within minutes. We'll notify you the moment a quote arrives."
           chips={[
-            sellNo ? { icon: BadgeCheck, text: `Sell Number: #${sellNo}`, selectable: true } : null,
             statusLabel ? { text: `Status: ${statusLabel}` } : null,
           ].filter(Boolean)}
         />

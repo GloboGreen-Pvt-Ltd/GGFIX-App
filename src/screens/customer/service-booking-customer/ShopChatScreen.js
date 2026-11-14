@@ -2,11 +2,13 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Image,
   Keyboard,
+  Platform,
   Pressable,
   ScrollView,
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import PageHeader, { HeaderIconButton, HEADER } from '../../../components/PageHeader';
@@ -29,11 +31,11 @@ import { Loader, EmptyState, Badge } from '../../../components/rnr';
 import { notify } from '../../../components/confirm';
 import { BRAND } from '../../../theme/brand';
 
-// Brand palette (09AD2A · 1E1E1E · F8F8F8 · F3F3F3).
-const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
-const MINT = '#EAF8EC';
-const GREEN_LINE = 'rgba(9,173,42,0.45)';
-const MUTED = '#6B6B6B';
+// Brand palette (035C6C · 111111 · F3F4F6 · F3F4F6).
+const GREEN_TEXT = '#035C6C'; // #035C6C shaded for text on white
+const MINT = '#E5F3F5';
+const GREEN_LINE = 'rgba(3,92,108,0.45)';
+const MUTED = '#606E87';
 import {
   openChat,
   getChatMessages,
@@ -192,6 +194,15 @@ export default function ShopChatScreen({ navigation, route }) {
   const isEnquiry = route?.params?.mode === 'ENQUIRY';
   const insets = useSafeAreaInsets();
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+  // Keyboard height and the chat area's height (with the keyboard closed as
+  // the baseline): the composer is lifted by whatever part of the keyboard the
+  // system didn't already make room for — 0 where Android resizes the window,
+  // the full height on iOS / edge-to-edge Android, where it doesn't.
+  const [kbH, setKbH] = useState(0);
+  const [areaH, setAreaH] = useState(0);
+  const baseAreaH = useRef(0);
+  if (!kbH && areaH) baseAreaH.current = areaH;
+  const { width: winW } = useWindowDimensions();
   const [shop, setShop] = useState(null);
   const [thread, setThread] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -242,16 +253,23 @@ export default function ShopChatScreen({ navigation, route }) {
 
   useEffect(() => { bootstrap(); }, [shopId]);
 
-  // The Android window resizes when the keyboard opens (adjustResize), so the OS
-  // itself lifts the composer above the keyboard — no KeyboardAvoidingView or
-  // manual padding needed (either would double-lift or leave a residual gap on
-  // dismiss). We only track whether the keyboard is open, to switch the
-  // composer's bottom padding (small while typing vs. nav-bar clearance closed).
+  // Keyboard open / height (iOS reports it early, so the lift moves with it).
   useEffect(() => {
-    const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardOpen(true));
-    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardOpen(false));
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvt, (e) => {
+      setKeyboardOpen(true);
+      setKbH(Math.round(e?.endCoordinates?.height || 0));
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+    });
+    const hideSub = Keyboard.addListener(hideEvt, () => { setKeyboardOpen(false); setKbH(0); });
     return () => { showSub.remove(); hideSub.remove(); };
   }, []);
+  const resizedBy = kbH && baseAreaH.current && areaH ? Math.max(0, baseAreaH.current - areaH) : 0;
+  const kbLift = kbH ? Math.max(0, kbH - resizedBy) : 0;
+  // Messages + composer in one readable column on tablets.
+  const column = { width: '100%', maxWidth: 760, alignSelf: 'center' };
+  const imgW = Math.min(240, Math.round(Math.min(winW, 760) * 0.6));
 
   // Constant clearance so the closed composer looks identical before and after
   // the keyboard has been used.
@@ -416,16 +434,17 @@ export default function ShopChatScreen({ navigation, route }) {
         ) : null}
       </View>
 
-      <View className="flex-1">
+      <View className="flex-1" style={{ paddingBottom: kbLift }} onLayout={(e) => setAreaH(Math.round(e.nativeEvent.layout.height))}>
         <ScrollView
           ref={scrollRef}
           className="flex-1"
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ padding: 12, paddingBottom: 16 }}
+          keyboardDismissMode="interactive"
+          contentContainerStyle={[{ padding: 12, paddingBottom: 16 }, column]}
           onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
         >
           {/* Encryption notice */}
-          <View className="self-center rounded-full px-3 py-1 mb-3 flex-row items-center" style={{ backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E6E6E6' }}>
+          <View className="self-center rounded-full px-3 py-1 mb-3 flex-row items-center" style={{ backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E8EAEE' }}>
             <ShieldCheck size={11} color={GREEN_TEXT} />
             <Text className="text-text-muted ml-1" style={{ fontSize: rf(10) }}>
               Encrypted via ggfix · Booking-safe chat
@@ -479,7 +498,7 @@ export default function ShopChatScreen({ navigation, route }) {
               const txtColor = m.failed ? 'text-danger' : mine ? 'text-white' : 'text-text';
               const metaColor = m.failed ? 'text-danger/70' : mine ? 'text-white/70' : 'text-text-muted';
               // Palette fill for the customer's own bubbles (overrides bg-primary).
-              const bubbleStyle = !m.failed && mine ? { backgroundColor: m.pending ? 'rgba(9,173,42,0.7)' : BRAND.green } : null;
+              const bubbleStyle = !m.failed && mine ? { backgroundColor: m.pending ? 'rgba(3,92,108,0.7)' : BRAND.green } : null;
               const isImage = m.attachmentType === 'IMAGE' && m.attachmentUrl;
               const isAudio = m.attachmentType === 'AUDIO' && m.attachmentUrl;
               return (
@@ -488,7 +507,7 @@ export default function ShopChatScreen({ navigation, route }) {
                     {isImage ? (
                       <Image
                         source={{ uri: m.attachmentUrl }}
-                        style={{ width: 220, height: 160, borderRadius: 10, marginBottom: m.body ? 6 : 0 }}
+                        style={{ width: imgW, height: Math.round(imgW * 0.72), borderRadius: 10, marginBottom: m.body ? 6 : 0 }}
                         resizeMode="cover"
                       />
                     ) : null}
@@ -528,6 +547,7 @@ export default function ShopChatScreen({ navigation, route }) {
             area, so only a little breathing room is needed. */}
         <View className="px-3 pt-2 bg-card border-t border-border"
               style={{ paddingBottom: keyboardOpen ? 10 : bottomInset, shadowColor: BRAND.ink, shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: -3 }, elevation: 8 }}>
+          <View style={column}>
           {voice.recording ? (
             <View className="flex-row items-center bg-danger/10 border border-danger/30 rounded-2xl px-3 py-2">
               <View className="h-2.5 w-2.5 rounded-full bg-danger mr-2" />
@@ -543,7 +563,7 @@ export default function ShopChatScreen({ navigation, route }) {
             </View>
           ) : (
             <View className="flex-row items-end">
-              <View className="flex-1 rounded-3xl flex-row items-center px-2 py-1" style={{ backgroundColor: BRAND.bg, borderWidth: 1, borderColor: '#E6E6E6' }}>
+              <View className="flex-1 rounded-3xl flex-row items-center px-2 py-1" style={{ backgroundColor: BRAND.bg, borderWidth: 1, borderColor: '#E8EAEE' }}>
                 <Pressable onPress={() => pickImage(false)} disabled={attaching} className="h-9 w-9 items-center justify-center active:opacity-70">
                   <Paperclip size={18} color={MUTED} />
                 </Pressable>
@@ -584,6 +604,7 @@ export default function ShopChatScreen({ navigation, route }) {
               )}
             </View>
           )}
+          </View>
         </View>
       </View>
     </View>

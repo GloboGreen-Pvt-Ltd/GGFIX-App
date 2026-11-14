@@ -15,7 +15,7 @@ export default function BackButton({ onPress }) {
           width: 36,
           height: 36,
           borderRadius: 18,
-          backgroundColor: '#EEF2FF',
+          backgroundColor: '#E6F3FA',
           alignItems: 'center',
           justifyContent: 'center',
         }}

@@ -8,7 +8,7 @@ import LegalDocumentView from './LegalDocumentView';
 import { LEGAL_DOCS, LEGAL_DOC_TYPES } from './legalContent';
 import { acceptCurrentLegal, ensureLegalAcceptance } from './legalConsent';
 
-const GREEN = '#09AD2A';
+const GREEN = '#035C6C';
 
 /**
  * Wraps the signed-in app. If the account hasn't accepted the current Terms /
@@ -90,11 +90,11 @@ function ConsentPrompt({ accountId, onAccepted, onLogout }) {
       onPress={() => setViewing(type)}
       accessibilityRole="button"
       style={styles.docRow}
-      android_ripple={{ color: '#E3E5E8' }}
+      android_ripple={{ color: '#E8EAEE' }}
     >
       <Ionicons name={icon} size={20} color={GREEN} />
       <Text style={styles.docRowText}>{LEGAL_DOCS[type].screenTitle}</Text>
-      <Ionicons name="chevron-forward" size={18} color="#9AA0A6" />
+      <Ionicons name="chevron-forward" size={18} color="#8E97A9" />
     </Pressable>
   );
 
@@ -150,27 +150,27 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#EAF8EC',
+    backgroundColor: '#E5F3F5',
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'center',
     marginBottom: 16,
   },
-  title: { fontSize: 22, fontWeight: '800', color: '#1E1E1E', textAlign: 'center', marginBottom: 8 },
-  body: { fontSize: 14, lineHeight: 21, color: '#4A4F55', textAlign: 'center', marginBottom: 20 },
+  title: { fontSize: 22, fontWeight: '800', color: '#111111', textAlign: 'center', marginBottom: 8 },
+  body: { fontSize: 14, lineHeight: 21, color: '#606E87', textAlign: 'center', marginBottom: 20 },
   docRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F2F3F5',
+    backgroundColor: '#F3F4F6',
     borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 14,
     marginBottom: 10,
     overflow: 'hidden',
   },
-  docRowText: { flex: 1, fontSize: 15, fontWeight: '600', color: '#1E1E1E', marginLeft: 12 },
+  docRowText: { flex: 1, fontSize: 15, fontWeight: '600', color: '#111111', marginLeft: 12 },
   agree: { marginTop: 10 },
-  error: { color: '#D93025', fontSize: 13, marginTop: 10 },
+  error: { color: '#F32C26', fontSize: 13, marginTop: 10 },
   cta: {
     backgroundColor: GREEN,
     borderRadius: 26,
@@ -182,5 +182,5 @@ const styles = StyleSheet.create({
   ctaDim: { opacity: 0.55 },
   ctaText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800', letterSpacing: 0.3 },
   logout: { alignSelf: 'center', marginTop: 16, padding: 6 },
-  logoutText: { color: '#6B6B6B', fontSize: 14, fontWeight: '600' },
+  logoutText: { color: '#606E87', fontSize: 14, fontWeight: '600' },
 });

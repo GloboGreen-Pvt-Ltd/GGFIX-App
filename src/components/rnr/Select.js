@@ -19,7 +19,7 @@ export function Select({ value, options = [], placeholder = 'Select…', onChang
         )}
       >
         <Text className={cn(selected ? 'text-text' : 'text-text-muted')} style={{ fontSize: rf(16) }}>{label}</Text>
-        <Ionicons name="chevron-down" size={16} color="#64748B" />
+        <Ionicons name="chevron-down" size={16} color="#606E87" />
       </Pressable>
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable className="flex-1 bg-black/50 justify-center px-6" onPress={() => setOpen(false)}>

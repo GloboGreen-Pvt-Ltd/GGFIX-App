@@ -13,7 +13,7 @@ import RepairSelectAddressScreen from './RepairSelectAddressScreen';
 import RepairPickupSlotScreen from './RepairPickupSlotScreen';
 import RepairCompleteOrderScreen from './RepairCompleteOrderScreen';
 import RepairConfirmationScreen from './RepairConfirmationScreen';
-import RepairOrderDetailsScreen from './RepairOrderDetailsScreen';
+import PickupDetailsScreen from './PickupDetailsScreen';
 import ServiceTicketDetailsScreen from './ServiceTicketDetailsScreen';
 import RepairOrderHistoryScreen from './RepairOrderHistoryScreen';
 import RepairPickupStatusScreen from './RepairPickupStatusScreen';
@@ -22,12 +22,14 @@ import ServiceReceiptScreen from './ServiceReceiptScreen';
 import InvoiceReceiptScreen from './InvoiceReceiptScreen';
 import ShopChatScreen from './ShopChatScreen';
 import { rf } from '../../../utils/responsive';
+import { screenRefreshLayout } from '../../../components/ScreenRefresh';
 
 const Stack = createNativeStackNavigator();
 
 export default function RepairServiceBookingCustomer() {
   return (
     <Stack.Navigator
+      screenLayout={screenRefreshLayout}
       initialRouteName="RepairSelectDevice"
       screenOptions={({ navigation }) => ({
         headerStyle: { backgroundColor: colors.headerBg, height: 52 },
@@ -53,7 +55,7 @@ export default function RepairServiceBookingCustomer() {
       <Stack.Screen name="RepairPickupSlot" component={RepairPickupSlotScreen} options={{ title: 'Select Pickup Slot' }} />
       <Stack.Screen name="RepairCompleteOrder" component={RepairCompleteOrderScreen} options={{ title: 'Complete Order' }} />
       <Stack.Screen name="RepairConfirmation" component={RepairConfirmationScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="RepairOrderDetails" component={RepairOrderDetailsScreen} options={{ title: 'View Details' }} />
+      <Stack.Screen name="RepairOrderDetails" component={PickupDetailsScreen} options={{ title: 'Pickup Details' }} />
       <Stack.Screen name="ServiceTicketDetails" component={ServiceTicketDetailsScreen} options={{ title: 'View Details' }} />
       <Stack.Screen name="RepairOrderHistory" component={RepairOrderHistoryScreen} options={{ title: 'Service History' }} />
       <Stack.Screen name="RepairPickupStatus" component={RepairPickupStatusScreen} options={{ title: 'Pickup Status' }} />
