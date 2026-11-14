@@ -13,4 +13,19 @@ config.resolver.blockList = [
   /node_modules[\\/].*[\\/]build[\\/]classes[\\/].*/,
 ];
 
+// App code under src/ imports 'react-native' through src/shims/react-native.js
+// (adds screen-level pull-to-refresh to vertical lists). The shim itself and
+// node_modules still get the real package.
+const path = require('path');
+const SRC = (path.join(__dirname, 'src') + path.sep).toLowerCase();
+const SHIM = path.join(__dirname, 'src', 'shims', 'react-native.js');
+const SHIM_LC = SHIM.toLowerCase();
+const prevResolve = config.resolver.resolveRequest;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (moduleName === 'react-native' && context.originModulePath.toLowerCase().startsWith(SRC) && context.originModulePath.toLowerCase() !== SHIM_LC) {
+    return { type: 'sourceFile', filePath: SHIM };
+  }
+  return prevResolve ? prevResolve(context, moduleName, platform) : context.resolveRequest(context, moduleName, platform);
+};
+
 module.exports = withNativeWind(config, { input: './global.css' });

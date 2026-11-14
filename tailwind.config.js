@@ -8,67 +8,24 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Primary — emerald green
-        primary: {
-          DEFAULT: '#004C40',
-          light: '#00695C',
-          dark: '#003830',
-          soft: '#DCFCE7',
-          // A real teal ramp. The scale was left half-converted by the sweep -
-          // 400/800/900 were still Tailwind green under a teal DEFAULT, so any
-          // future `bg-primary-800` would have painted green.
-          50:  '#E6F0EE',
-          100: '#DCFCE7',
-          200: '#B2D8D0',
-          300: '#7FB8AE',
-          400: '#4D9A8C',
-          500: '#00695C',
-          600: '#004C40',
-          700: '#004037',
-          800: '#003830',
-          900: '#002A24',
-        },
-        // Accent — vivid orange
-        accent: {
-          DEFAULT: '#FF7A00',
-          light: '#FF9A3D',
-          dark: '#E56A00',
-          soft: '#FFEDD5',
-          50: '#FFF7ED',
-          100: '#FFEDD5',
-          200: '#FED7AA',
-          300: '#FDBA74',
-          400: '#FB923C',
-          500: '#FF7A00',
-          600: '#E56A00',
-          700: '#C2410C',
-          800: '#9A3412',
-          900: '#7C2D12',
-        },
-        // Surfaces
+        // GGShopIndia palette (see src/theme/colors.js). Lighter steps are the
+        // colour blended with white.
+        primary: { DEFAULT: '#035C6C', light: '#035C6C', dark: '#035C6C', soft: '#E5F3F5', 50: '#E5F3F5', 100: '#E5F3F5', 200: '#C7E6EA', 300: '#9ABEC4', 400: '#035C6C', 500: '#035C6C', 600: '#035C6C', 700: '#035C6C', 800: '#035C6C', 900: '#035C6C' },
+        accent: { DEFAULT: '#FAA700', light: '#FAA700', dark: '#FAA700', soft: '#FFF4D6', 50: '#FFF4D6', 100: '#FFF4D6', 200: '#FDE3A3', 300: '#FDE3A3', 400: '#FAA700', 500: '#FAA700', 600: '#FAA700', 700: '#FAA700', 800: '#FAA700', 900: '#FAA700' },
         background: '#FFFFFF',
         card: '#FFFFFF',
-        surface: {
-          DEFAULT: '#FFFFFF',
-          muted: '#F1F3F5',
-        },
-        // Text
-        text: {
-          DEFAULT: '#0F172A',
-          muted: '#64748B',
-          subtle: '#94A3B8',
-        },
-        // Lines
-        border: {
-          DEFAULT: '#E5E7EB',
-          strong: '#D1D5DB',
-        },
-        // Status
-        success: '#004C40',
-        warning: '#F59E0B',
-        danger: '#EF4444',
-        error: '#EF4444',
-        info: '#0EA5E9',
+        surface: { DEFAULT: '#FFFFFF', muted: '#F3F4F6' },
+        text: { DEFAULT: '#1C3053', muted: '#606E87', subtle: '#8E97A9' },
+        border: { DEFAULT: '#E8EAEE', strong: '#D2D6DD' },
+        success: '#609138',
+        warning: '#FAA700',
+        danger: '#F32C26',
+        error: '#F32C26',
+        info: '#0788C9',
+        navy: '#1C3053',
+        link: '#0788C9',
+        ink: '#111111',
+        lightgray: '#F3F4F6',
       },
       fontFamily: {
         sans: ['System'],

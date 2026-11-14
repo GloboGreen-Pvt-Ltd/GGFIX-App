@@ -366,3 +366,9 @@ export async function getAppContent(code) {
 export async function getSupportContacts() {
   return unwrap(await masterApi.get('/master/support-contacts'));
 }
+
+/** "SM-S921B / SM-S921E" or ["…"] → unique model codes (same helper as the staff app). */
+export function parseModelNumbers(mn) {
+  const raw = Array.isArray(mn) ? mn.map((x) => String(x).trim()) : String(mn || '').split(/[/,;]+/).map((x) => x.trim());
+  return [...new Set(raw.filter(Boolean))];
+}

@@ -1,34 +1,25 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Image, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Platform, Pressable, ScrollView, TextInput, View, useWindowDimensions } from 'react-native';
 import {
-  Smartphone, Laptop, Watch, Tablet, Headphones, Volume2, ChevronRight, Search, X,
+  Smartphone, Laptop, Watch, Tablet, Headphones, Volume2, Search, X,
 } from 'lucide-react-native';
-import { EmptyState, Loader, ScreenHeader } from '../../../components/rnr';
+import { EmptyState, Loader } from '../../../components/rnr';
 import { getDeviceCategories, getCategoryMenu, categoryMenuKey } from '../../../api/masterData';
-import { rf } from '../../../utils/responsive';
-import { BRAND } from '../../../theme/brand';
+import { DP, DP_COLUMN, DevicePickerHeader, DPSection, DPGridTile, DPNextBar, gridTileW } from './DevicePickerChrome';
 
-// Palette: 09AD2A · 1E1E1E · F8F8F8 · F3F3F3 · F3BF23 · F84141.
-const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
-const MINT = '#EAF8EC';
-const LINE = '#E6E6E6';
-const MUTED = '#6B6B6B';
-const cardShadow = { shadowColor: BRAND.ink, shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1 };
-
-// Fallback icon + subtitle per category code (same subtitles as the Repair tab).
-const CODE_META = {
-  MOBILE:        { icon: Smartphone, sub: 'Smartphones' },
-  SMARTPHONE:    { icon: Smartphone, sub: 'Smartphones' },
-  LAPTOP:        { icon: Laptop,     sub: 'Windows, MacBook' },
-  TABLET:        { icon: Tablet,     sub: 'iPad, Android Tablet' },
-  SMARTWATCH:    { icon: Watch,      sub: 'Apple, Samsung, Others' },
-  SMARTWATCHES:  { icon: Watch,      sub: 'Apple, Samsung, Others' },
-  AUDIO:         { icon: Headphones, sub: 'Earbuds, Headphones' },
-  AUDIO_DEVICE:  { icon: Headphones, sub: 'Earbuds, Headphones' },
-  AUDIO_DEVICES: { icon: Headphones, sub: 'Earbuds, Headphones' },
-  SPEAKER:       { icon: Volume2,    sub: 'Speakers' },
+// Fallback icon per category code when the API has no artwork.
+const CODE_ICON = {
+  MOBILE: Smartphone,
+  SMARTPHONE: Smartphone,
+  LAPTOP: Laptop,
+  TABLET: Tablet,
+  SMARTWATCH: Watch,
+  SMARTWATCHES: Watch,
+  AUDIO: Headphones,
+  AUDIO_DEVICE: Headphones,
+  AUDIO_DEVICES: Headphones,
+  SPEAKER: Volume2,
 };
-const DEFAULT_META = { icon: Smartphone, sub: 'Devices' };
 
 // Same order as the Home rails: Mobile, Laptop, Tablet, Smartwatch, Audio.
 const ORDER = ['mobile', 'laptop', 'tablet', 'smartwatch', 'audiodevice'];
@@ -37,47 +28,49 @@ const ORDER = ['mobile', 'laptop', 'tablet', 'smartwatch', 'audiodevice'];
 // for SELL, …). Saved-device (PROFILE) picks keep the plain category image.
 const MENU_TYPE = { REPAIR: 'REPAIR', SELL: 'SELL', OWNER_LIST: 'SELL', BUY: 'BUY' };
 
-// NOTE: Pressables take plain style objects only — NativeWind's cssInterop
-// drops function-form `style={({ pressed }) => ...}` on native.
-function CategoryRow({ c, art, onPress }) {
-  const [broken, setBroken] = useState(false);
-  const meta = CODE_META[(c.code || '').toUpperCase()] || DEFAULT_META;
-  const Icon = meta.icon;
-  const uri = !broken ? art : null;
+// Search only earns its space once the catalogue outgrows two grid rows.
+const SEARCH_MIN = 8;
+
+// Partner-style search field (48 high, soft grey, radius 12).
+function SearchField({ value, onChangeText, placeholder }) {
   return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={c.name}
-      className="active:opacity-85"
-      style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1, borderColor: LINE, paddingVertical: 8, paddingHorizontal: 10, marginBottom: 8, ...cardShadow }}
-    >
-      <View style={{ height: 48, width: 48, borderRadius: 24, backgroundColor: MINT, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', marginRight: 10 }}>
-        {uri ? (
-          <Image resizeMethod="resize" source={{ uri }} onError={() => setBroken(true)} style={{ width: 46, height: 46 }} resizeMode="contain" />
-        ) : (
-          <Icon size={22} color={GREEN_TEXT} />
-        )}
-      </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={{ fontSize: rf(13.5), fontWeight: '800', color: BRAND.ink }} numberOfLines={1}>{c.name}</Text>
-        <Text style={{ fontSize: rf(11), color: MUTED, marginTop: 1 }} numberOfLines={1}>{meta.sub}</Text>
-      </View>
-      <View style={{ height: 26, width: 26, borderRadius: 13, backgroundColor: MINT, alignItems: 'center', justifyContent: 'center' }}>
-        <ChevronRight size={15} color={GREEN_TEXT} />
-      </View>
-    </Pressable>
+    <View style={{ flexDirection: 'row', alignItems: 'center', height: 48, borderRadius: 12, paddingHorizontal: 12, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#F3F4F6', marginBottom: 12 }}>
+      <Search size={18} color={DP.muted} />
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor="#9CA3AF"
+        cursorColor={DP.teal}
+        returnKeyType="search"
+        accessibilityLabel={placeholder}
+        // Web only: drop the browser focus ring inside the rounded field.
+        style={[{ flex: 1, marginLeft: 8, paddingVertical: 0, fontSize: 14, color: DP.ink }, Platform.OS === 'web' ? { outlineStyle: 'none' } : null]}
+      />
+      {value ? (
+        <Pressable onPress={() => onChangeText('')} hitSlop={12} accessibilityRole="button" accessibilityLabel="Clear search">
+          <X size={16} color={DP.muted} />
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 
-export default function SelectCategoryScreen({ navigation, route }) {
-  const flow = route?.params?.flow || 'PROFILE';
+// Fallback icon for a category code (no artwork / failed image).
+export const categoryFallbackIcon = (code) => CODE_ICON[(code || '').toUpperCase()] || Smartphone;
+
+// Active categories in Home-rail order, plus this flow's admin "Category Menu"
+// artwork (falls back to the category's own image). `enabled` false skips the
+// fetch — the repair brand step only loads them when it picks the category.
+export function useDeviceCategories(flow, enabled = true) {
   const [cats, setCats] = useState([]);
   const [menuArt, setMenuArt] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [q, setQ] = useState('');
+  const [loading, setLoading] = useState(enabled);
 
   useEffect(() => {
+    if (!enabled) return undefined;
+    let alive = true;
+    setLoading(true);
     (async () => {
       try {
         const menuType = MENU_TYPE[flow];
@@ -86,18 +79,37 @@ export default function SelectCategoryScreen({ navigation, route }) {
           menuType ? getCategoryMenu(menuType).catch(() => []) : Promise.resolve([]),
         ]);
         const rank = (c) => { const i = ORDER.indexOf(categoryMenuKey(c.name || c.code)); return i === -1 ? ORDER.length : i; };
-        setCats((list || []).filter((c) => c.isActive !== false).sort((a, b) => rank(a) - rank(b)));
         // Active rows win over inactive ones with the same key.
         const art = {};
         (Array.isArray(menu) ? menu : [])
           .filter((m) => m && m.imageUrl && String(m.imageUrl).trim())
           .sort((a, b) => Number(a.isActive === true) - Number(b.isActive === true))
           .forEach((m) => { art[categoryMenuKey(m.menuName)] = String(m.imageUrl).trim(); });
+        if (!alive) return;
+        setCats((list || []).filter((c) => c.isActive !== false).sort((a, b) => rank(a) - rank(b)));
         setMenuArt(art);
       } catch (_) {}
-      setLoading(false);
+      if (alive) setLoading(false);
     })();
-  }, [flow]);
+    return () => { alive = false; };
+  }, [flow, enabled]);
+
+  const artFor = useCallback((c) => menuArt[categoryMenuKey(c.name)] || menuArt[categoryMenuKey(c.code)]
+    || c.imageUrl || (c.imageBase64 ? (String(c.imageBase64).startsWith('data:') ? c.imageBase64 : `data:image/png;base64,${c.imageBase64}`) : null), [menuArt]);
+
+  return { cats, loading, artFor };
+}
+
+export default function SelectCategoryScreen({ navigation, route }) {
+  const flow = route?.params?.flow || 'PROFILE';
+  const { cats, loading, artFor } = useDeviceCategories(flow);
+  const [q, setQ] = useState('');
+  const { width } = useWindowDimensions();
+
+  // 4 per row on phones, 6 on tablets (content capped at 720).
+  const cols = width >= 600 ? 6 : 4;
+  const tileW = gridTileW(Math.min(width, 720), cols);
+  const imgSize = width >= 600 ? 48 : 44;
 
   const filtered = useMemo(() => {
     if (!q.trim()) return cats;
@@ -107,60 +119,67 @@ export default function SelectCategoryScreen({ navigation, route }) {
 
   // Tap auto-advances straight to the brand step. Forward `editSellOrderId`
   // (set when entering the wizard from "Edit sell order") so SellComplete can
-  // PUT instead of POST at the end of the flow.
-  const onPick = (c) => navigation.navigate('SelectBrand', {
+  // PUT instead of POST at the end of the flow. `categoryImage` lets the next
+  // steps show the picked category as a card.
+  // Repair: a category chosen earlier (Home tile) shows as selected and Next
+  // continues with it; tapping any tile still moves straight on.
+  const presetId = String(route?.params?.categoryId || '');
+  const presetCode = String(route?.params?.categoryCode || '').toUpperCase();
+  const preset = presetId || presetCode
+    ? cats.find((c) => c.id === presetId
+      || (presetCode && (c.code || '').toUpperCase() === presetCode)
+      || (presetId && (c.code || '').toUpperCase() === presetId.toUpperCase()))
+    : null;
+
+  const onPick = (c, art) => navigation.navigate('SelectBrand', {
     flow,
     categoryId: c.id,
     categoryCode: (c.code || '').toUpperCase(),
     categoryName: c.name,
+    categoryImage: art || null,
     editSellOrderId: route?.params?.editSellOrderId,
   });
 
-  if (loading) return <Loader label="Loading categories..." />;
-
-  const headerTitle = flow === 'OWNER_LIST' ? 'Sell' : 'Select Category';
-  const artFor = (c) => menuArt[categoryMenuKey(c.name)] || menuArt[categoryMenuKey(c.code)]
-    || c.imageUrl || (c.imageBase64 ? (String(c.imageBase64).startsWith('data:') ? c.imageBase64 : `data:image/png;base64,${c.imageBase64}`) : null);
-
   return (
-    <View style={{ flex: 1, backgroundColor: BRAND.bg }}>
-      <ScreenHeader
-        title={headerTitle}
-        onBack={navigation.canGoBack() ? () => navigation.goBack() : undefined}
-      />
-      <View style={{ backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: LINE, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 10 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', height: 42, borderRadius: 12, paddingHorizontal: 12, backgroundColor: BRAND.line, borderWidth: 1, borderColor: LINE }}>
-          <Search size={17} color={BRAND.green} />
-          <TextInput
-            value={q}
-            onChangeText={setQ}
-            placeholder="Search category"
-            placeholderTextColor={MUTED}
-            returnKeyType="search"
-            accessibilityLabel="Search category"
-            // Web only: drop the browser focus ring inside the rounded field.
-            style={[{ flex: 1, marginLeft: 8, paddingVertical: 0, fontSize: rf(13.5), color: BRAND.ink }, Platform.OS === 'web' ? { outlineStyle: 'none' } : null]}
-          />
-          {q ? (
-            <Pressable onPress={() => setQ('')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear search">
-              <X size={16} color={MUTED} />
-            </Pressable>
-          ) : null}
-        </View>
-      </View>
-
-      <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 24 }}>
-        {filtered.length === 0 ? (
-          <EmptyState
-            accent={BRAND.green}
-            accentSoft={MINT}
-            title="No categories"
-            description={q ? `Nothing matches "${q.trim()}".` : "Master data isn't seeded yet."}
-          />
-        ) : (
-          filtered.map((c) => <CategoryRow key={c.id} c={c} art={artFor(c)} onPress={() => onPick(c)} />)
-        )}
-      </ScrollView>
+    <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+      <DevicePickerHeader navigation={navigation} title={flow === 'OWNER_LIST' ? 'Sell' : undefined} />
+      {loading ? (
+        <Loader label="Loading categories..." className="bg-white" />
+      ) : (
+        <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
+          <View style={[DP_COLUMN, { paddingHorizontal: 16 }]}>
+            <DPSection title="Category" />
+            {cats.length > SEARCH_MIN ? <SearchField value={q} onChangeText={setQ} placeholder="Search category" /> : null}
+            {filtered.length === 0 ? (
+              <EmptyState
+                accent={DP.teal}
+                accentSoft={DP.mint}
+                title="No categories"
+                description={q ? `Nothing matches "${q.trim()}".` : "Master data isn't seeded yet."}
+              />
+            ) : (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                {filtered.map((c) => {
+                  const art = artFor(c);
+                  return (
+                    <DPGridTile
+                      key={c.id}
+                      width={tileW}
+                      image={art}
+                      icon={categoryFallbackIcon(c.code)}
+                      label={c.name}
+                      imageSize={imgSize}
+                      minHeight={96}
+                      selected={preset?.id === c.id}
+                      onPress={() => onPick(c, art)}
+                    />
+                  );
+                })}
+              </View>
+            )}
+          </View>
+        </ScrollView>
+      )}
     </View>
   );
 }

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Image, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { Image, Linking, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { createAudioPlayer } from 'expo-audio';
 import {
@@ -13,6 +13,11 @@ import {
   PackageX,
   Play,
   Pause,
+  Clock,
+  CalendarDays,
+  ScanLine,
+  Lock,
+  CheckCircle2,
 } from 'lucide-react-native';
 import {
   Card,
@@ -20,20 +25,22 @@ import {
   Badge,
   EmptyState,
 } from '../../../components/rnr';
-import { getServiceTicket } from '../../../api/orders';
+import { getServiceTicket, getRepairBooking } from '../../../api/orders';
+import ServiceHistoryCard from './ServiceHistoryCard';
+import InvoiceCard from './InvoiceCard';
 import { rf } from '../../../utils/responsive';
 import { BRAND } from '../../../theme/brand';
 
-// Brand palette (09AD2A · 1E1E1E · F8F8F8 · F3F3F3 · F3BF23 · F84141).
-const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
-const MINT = '#EAF8EC';
-const SOFT_MINT = '#F4FBF5';
-const GREEN_LINE = 'rgba(9,173,42,0.45)';
-const YELLOW_SOFT = '#FEF6DA';
-const YELLOW_FAINT = '#FFFCF3';
-const RED_SOFT = '#FEECEC';
-const LINE = '#E6E6E6';
-const MUTED = '#6B6B6B';
+// Brand palette (035C6C · 111111 · F3F4F6 · F3F4F6 · FAA700 · F32C26).
+const GREEN_TEXT = '#035C6C'; // #035C6C shaded for text on white
+const MINT = '#E5F3F5';
+const SOFT_MINT = '#F0F8F9';
+const GREEN_LINE = 'rgba(3,92,108,0.45)';
+const YELLOW_SOFT = '#FFF4D6';
+const YELLOW_FAINT = '#FFF4D6';
+const RED_SOFT = '#FEEBEA';
+const LINE = '#E8EAEE';
+const MUTED = '#606E87';
 
 const fmtDateTime = (v) => {
   if (!v) return '-';
@@ -116,7 +123,7 @@ function parseTechnicianPhotos(raw) {
 // complianceImageUrls / complianceVerifiedAt) so the customer can review
 // what the technician verified without a second API call. Returns null when
 // the technician hasn't submitted a customer-visible note yet.
-function ComplianceNoteCard({ ticket }) {
+function ComplianceNoteCard({ ticket, embedded }) {
   const noteText = ticket?.complianceNote || null;
   const audioUrl = ticket?.complianceAudioUrl || null;
   const imageUrls = Array.isArray(ticket?.complianceImageUrls) ? ticket.complianceImageUrls : [];
@@ -155,8 +162,12 @@ function ComplianceNoteCard({ ticket }) {
     } catch (_) { /* best-effort playback */ }
   };
 
+  // Embedded inside Technician Details → plain block; otherwise its own card.
+  const Wrap = embedded ? View : Card;
+  const wrapProps = embedded ? { style: { marginTop: 4 } } : { className: 'rounded-2xl', style: { padding: 12, marginBottom: 10, borderRadius: 16, borderWidth: 1, borderColor: LINE } };
+
   return (
-    <Card className="rounded-2xl" style={{ padding: 12, marginBottom: 10, borderRadius: 16, borderWidth: 1, borderColor: LINE }}>
+    <Wrap {...wrapProps}>
       <View className="flex-row items-center mb-3">
         <View
           className="w-8 h-8 rounded-full items-center justify-center mr-2.5"
@@ -250,7 +261,7 @@ function ComplianceNoteCard({ ticket }) {
           ) : null}
         </View>
       ) : null}
-    </Card>
+    </Wrap>
   );
 }
 
@@ -278,6 +289,31 @@ const BRAND_GREEN_DARK = GREEN_TEXT;
 // Swiggy/Zomato-style section card: tinted icon chip on the left + bold
 // title. Caller passes the accent (icon color); the tint is derived from
 // the same hex so the chip always feels coherent with the icon.
+// Partner booking-details style: icon disc + spaced caps label + rule.
+const REF_SHADOW = { shadowColor: '#111111', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1 };
+function RefSection({ icon: Icon, label }) {
+  return (
+    <View className="flex-row items-center pt-2 pb-2">
+      <View className="w-7 h-7 rounded-full items-center justify-center" style={{ backgroundColor: BRAND_GREEN_DARK }}>
+        <Icon size={14} color="#FFFFFF" />
+      </View>
+      <Text className="text-text font-extrabold ml-2" style={{ fontSize: rf(12.5), letterSpacing: 1.6 }}>{label}</Text>
+      <View className="flex-1 h-px ml-2" style={{ backgroundColor: '#E5E7EB' }} />
+    </View>
+  );
+}
+function RefRow({ icon: Icon, tint, label, value, children }) {
+  return (
+    <View className="flex-row items-center py-1.5">
+      <View className="w-8 h-8 rounded-lg items-center justify-center mr-3" style={{ backgroundColor: tint }}>
+        <Icon size={15} color="#FFFFFF" />
+      </View>
+      <Text className="text-text-muted" style={{ fontSize: rf(12), width: 104, paddingRight: 6 }}>{label}</Text>
+      {children || <Text className="flex-1 text-text font-bold" style={{ fontSize: rf(13) }} numberOfLines={2}>{value}</Text>}
+    </View>
+  );
+}
+
 function SectionCard({ icon: Icon, color, title, children, subtitle, right }) {
   const accent = color || BRAND_GREEN;
   const tint = accent + '1A'; // 10% alpha tint for the icon-chip background
@@ -314,8 +350,9 @@ function SectionCard({ icon: Icon, color, title, children, subtitle, right }) {
 }
 
 export default function ServiceTicketDetailsScreen({ navigation, route }) {
-  const { ticketId, fromOrders } = route.params || {};
+  const { ticketId, fromOrders, bookingId } = route.params || {};
   const [t, setT] = useState(null);
+  const [booking, setBooking] = useState(null); // events for the Service History card
   const [loading, setLoading] = useState(true);
 
   const goHome = useCallback(() => {
@@ -325,7 +362,7 @@ export default function ServiceTicketDetailsScreen({ navigation, route }) {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: 'View Details',
+      title: 'Booking Details',
       headerBackAction: goHome,
     });
   }, [navigation, goHome]);
@@ -334,16 +371,45 @@ export default function ServiceTicketDetailsScreen({ navigation, route }) {
     let cancelled = false;
     (async () => {
       try {
-        const resp = await getServiceTicket(ticketId);
-        if (!cancelled) setT(resp);
+        const [resp, bk] = await Promise.all([
+          getServiceTicket(ticketId),
+          bookingId ? getRepairBooking(bookingId).catch(() => null) : Promise.resolve(null),
+        ]);
+        if (!cancelled) { setT(resp); setBooking(bk); }
       } catch (_) {
         if (!cancelled) setT(null);
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
-  }, [ticketId]));
+    // Live sync with the Partner App: re-read the booking events (and ticket)
+    // every 10 s while this screen is open — new completed steps appear by themselves.
+    const live = setInterval(async () => {
+      const [resp, bk] = await Promise.all([
+        getServiceTicket(ticketId).catch(() => null),
+        bookingId ? getRepairBooking(bookingId).catch(() => null) : Promise.resolve(null),
+      ]);
+      if (cancelled) return;
+      if (resp) setT(resp);
+      if (bk) setBooking(bk);
+    }, 10000);
+    return () => { cancelled = true; clearInterval(live); };
+  }, [ticketId, bookingId]));
+
+  // Pull-to-refresh: re-read ticket + booking and the delivery card.
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    setRefreshKey((k) => k + 1);
+    const [resp, bk] = await Promise.all([
+      getServiceTicket(ticketId).catch(() => null),
+      bookingId ? getRepairBooking(bookingId).catch(() => null) : Promise.resolve(null),
+    ]);
+    if (resp) setT(resp);
+    if (bk) setBooking(bk);
+    setRefreshing(false);
+  }, [ticketId, bookingId]);
 
   if (loading) return <Loader label="Loading order..." />;
   if (!t) {
@@ -398,7 +464,7 @@ export default function ServiceTicketDetailsScreen({ navigation, route }) {
 
   return (
     <View className="flex-1" style={{ backgroundColor: BRAND.bg }}>
-      <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 28 }} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#035C6C" colors={['#035C6C']} />}>
         <View style={centered}>
           {/* Hero device card — left green accent bar, 72×90 thumbnail,
               tracking pill, big device name, color + status chips. The
@@ -462,87 +528,106 @@ export default function ServiceTicketDetailsScreen({ navigation, route }) {
             </View>
           </Card>
 
-          {/* Price summary — green icon, green primary money. Final amount
-              gets the brand-green emphasis Swiggy-style ("Pay" CTAs). */}
-          <SectionCard icon={IndianRupee} color={BRAND_GREEN} title="Price Summary">
+          {/* Invoice — View / Download, before Service History. */}
+          <View style={{ marginBottom: 12 }}>
+            <InvoiceCard ticket={t} booking={booking} items={priceItems} total={priceTotal} navigation={navigation} />
+          </View>
+
+          {/* Service History — Pickup Status design, before Price Summary. */}
+          {booking ? (
+            <View style={{ marginBottom: 12 }}>
+              <ServiceHistoryCard events={booking.events} status={booking.status || t.status} bookingNumber={booking.bookingNumber || t.bookingNumber} />
+            </View>
+          ) : null}
+
+          {/* Price summary — Partner booking-details design. */}
+          <View className="bg-card rounded-2xl p-4 mb-3" style={REF_SHADOW}>
+            <RefSection icon={IndianRupee} label="PRICE SUMMARY" />
             {Array.isArray(priceItems) && priceItems.length > 0 ? (
               priceItems.map((it, i) => (
-                <PriceLine key={i} index={i + 1} label={it?.label || it?.name} amount={it?.amount} />
+                <View key={i} className="flex-row items-center py-2" style={{ borderTopWidth: i === 0 ? 0 : 1, borderTopColor: MINT }}>
+                  <View className="w-6 h-6 rounded-lg items-center justify-center mr-2.5" style={{ backgroundColor: MINT }}>
+                    <Text className="font-extrabold" style={{ fontSize: rf(11), color: BRAND_GREEN_DARK }}>{i + 1}</Text>
+                  </View>
+                  <Text className="flex-1 text-text font-semibold" style={{ fontSize: rf(13) }} numberOfLines={1}>{it?.label || it?.name}</Text>
+                  <Text className="font-extrabold text-text" style={{ fontSize: rf(13) }}>{fmtMoney(it?.amount) || '₹0'}</Text>
+                </View>
               ))
             ) : (
-              <Text className="text-text-muted" style={{ fontSize: rf(12) }}>
-                {t.repairServicesSummary || 'No itemised pricing'}
-              </Text>
+              <Text className="text-text-muted" style={{ fontSize: rf(12) }}>{t.repairServicesSummary || 'No service items recorded.'}</Text>
             )}
-            <View
-              className="flex-row items-center justify-between mt-3 pt-3"
-              style={{ borderTopWidth: 1, borderTopColor: LINE }}
-            >
-              <Text className="font-extrabold text-text" style={{ fontSize: rf(13) }}>
-                {t.finalPrice != null ? 'Final Amount' : 'Estimated Amount'}
-              </Text>
-              <View
-                className="rounded-full px-3 py-1"
-                style={{ backgroundColor: MINT }}
-              >
-                <Text className="font-extrabold" style={{ fontSize: rf(14), color: BRAND_GREEN_DARK }}>
-                  {fmtMoney(priceTotal) || '-'}
-                </Text>
-              </View>
+            <View className="flex-row items-center mt-1 pt-2.5" style={{ borderTopWidth: 1, borderTopColor: '#E5E7EB' }}>
+              <Text className="flex-1 font-extrabold text-text" style={{ fontSize: rf(13) }}>{t.finalPrice != null ? 'Final Total' : 'Estimated Total'}</Text>
+              <Text className="font-extrabold" style={{ fontSize: rf(15), color: BRAND_GREEN_DARK }}>{fmtMoney(priceTotal) || '₹0'}</Text>
             </View>
-          </SectionCard>
 
-          {/* Complaint */}
-          <SectionCard icon={FileText} color={BRAND.ink} title="Complaint Issue">
-            <Text className="text-text leading-5" style={{ fontSize: rf(12.5) }}>{t.issueDescription || '-'}</Text>
-          </SectionCard>
-
-          {/* Schedule */}
-          <SectionCard icon={CalendarClock} color={BRAND.yellow} title="Service Schedule">
-            <View className="flex-row py-1.5">
-              <Text className="text-text-muted" style={{ fontSize: rf(11), width: 96 }}>Approx. Ready</Text>
-              <Text className="font-bold text-text flex-1" style={{ fontSize: rf(12) }}>{fmtDateTime(t.estimatedReadyAt)}</Text>
+            {/* Service info — same summary card (Partner design). */}
+            <View style={{ marginTop: 14 }}>
+              <RefSection icon={Wrench} label="SERVICE INFO" />
             </View>
-            <View className="flex-row py-1.5">
-              <Text className="text-text-muted" style={{ fontSize: rf(11), width: 96 }}>Delivery</Text>
-              <Text className="font-bold text-text flex-1" style={{ fontSize: rf(12) }}>{fmtDateTime(t.estimatedDeliveryAt)}</Text>
-            </View>
-            <View className="flex-row items-center py-1.5">
-              <Text className="text-text-muted" style={{ fontSize: rf(11), width: 96 }}>Approval</Text>
-              <View
-                className="rounded-full px-2 py-0.5"
-                style={{ backgroundColor: approvalDone ? MINT : YELLOW_SOFT }}
-              >
-                <Text
-                  className="font-extrabold"
-                  style={{ fontSize: rf(10.5), color: approvalDone ? BRAND_GREEN_DARK : BRAND.ink }}
-                >
-                  {approvalDone ? 'DONE' : 'PENDING'}
-                </Text>
+            <RefRow icon={FileText} tint="#F59E0B" label="Complaint" value={t.issueDescription || '-'} />
+            <RefRow icon={Clock} tint="#3B9BD9" label="Booking Date & Time" value={fmtDateTime(t.estimatedReadyAt) || '-'} />
+            <RefRow icon={CalendarDays} tint="#7FA65A" label="Est. Delivery Date & Time" value={fmtDateTime(t.estimatedDeliveryAt) || '-'} />
+            {t.imei ? <RefRow icon={ScanLine} tint="#3F4A63" label="IMEI" value={String(t.imei)} /> : null}
+            <RefRow icon={ShieldCheck} tint={BRAND_GREEN_DARK} label="Approval">
+              <View className="flex-row items-center self-start rounded-full px-3 py-1" style={{ backgroundColor: approvalDone ? MINT : YELLOW_SOFT }}>
+                {approvalDone ? <CheckCircle2 size={13} color={BRAND_GREEN_DARK} /> : <Clock size={13} color={BRAND.ink} />}
+                <Text className="font-extrabold ml-1" style={{ fontSize: rf(12), color: approvalDone ? BRAND_GREEN_DARK : BRAND.ink }}>{approvalDone ? 'Approved' : 'Pending'}</Text>
               </View>
-            </View>
-          </SectionCard>
+            </RefRow>
+            {t.deviceSecurityType && String(t.deviceSecurityType).toUpperCase() !== 'NONE' ? (
+              <RefRow icon={Lock} tint="#EF4444" label="Security" value={`${String(t.deviceSecurityType).replace(/_/g, ' ')} · ••••••`} />
+            ) : null}
+            {missingPartsLabels.length ? (
+              <RefRow icon={PackageX} tint={BRAND.red} label="Missing / Damage">
+                <View className="flex-1 flex-row flex-wrap">
+                  {missingPartsLabels.map((p, i) => (
+                    <View key={i} className="rounded-full px-2.5 py-1 mr-1 mb-1" style={{ backgroundColor: RED_SOFT }}>
+                      <Text className="font-extrabold" style={{ fontSize: rf(11), color: BRAND.red }}>{p}</Text>
+                    </View>
+                  ))}
+                </View>
+              </RefRow>
+            ) : null}
+
+            {/* Technician details — the technician's Issue Verified & Updated note; hidden until submitted. */}
+            {(t.complianceNote || t.complianceAudioUrl || (Array.isArray(t.complianceImageUrls) && t.complianceImageUrls.length)) ? (
+              <>
+                <View style={{ marginTop: 14 }}>
+                  <RefSection icon={UserCog} label="TECHNICIAN DETAILS" />
+                </View>
+                <ComplianceNoteCard ticket={t} embedded />
+              </>
+            ) : null}
+          </View>
 
           {/* Device photos uploaded by the customer at booking time. */}
           {(photos.front || photos.back || photos.video) ? (
             <SectionCard icon={Camera} color={BRAND_GREEN} title="Device Photos" subtitle="Submitted by you">
               <View className="flex-row -mx-1">
-                {['front', 'back', 'video'].map((k) => (
-                  <View key={k} className="flex-1 px-1">
+                {/* Video tile only when a video was uploaded; tap plays it. */}
+                {['front', 'back', ...(photos.video ? ['video'] : [])].map((k) => (
+                  <View key={k} className="px-1" style={{ width: 120 }}>
+                    <TouchableOpacity activeOpacity={0.85} disabled={k !== 'video'} onPress={() => Linking.openURL(photos.video).catch(() => {})}>
                     <View
                       className="rounded-xl items-center justify-center overflow-hidden"
                       style={{
-                        height: 84,
+                        height: 112,
                         backgroundColor: SOFT_MINT,
                         borderWidth: 1.5, borderStyle: 'dashed', borderColor: GREEN_LINE,
                       }}
                     >
-                      {photos[k] ? (
+                      {k === 'video' ? (
+                        <View style={{ height: 34, width: 34, borderRadius: 17, backgroundColor: BRAND_GREEN, alignItems: 'center', justifyContent: 'center' }}>
+                          <Play size={16} color="#FFFFFF" fill="#FFFFFF" />
+                        </View>
+                      ) : photos[k] ? (
                         <Image source={{ uri: photos[k] }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
                       ) : (
                         <Camera size={20} color={BRAND_GREEN} />
                       )}
                     </View>
+                    </TouchableOpacity>
                     <Text
                       className="font-extrabold text-center mt-1.5"
                       style={{ fontSize: rf(10), color: BRAND_GREEN_DARK }}
@@ -555,117 +640,6 @@ export default function ServiceTicketDetailsScreen({ navigation, route }) {
             </SectionCard>
           ) : null}
 
-          {/* Security type — value masked on backend for customer reads */}
-          <SectionCard icon={ShieldCheck} color={BRAND_GREEN} title="Device Security">
-            {t.deviceSecurityType && t.deviceSecurityType !== 'NONE' ? (
-              <View className="flex-row items-center">
-                <View
-                  className="rounded-full px-2.5 py-1"
-                  style={{ backgroundColor: MINT }}
-                >
-                  <Text className="font-extrabold" style={{ fontSize: rf(11), color: BRAND_GREEN_DARK }}>
-                    {t.deviceSecurityType}
-                  </Text>
-                </View>
-                <Text className="text-text-muted ml-2" style={{ fontSize: rf(12) }}>••••••  set</Text>
-              </View>
-            ) : (
-              <Text className="text-text-muted" style={{ fontSize: rf(12) }}>Not set</Text>
-            )}
-          </SectionCard>
-
-          {/* Missing parts */}
-          <SectionCard icon={PackageX} color={BRAND.red} title="Missing / Damage Parts">
-            {missingPartsLabels.length ? (
-              <View className="flex-row flex-wrap -mx-0.5">
-                {missingPartsLabels.map((p, i) => (
-                  <View
-                    key={i}
-                    className="rounded-full px-2.5 py-1 mr-1 mb-1"
-                    style={{ backgroundColor: RED_SOFT }}
-                  >
-                    <Text className="font-extrabold" style={{ fontSize: rf(11), color: BRAND.red }}>{p}</Text>
-                  </View>
-                ))}
-              </View>
-            ) : (
-              <Text className="text-text-muted" style={{ fontSize: rf(12) }}>Nil</Text>
-            )}
-          </SectionCard>
-
-          {/* Technician — assigned to the booking. Empty when none yet. */}
-          {t.assignedTechnicianName ? (
-            <SectionCard
-              icon={UserCog}
-              color={BRAND_GREEN}
-              title={t.assignedTechnicianName}
-              subtitle={t.assignedTechnicianCode ? `Technician · ${t.assignedTechnicianCode}` : 'Technician'}
-            >
-              {technicianPhotos.length > 0 ? (
-                <>
-                  <Text
-                    className="font-extrabold uppercase mb-1.5"
-                    style={{ fontSize: rf(10), color: BRAND_GREEN_DARK, letterSpacing: 0.8 }}
-                  >
-                    Photos of your device
-                  </Text>
-                  <View className="flex-row -mx-1">
-                    {[0, 1, 2].map((i) => (
-                      <View key={i} style={{ width: '33.333%' }} className="p-1">
-                        <View
-                          className="rounded-xl items-center justify-center overflow-hidden"
-                          style={{
-                            aspectRatio: 1,
-                            backgroundColor: SOFT_MINT,
-                            borderWidth: 1.5, borderStyle: 'dashed', borderColor: GREEN_LINE,
-                          }}
-                        >
-                          {technicianPhotos[i] ? (
-                            <Image source={{ uri: technicianPhotos[i] }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-                          ) : (
-                            <View className="items-center px-2">
-                              <Camera size={18} color={BRAND_GREEN} />
-                              <Text className="text-text-muted text-center mt-1" style={{ fontSize: rf(9) }}>Awaiting photo</Text>
-                            </View>
-                          )}
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                </>
-              ) : (
-                <Text className="text-text-muted italic" style={{ fontSize: rf(11) }}>No photos uploaded yet.</Text>
-              )}
-            </SectionCard>
-          ) : technicianPhotos.length > 0 ? (
-            <SectionCard icon={Camera} color={BRAND_GREEN} title="Technician Photos">
-              <View className="flex-row -mx-1">
-                {[0, 1, 2].map((i) => (
-                  <View key={i} style={{ width: '33.333%' }} className="p-1">
-                    <View
-                      className="rounded-xl items-center justify-center overflow-hidden"
-                      style={{
-                        aspectRatio: 1,
-                        backgroundColor: SOFT_MINT,
-                        borderWidth: 1.5, borderStyle: 'dashed', borderColor: GREEN_LINE,
-                      }}
-                    >
-                      {technicianPhotos[i] ? (
-                        <Image source={{ uri: technicianPhotos[i] }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-                      ) : (
-                        <Camera size={18} color={BRAND_GREEN} />
-                      )}
-                    </View>
-                  </View>
-                ))}
-              </View>
-            </SectionCard>
-          ) : null}
-
-          {/* Technician Issue Verified & Updated — populated from the
-              latest customer-visible repair_notes row by ticket-service.
-              Renders nothing when no compliance note exists yet. */}
-          <ComplianceNoteCard ticket={t} />
         </View>
       </ScrollView>
     </View>

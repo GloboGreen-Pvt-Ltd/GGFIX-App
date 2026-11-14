@@ -4,9 +4,9 @@ import { Plus, X } from 'lucide-react-native';
 import { rf } from '../../../utils/responsive';
 import { BRAND } from '../../../theme/brand';
 
-const GREEN_TEXT = '#078F23';
-const MINT = '#EAF8EC';
-const LINE = '#E6E6E6';
+const GREEN_TEXT = '#035C6C';
+const MINT = '#E5F3F5';
+const LINE = '#E8EAEE';
 
 // Type-in dialog for a brand / model the catalogue doesn't carry ("Other").
 // Repair booking only — the typed name rides along on that booking and is
@@ -21,7 +21,7 @@ export default function OtherNameDialog({
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <Pressable
           onPress={onCancel}
-          style={{ flex: 1, backgroundColor: 'rgba(30,30,30,0.55)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18 }}
+          style={{ flex: 1, backgroundColor: 'rgba(17,17,17,0.55)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18 }}
         >
           <Pressable
             onPress={(e) => e.stopPropagation?.()}

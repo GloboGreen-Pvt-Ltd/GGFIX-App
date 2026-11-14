@@ -47,7 +47,7 @@ export function BottomActionBar({
       className={cn('absolute left-0 right-0 bottom-0 bg-card border-t border-border px-4 pt-3', className)}
       style={{
         paddingBottom: resolvedBottom,
-        shadowColor: '#0F172A',
+        shadowColor: '#1C3053',
         shadowOpacity: 0.10,
         shadowRadius: 16,
         shadowOffset: { width: 0, height: -6 },

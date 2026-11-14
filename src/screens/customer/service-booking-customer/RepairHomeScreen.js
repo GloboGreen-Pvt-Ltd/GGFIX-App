@@ -10,15 +10,17 @@ import { getDeviceCategories, getBanners, getCategoryMenu, categoryMenuKey, getR
 import { rf } from '../../../utils/responsive';
 import RepairArt, { serviceArtKey } from '../../../components/RepairArt';
 import PageHeader, { HeaderIconButton, HEADER } from '../../../components/PageHeader';
+import { cardPastels } from '../../../theme/categoryTints';
+import CategoryGridCard from '../../../components/CategoryGridCard';
 
-// Brand palette (Partner app): green #09AD2A, ink #1E1E1E, neutrals.
-const GREEN = '#09AD2A';
-const GREEN_DEEP = '#078F23';   // green text
-const MINT = '#EAF8EC';
-const INK = '#1E1E1E';
-const MUTED = '#6B6B6B';
-const LINE = '#E6E6E6';
-const PAGE_BG = '#F8F8F8';
+// Brand palette (Partner app): green #035C6C, ink #111111, neutrals.
+const GREEN = '#035C6C';
+const GREEN_DEEP = '#035C6C';   // green text
+const MINT = '#E5F3F5';
+const INK = '#111111';
+const MUTED = '#606E87';
+const LINE = '#E8EAEE';
+const PAGE_BG = '#F3F4F6';
 
 const MAX_W = 720;
 const PAD = 16;
@@ -60,39 +62,6 @@ function imgUri(item) {
   return url || null;
 }
 
-// NOTE: every Pressable here takes a plain style object. NativeWind's
-// cssInterop wrapper drops function-form `style={({ pressed }) => ...}` on
-// native, which collapsed this layout on Android; press feedback uses the
-// `active:` className instead.
-function CategoryTile({ name, subtitle, uri, iconKey, width, onPress }) {
-  const [broken, setBroken] = useState(false);
-  const Icon = ICONS[iconKey] || Wrench;
-  const well = Math.max(32, Math.min(42, Math.round(width * 0.66)));
-  return (
-    <Pressable
-      onPress={onPress}
-      className="active:opacity-80"
-      accessibilityRole="button"
-      accessibilityLabel={`${name}${subtitle ? `, ${subtitle}` : ''}`}
-      style={{
-        width, alignItems: 'center', paddingTop: 6, paddingBottom: 5, paddingHorizontal: 2,
-        borderRadius: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: LINE,
-      }}
-    >
-      <View style={{ width: well, height: well, borderRadius: well / 2, backgroundColor: MINT, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-        {uri && !broken ? (
-          <Image resizeMethod="resize" source={{ uri }} resizeMode="contain" onError={() => setBroken(true)} style={{ width: '84%', height: '84%' }} />
-        ) : (
-          <Icon size={Math.round(well * 0.46)} color={GREEN} strokeWidth={1.8} />
-        )}
-      </View>
-      <Text numberOfLines={2} style={{ marginTop: 4, fontSize: rf(9), lineHeight: rf(11.5), minHeight: rf(23), letterSpacing: -0.2, fontWeight: '800', color: INK, textAlign: 'center', alignSelf: 'stretch' }}>
-        {name}
-      </Text>
-    </Pressable>
-  );
-}
-
 // "Services Available" card (reference style): two-tone art, caps label.
 function ServiceTile({ name, width }) {
   return (
@@ -100,7 +69,7 @@ function ServiceTile({ name, width }) {
       accessibilityLabel={name}
       style={{
         width, height: 116, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6,
-        borderRadius: 10, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#F3F3F3',
+        borderRadius: 10, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#F3F4F6',
         shadowColor: INK, shadowOpacity: 0.07, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 2,
       }}
     >
@@ -217,13 +186,15 @@ export default function RepairHomeScreen({ navigation }) {
   const serviceW = Math.floor((availableWidth - 20) / 3);
   const bannerW = pageW - PAD * 2;
   const bannerH = Math.round(bannerW / bannerRatio);
-  // Category card: every tile in one compact row (scrolls only past 5).
+  // Category card: a 3-column grid of cards that wraps (5 → 3 + 2).
   const cardPad = width < 360 ? 8 : 10;
-  const tileGap = width < 360 ? 5 : 6;
+  const tileGap = width < 360 ? 8 : 10;
   const inner = availableWidth - cardPad * 2 - 2; // minus the card's 1px borders
-  const cols = Math.max(1, Math.min(5, cats.length));
-  const tileW = cats.length > 5 ? 64 : Math.floor((inner - tileGap * (cols - 1)) / cols);
+  const cols = 3;
+  const tileW = Math.floor((inner - tileGap * (cols - 1)) / cols);
   const centered = { width: '100%', maxWidth: MAX_W, alignSelf: 'center' };
+  // Pastel per category card (Repair colours, shared with Home).
+  const tones = cardPastels(0, cats.map((c) => c.code || c.name));
 
   const goToDevice = (extra = {}) =>
     navigation.navigate('RepairSelectDevice', { flow: 'REPAIR', ...extra });
@@ -253,11 +224,11 @@ export default function RepairHomeScreen({ navigation }) {
           accessibilityRole="search"
           style={{
             flexDirection: 'row', alignItems: 'center', height: 46, marginTop: 14, paddingHorizontal: 14,
-            borderRadius: 16, backgroundColor: '#F3F3F3', borderWidth: 1, borderColor: LINE,
+            borderRadius: 16, backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: LINE,
           }}
         >
           <Search size={18} color={HEADER.action} />
-          <Text numberOfLines={1} style={{ flex: 1, marginLeft: 10, color: '#8E8E8E', fontSize: rf(13) }}>
+          <Text numberOfLines={1} style={{ flex: 1, marginLeft: 10, color: '#8E97A9', fontSize: rf(13) }}>
             Search repairs, devices, brands...
           </Text>
         </Pressable>
@@ -306,7 +277,7 @@ export default function RepairHomeScreen({ navigation }) {
               {banners.length > 1 ? (
                 <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 6 }}>
                   {banners.map((b, i) => (
-                    <View key={b.key} style={{ height: 6, width: i === bannerIndex ? 18 : 6, borderRadius: 3, marginHorizontal: 3, backgroundColor: i === bannerIndex ? GREEN : 'rgba(30,30,30,0.18)' }} />
+                    <View key={b.key} style={{ height: 6, width: i === bannerIndex ? 18 : 6, borderRadius: 3, marginHorizontal: 3, backgroundColor: i === bannerIndex ? GREEN : 'rgba(17,17,17,0.18)' }} />
                   ))}
                 </View>
               ) : null}
@@ -324,7 +295,7 @@ export default function RepairHomeScreen({ navigation }) {
             </View>
           )}
 
-          {/* Category picker (Partner "Select your device category to repair") — one compact row. */}
+          {/* Category picker (Partner "Select your device category to repair") — 3-column card grid. */}
           <View style={{ marginHorizontal: PAD, marginTop: 10, padding: cardPad, borderRadius: 16, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: LINE, ...cardShadow }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
               <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} style={{ flex: 1, fontSize: rf(13.5), fontWeight: '800', color: INK }}>
@@ -334,24 +305,26 @@ export default function RepairHomeScreen({ navigation }) {
             {cats.length === 0 ? (
               <EmptyState title="No categories yet" description="The admin hasn't published any device categories." />
             ) : (
-              <ScrollView horizontal scrollEnabled={cats.length > 5} showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: tileGap }}>
-                {cats.map((c) => {
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: tileGap }}>
+                {cats.map((c, idx) => {
                   const key = categoryMenuKey(c.name || c.code);
                   const row = menuByKey[key] || menuByKey[categoryMenuKey(c.code)];
                   const subtitle = (row?.description && row.description.trim()) || FALLBACK_SUBTITLE[key] || '';
                   return (
-                    <CategoryTile
+                    <CategoryGridCard
                       key={c.id}
                       name={c.name}
                       subtitle={subtitle}
                       uri={(row && imgUri(row)) || imgUri(c)}
-                      iconKey={key}
+                      Icon={ICONS[key] || Wrench}
+                      iconColor={GREEN}
                       width={tileW}
+                      tone={tones[idx]}
                       onPress={() => goToCategory(c)}
                     />
                   );
                 })}
-              </ScrollView>
+              </View>
             )}
           </View>
 

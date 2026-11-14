@@ -14,10 +14,10 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: rf(14), fontWeight: '700', color: colors.text, marginBottom: 10 },
   row: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -3 },
   accTile: { width: '31.33%', marginHorizontal: '1%', marginBottom: 6, paddingVertical: 10, paddingHorizontal: 6, borderWidth: 1, borderColor: colors.border, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', minHeight: 88 },
-  accTileActive: { borderColor: '#004C40', borderWidth: 2, backgroundColor: '#F0FDF4' },
+  accTileActive: { borderColor: '#035C6C', borderWidth: 2, backgroundColor: '#F0F8F9' },
   accLabel: { fontSize: rf(10), lineHeight: rlh(13), color: colors.text, marginTop: 6, textAlign: 'center', fontWeight: '600' },
   warrantyRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 10, marginTop: 8 },
-  warrantyRowActive: { borderColor: '#004C40', backgroundColor: '#F0FDF4' },
+  warrantyRowActive: { borderColor: '#035C6C', backgroundColor: '#F0F8F9' },
   warrantyLabel: { marginLeft: 10, fontSize: rf(14), color: colors.text, fontWeight: '600' },
   editBanner: { backgroundColor: BRAND.yellowSoft, borderColor: BRAND.yellowLine, borderWidth: 1, borderRadius: 12, padding: 10, marginBottom: 4, flexDirection: 'row', alignItems: 'center' },
   editBannerTitle: { fontSize: rf(10), fontWeight: '800', color: BRAND.ink, letterSpacing: 0.5 },
@@ -25,24 +25,28 @@ const styles = StyleSheet.create({
   bottom: { padding: 12, backgroundColor: '#fff', borderTopColor: BRAND.line, borderTopWidth: 1 },
 });
 
-const MOBILE_ACCESSORIES = [
+export const MOBILE_ACCESSORIES = [
   { id: 'original_charger', label: 'Original Charger', icon: 'flash-outline' },
-  { id: 'battery_local', label: 'Battery Replaced From Local Market', icon: 'battery-charging-outline' },
-  { id: 'flashlight_not_working', label: 'Flash Light Not Working', icon: 'flashlight-outline' },
+  { id: 'original_box', label: 'Original Box', icon: 'cube-outline' },
+  { id: 'purchase_invoice', label: 'Purchase Bill / Invoice', icon: 'receipt-outline' },
 ];
-const LAPTOP_ACCESSORIES = [
+export const LAPTOP_ACCESSORIES = [
   { id: 'original_charger', label: 'Original Charger', icon: 'flash-outline' },
+  { id: 'original_box', label: 'Original Box', icon: 'cube-outline' },
+  { id: 'purchase_invoice', label: 'Purchase Bill / Invoice', icon: 'receipt-outline' },
 ];
 
-const WARRANTY = [
-  { id: 'lt_3', label: 'Less then 3 months' },
-  { id: '3_6', label: '3 - 6 months' },
-  { id: '6_11', label: '6 - 11 months' },
-  { id: 'gt_11', label: 'More then 11 months' },
+// `label` goes to the summary / order; `short` fits the compact tile.
+export const WARRANTY = [
+  { id: 'none', label: 'No Warranty', short: 'No Warranty' },
+  { id: 'lt_3', label: 'Less then 3 months', short: '< 3 months' },
+  { id: '3_6', label: '3 - 6 months', short: '3 - 6 months' },
+  { id: '6_11', label: '6 - 11 months', short: '6 - 11 months' },
+  { id: 'gt_11', label: 'More then 11 months', short: '> 11 months' },
 ];
 
 // Laptop/audio/watch sell flows don't carry a warranty option.
-const NO_WARRANTY_KEYWORDS = ['LAPTOP', 'AUDIO', 'WATCH', 'HEADPHONE', 'EARBUD', 'TABLET'];
+export const NO_WARRANTY_KEYWORDS = ['LAPTOP', 'AUDIO', 'WATCH', 'HEADPHONE', 'EARBUD', 'TABLET'];
 
 export default function SellAccessoriesWarrantyScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
@@ -87,7 +91,7 @@ export default function SellAccessoriesWarrantyScreen({ navigation, route }) {
   // ---- presentation-only values ----
   const ACC_ICON = { original_charger: Zap, battery_local: BatteryCharging, flashlight_not_working: Flashlight };
   const continueDisabled = !isLaptopLike && !warranty;
-  const card = { backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#E6E6E6', padding: 11, marginTop: 8, ...cardShadow };
+  const card = { backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#E8EAEE', padding: 11, marginTop: 8, ...cardShadow };
 
   return (
     <View style={{ flex: 1, backgroundColor: BRAND.bg }}>
@@ -143,32 +147,40 @@ export default function SellAccessoriesWarrantyScreen({ navigation, route }) {
 
         {!isLaptopLike ? (
           <View style={card}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 7 }}>
               <View style={{ height: 30, width: 30, borderRadius: 10, backgroundColor: BRAND.greenSoft, alignItems: 'center', justifyContent: 'center', marginRight: 9 }}>
                 <ShieldCheck size={15} color={BRAND.green} />
               </View>
               <Text style={{ fontSize: rf(14), fontWeight: '800', color: BRAND.ink }}>Warranty</Text>
             </View>
-            {/* 2 × 2 grid of warranty choices */}
+            {/* Compact 3-column grid, aligned with the accessories tiles above */}
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -3 }}>
             {WARRANTY.map((w) => {
               const active = warranty === w.id;
               return (
-                <View key={w.id} style={{ width: '50%', padding: 3 }}>
+                <View key={w.id} style={{ width: '33.333%', padding: 3 }}>
                 <TouchableOpacity
                   activeOpacity={0.85}
                   onPress={() => setWarranty(w.id)}
                   accessibilityRole="radio"
                   accessibilityState={{ checked: active }}
+                  accessibilityLabel={w.label}
                   style={{
-                    flexDirection: 'row', alignItems: 'center', minHeight: 42, paddingHorizontal: 10, borderRadius: 12, marginTop: 3,
+                    flexDirection: 'row', alignItems: 'center', height: 38, paddingHorizontal: 7, borderRadius: 12,
                     backgroundColor: active ? BRAND.greenSoft : BRAND.bg, borderWidth: active ? 1.5 : 1, borderColor: active ? BRAND.green : BRAND.line,
                   }}
                 >
-                  <View style={{ height: 18, width: 18, borderRadius: 9, borderWidth: 2, borderColor: active ? BRAND.green : BRAND.ring, alignItems: 'center', justifyContent: 'center' }}>
-                    {active ? <View style={{ height: 9, width: 9, borderRadius: 5, backgroundColor: BRAND.green }} /> : null}
+                  <View style={{ height: 16, width: 16, borderRadius: 8, borderWidth: 2, borderColor: active ? BRAND.green : BRAND.ring, alignItems: 'center', justifyContent: 'center' }}>
+                    {active ? <View style={{ height: 8, width: 8, borderRadius: 4, backgroundColor: BRAND.green }} /> : null}
                   </View>
-                  <Text style={{ flex: 1, marginLeft: 8, fontSize: rf(12), fontWeight: '700', color: BRAND.ink }}>{w.label}</Text>
+                  <Text
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.85}
+                    style={{ flex: 1, marginLeft: 6, fontSize: rf(11.5), fontWeight: '700', color: BRAND.ink }}
+                  >
+                    {w.short}
+                  </Text>
                 </TouchableOpacity>
                 </View>
               );

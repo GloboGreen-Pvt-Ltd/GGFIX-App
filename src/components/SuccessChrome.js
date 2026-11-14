@@ -7,12 +7,12 @@ import { rf } from '../utils/responsive';
 import { BRAND } from '../theme/brand';
 
 // Compact success-page pieces shared by Buy · Sell · Repair "submitted" pages
-// (palette: 09AD2A · 1E1E1E · F8F8F8 · F3F3F3 · F3BF23).
-export const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
-export const MINT = '#EAF8EC';
-export const LINE = '#E6E6E6';
-export const YELLOW_SOFT = '#FEF6DA';
-export const MUTED = '#6B6B6B';
+// (palette: 035C6C · 111111 · F3F4F6 · F3F4F6 · FAA700).
+export const GREEN_TEXT = '#035C6C'; // #035C6C shaded for text on white
+export const MINT = '#E5F3F5';
+export const LINE = '#E8EAEE';
+export const YELLOW_SOFT = '#FFF4D6';
+export const MUTED = '#606E87';
 const cardShadow = { shadowColor: BRAND.ink, shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 2 };
 
 const CONFETTI = [
@@ -25,7 +25,7 @@ const CONFETTI = [
 export function SuccessHero({ title, subtitle, chips = [] }) {
   const RING = 104;
   return (
-    <LinearGradient colors={['#078F23', '#09AD2A', '#22B843']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ paddingBottom: 44, overflow: 'hidden' }}>
+    <LinearGradient colors={['#035C6C', '#035C6C', '#035C6C']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ paddingBottom: 44, overflow: 'hidden' }}>
       <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
         <View style={{ position: 'absolute', width: 240, height: 240, borderRadius: 120, right: -100, top: -90, backgroundColor: 'rgba(255,255,255,0.07)' }} />
         <View style={{ position: 'absolute', width: 200, height: 200, borderRadius: 100, left: -110, bottom: -70, backgroundColor: 'rgba(255,255,255,0.08)' }} />
@@ -35,7 +35,7 @@ export function SuccessHero({ title, subtitle, chips = [] }) {
       <SafeAreaView edges={['top']}>
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8 }}>
           <Image source={require('../../assets/logo.png')} style={{ width: 26, height: 26, borderRadius: 7 }} resizeMode="cover" />
-          <Text style={{ color: '#FFFFFF', fontWeight: '900', fontSize: rf(14), marginLeft: 7, letterSpacing: 0.6 }}>GGFIX</Text>
+          <Text style={{ color: '#FFFFFF', fontWeight: '900', fontSize: rf(14), marginLeft: 7, letterSpacing: 0.6 }}>NearGFix</Text>
         </View>
         <View style={{ alignItems: 'center', paddingTop: 4, paddingHorizontal: 20 }}>
           <View style={{ width: RING, height: RING, alignItems: 'center', justifyContent: 'center' }}>
@@ -136,11 +136,11 @@ export function NextSteps({ title = 'What happens next', steps }) {
           const wait = s.state === 'wait';
           return (
             <View key={s.title}>
-              {i > 0 ? <View style={{ height: 8, marginLeft: 16, borderLeftWidth: 1.5, borderStyle: 'dashed', borderLeftColor: done || wait ? 'rgba(9,173,42,0.45)' : '#D6D6D6' }} /> : null}
+              {i > 0 ? <View style={{ height: 8, marginLeft: 16, borderLeftWidth: 1.5, borderStyle: 'dashed', borderLeftColor: done || wait ? 'rgba(3,92,108,0.45)' : '#D2D6DD' }} /> : null}
               <View
                 style={{
                   flexDirection: 'row', alignItems: 'center', borderRadius: 12, paddingVertical: 7, paddingHorizontal: 8,
-                  backgroundColor: done ? '#F4FBF5' : BRAND.bg, borderWidth: 1, borderColor: done ? 'rgba(9,173,42,0.22)' : BRAND.line,
+                  backgroundColor: done ? '#F0F8F9' : BRAND.bg, borderWidth: 1, borderColor: done ? 'rgba(3,92,108,0.22)' : BRAND.line,
                 }}
               >
                 <View style={{ height: 34, width: 34, borderRadius: 17, backgroundColor: wait ? YELLOW_SOFT : MINT, alignItems: 'center', justifyContent: 'center', marginRight: 9 }}>

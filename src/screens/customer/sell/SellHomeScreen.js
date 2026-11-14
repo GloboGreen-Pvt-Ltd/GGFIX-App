@@ -1,26 +1,31 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import {
-  TrendingUp, ShieldCheck, Truck, ChevronRight, FileText, Store, LayoutGrid, Smartphone, ArrowRight, Wrench, ShoppingBag,
+  TrendingUp, ShieldCheck, Truck, ChevronRight, Smartphone, ArrowRight, Wrench, ShoppingBag,
+  Package, PackageCheck, History, MessageSquare, BadgeIndianRupee,
 } from 'lucide-react-native';
+import { listSellOrders, getSellOrderQuotations } from '../../../api/orders';
 import { OfferBanner, EmptyState, Loader } from '../../../components/rnr';
 import { getDeviceCategories, getBanners, getCategoryMenuImages, categoryMenuKey } from '../../../api/masterData';
-import { tintFor } from '../../../theme/categoryTints';
-import PageHeader, { HeaderIconButton } from '../../../components/PageHeader';
+import { cardPastels } from '../../../theme/categoryTints';
+import CategoryGridCard, { homeRailCardWidthFor } from '../../../components/CategoryGridCard';
+import PageHeader, { HEADER_FONT, HeaderIconButton } from '../../../components/PageHeader';
 import { rf } from '../../../utils/responsive';
+import { sellProgress } from '../../../utils/sellStatus';
 import { goToTab } from '../../../navigation/goToTab';
 import { useCurrentDevice, deviceName, deviceTitle, roughEstimate } from '../../../utils/currentDevice';
 
-// Partner app Sell palette — green #09AD2A, ink #1E1E1E, neutrals #F8F8F8 / #F3F3F3.
-const ACCENT = '#09AD2A';
-const PRIMARY = '#078F23';      // green text
-const MINT = '#EAF8EC';
-const PAGE_BG = '#F8F8F8';
-const BORDER = '#E6E6E6';
-const TEXT = '#1E1E1E';
-const MUTED = '#6B6B6B';
-const AMBER_FG = '#B45309';
-const AMBER_BG = '#FFF3CD';
+// Partner app Sell palette — green #035C6C, ink #111111, neutrals #F3F4F6 / #F3F4F6.
+const ACCENT = '#035C6C';
+const PRIMARY = '#035C6C';      // green text
+const MINT = '#E5F3F5';
+const PAGE_BG = '#F3F4F6';
+const BORDER = '#E8EAEE';
+const TEXT = '#111111';
+const MUTED = '#606E87';
+const AMBER_FG = '#1C3053';
+const AMBER_BG = '#FFF4D6';
 const MAX_W = 1000;
 
 const cardShadow = {
@@ -67,11 +72,45 @@ const PROMISES = [
   { icon: Truck, title: 'Free Pickup', sub: 'Hassle-free at your doorstep', color: ACCENT, bg: MINT },
 ];
 
-const STEPS = [
-  { n: 1, icon: FileText, title: 'Tell us about your device', sub: 'Model · condition · accessories' },
-  { n: 2, icon: Store, title: 'Get quotes from shops', sub: 'Up to 5 instant quotes' },
-  { n: 3, icon: Truck, title: 'Pickup at your doorstep', sub: 'Pick the best · free pickup' },
+// Seller overview — 2×2 cards with live counts (the customer's sell orders and
+// shop chats), each opening the matching My Orders list.
+const NAVY = '#1C3053';
+const SELL_STATS = [
+  { key: 'listings', title: 'My Listings', icon: Package, tone: '#0E8A86', bg: '#EEF8F8' },
+  { key: 'enquiries', title: 'Buyer Enquiries', icon: MessageSquare, tone: '#7E3AAE', bg: '#F6F0FC' },
+  { key: 'quotes', title: 'Quotation Requests', icon: BadgeIndianRupee, tone: '#E0900F', bg: '#FFF6EC' },
+  { key: 'sold', title: 'Sold Items', icon: PackageCheck, tone: '#2E9E3E', bg: '#EFFAF0', countTone: '#2E9E3E' },
 ];
+// Sell order statuses (order-service SellOrder): waiting for a shop's quote,
+// and a sale agreed / done.
+const AWAITING = new Set(['AWAITING_QUOTATION', 'PENDING', 'DRAFT']);
+const SOLD = new Set(['SELL_CONFIRMED', 'COMPLETED', 'PICKED_UP', 'SOLD']);
+
+function StatCard({ stat, count, width, onPress }) {
+  const Icon = stat.icon;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${stat.title}, ${count ?? 'loading'}`}
+      className="active:opacity-85"
+      style={{
+        width, height: 148, borderRadius: 18, padding: 14, justifyContent: 'space-between',
+        backgroundColor: stat.bg, borderWidth: 1, borderColor: `${stat.tone}1F`,
+        shadowColor: stat.tone, shadowOpacity: 0.1, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 2,
+      }}
+    >
+      <View>
+        <Icon size={28} color={stat.tone} strokeWidth={2} />
+        <Text numberOfLines={2} style={{ marginTop: 8, fontSize: rf(15), lineHeight: rf(19), fontWeight: '800', color: NAVY }}>{stat.title}</Text>
+      </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <Text style={{ flex: 1, fontSize: rf(28), fontWeight: '800', color: stat.countTone || NAVY }}>{count ?? '–'}</Text>
+        <ChevronRight size={20} color={NAVY} strokeWidth={2.4} />
+      </View>
+    </Pressable>
+  );
+}
 
 // NOTE: Pressables take plain style objects only — NativeWind's cssInterop
 // drops function-form `style={({ pressed }) => ...}` on native. Press feedback
@@ -109,30 +148,6 @@ function ActionCard({ width, image, Icon, kicker, title, sub, cta, onPress }) {
   );
 }
 
-function CategoryChip({ label, size, isAll, uri, photo, code, onPress, gap = 10 }) {
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} className="active:opacity-80" style={{ width: size, marginRight: gap, alignItems: 'center' }}>
-      <View
-        style={{
-          width: size, height: size, borderRadius: 14, overflow: 'hidden', alignItems: 'center', justifyContent: 'center',
-          backgroundColor: isAll ? MINT : tintFor(code), borderWidth: isAll ? 1.5 : 1, borderColor: isAll ? ACCENT : BORDER, ...cardShadow,
-        }}
-      >
-        {isAll ? (
-          <LayoutGrid size={20} color={ACCENT} />
-        ) : uri ? (
-          <Image resizeMethod="resize" source={{ uri }} style={photo ? { width: '86%', height: '86%' } : { width: size * 0.6, height: size * 0.6 }} resizeMode="contain" />
-        ) : (
-          <Smartphone size={20} color={PRIMARY} />
-        )}
-      </View>
-      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ marginTop: 6, fontSize: rf(10), textAlign: 'center', alignSelf: 'stretch', color: isAll ? PRIMARY : TEXT, fontWeight: isAll ? '700' : '600' }}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
 export default function SellHomeScreen({ navigation }) {
   const [cats, setCats] = useState([]);
   const [menuImages, setMenuImages] = useState({});
@@ -145,6 +160,7 @@ export default function SellHomeScreen({ navigation }) {
   const bannerRef = useRef(null);
   const { width } = useWindowDimensions();
   const currentDevice = useCurrentDevice();
+  const [recent, setRecent] = useState([]); // latest 3 sell orders [{ so, p }]
 
   useEffect(() => {
     (async () => {
@@ -171,6 +187,30 @@ export default function SellHomeScreen({ navigation }) {
     })();
   }, []);
 
+  // Live counts for the seller overview (null while loading → shows "–").
+  const [stats, setStats] = useState(null);
+  useFocusEffect(useCallback(() => {
+    let alive = true;
+    (async () => {
+      const list = await listSellOrders().catch(() => []);
+      const st = (o) => String(o?.status || '').toUpperCase();
+      // Buyer enquiries = shop offers on listings still open (not sold / cancelled).
+      const open = (list || []).filter((o) => !SOLD.has(st(o)) && !/CANCEL/.test(st(o)));
+      const quoteLists = await Promise.all(open.map((o) => getSellOrderQuotations(o.id).catch(() => [])));
+      if (!alive) return;
+      const qBy = new Map(open.map((o, i) => [o.id, Array.isArray(quoteLists[i]) ? quoteLists[i] : []]));
+      setRecent([...(list || [])].sort((a, b) => new Date(b?.createdAt || 0) - new Date(a?.createdAt || 0)).slice(0, 3)
+        .map((so) => ({ so, p: sellProgress(so, qBy.get(so.id) || []) })));
+      setStats({
+        listings: (list || []).length,
+        enquiries: quoteLists.reduce((n, q) => n + (Array.isArray(q) ? q.length : 0), 0),
+        quotes: (list || []).filter((o) => AWAITING.has(st(o))).length,
+        sold: (list || []).filter((o) => SOLD.has(st(o))).length,
+      });
+    })();
+    return () => { alive = false; };
+  }, []));
+
   // Frame the carousel at the first banner's real ratio so no edge is cut.
   useEffect(() => {
     const first = banners[0]?.uri;
@@ -183,10 +223,15 @@ export default function SellHomeScreen({ navigation }) {
   const pageW = bannerPageW || contentW;
   const bannerW = pageW - padH * 2;
   const bannerH = Math.round(bannerW / bannerRatio);
-  // Sell for Cash: five category tiles across one row.
-  const catCols = 5;
-  const catGap = 8;
-  const catSize = Math.min(72, Math.floor((contentW - padH * 2 - catGap * (catCols - 1)) / catCols));
+  // Sell for Cash: the Repair tab's grid — pastel cards, 3 per row (5 → 3 + 2),
+  // inside a white panel.
+  const catCols = 3;
+  const catGap = width < 360 ? 8 : 10;
+  const panelPad = width < 360 ? 8 : 10;
+  const catSize = Math.floor((contentW - padH * 2 - panelPad * 2 - 2 - catGap * (catCols - 1)) / catCols);
+  const catTones = cardPastels(1, cats.map((c) => c.code || c.name));
+  // Card names use the Home category cards' typography on this screen size.
+  const homeCardW = homeRailCardWidthFor(width);
   // Action cards: one per screen with the next peeking in.
   const actionW = Math.min(360, Math.round((contentW - padH * 2) * 0.88));
   const centered = { width: '100%', maxWidth: MAX_W, alignSelf: 'center' };
@@ -210,14 +255,23 @@ export default function SellHomeScreen({ navigation }) {
   const goPickDevice = (extra = {}) =>
     navigation.navigate('SellSelectDevice', { flow: 'SELL', ...extra });
 
+  // Seller overview cards: 2 per row; counts refresh whenever the tab is shown.
+  const statGap = 12;
+  const statW = Math.floor((contentW - padH * 2 - statGap) / 2);
+  const openStat = (key) => {
+    if (key === 'enquiries') navigation.navigate('SellBuyerEnquiries');
+    else if (key === 'quotes') navigation.navigate('SellQuoteRequests');
+    else navigation.navigate('MyOrders', { initialTab: 'Sell' });
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: PAGE_BG }}>
       {/* ---------- Header: back · Sell on GGFIX · my sell orders ---------- */}
       <PageHeader
-        title="Sell on GGFIX"
+        title="Sell on NearGFix"
         subtitle="Sell your device. Get quotes from verified shops."
         onBack={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Home'))}
-        right={<HeaderIconButton icon={FileText} color={ACCENT} size={17} label="My sell orders" onPress={() => navigation.navigate('MyOrders', { initialTab: 'Sell' })} />}
+        right={<HeaderIconButton icon={History} label="Sell History" onPress={() => navigation.navigate('MyOrders', { initialTab: 'Sell' })} />}
       />
 
       {loading ? (
@@ -304,35 +358,37 @@ export default function SellHomeScreen({ navigation }) {
               />
             </ScrollView>
 
-            {/* Sell for Cash — one tile per category (starts a sale for it). */}
-            <View style={{ flexDirection: 'row', alignItems: 'baseline', paddingHorizontal: padH, marginTop: 16 }}>
-              <Text style={{ fontSize: rf(15), fontWeight: '800', color: TEXT }}>Sell for <Text style={{ color: PRIMARY }}>Cash</Text></Text>
-              <Text numberOfLines={1} style={{ flex: 1, marginLeft: 8, fontSize: rf(11), color: MUTED }}>Pick your device</Text>
-            </View>
-            {cats.length === 0 ? (
-              <View style={{ paddingHorizontal: padH, marginTop: 10 }}>
+            {/* Sell for Cash — one pastel card per category (starts a sale for it). */}
+            <View style={{ marginHorizontal: padH, marginTop: 16, padding: panelPad, borderRadius: 16, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: BORDER, ...cardShadow }}>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline', marginBottom: 8 }}>
+                <Text style={{ fontSize: rf(15), fontWeight: '800', color: TEXT }}>Sell for <Text style={{ color: PRIMARY }}>Cash</Text></Text>
+                <Text numberOfLines={1} style={{ flex: 1, marginLeft: 8, fontSize: rf(11), color: MUTED }}>Pick your device</Text>
+              </View>
+              {cats.length === 0 ? (
                 <EmptyState title="No categories yet" description="The admin hasn't published any device categories." />
-              </View>
-            ) : (
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: padH, paddingTop: 10, columnGap: catGap, rowGap: 12 }}>
-                {cats.map((c) => {
-                  const code = (c.code || '').toUpperCase();
-                  const menuUri = menuImages[categoryMenuKey(c.name)] || menuImages[categoryMenuKey(c.code)] || null;
-                  return (
-                    <CategoryChip
-                      key={c.id}
-                      gap={0}
-                      label={c.name}
-                      code={code}
-                      size={catSize}
-                      uri={menuUri || SELL_IMAGES[code] || imgUri(c)}
-                      photo={!!(menuUri || SELL_IMAGES[code])}
-                      onPress={() => goPickDevice({ categoryId: c.id, categoryCode: code, categoryName: c.name })}
-                    />
-                  );
-                })}
-              </View>
-            )}
+              ) : (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: catGap }}>
+                  {cats.map((c, idx) => {
+                    const code = (c.code || '').toUpperCase();
+                    const menuUri = menuImages[categoryMenuKey(c.name)] || menuImages[categoryMenuKey(c.code)] || null;
+                    return (
+                      <CategoryGridCard
+                        key={c.id}
+                        name={c.name}
+                        uri={menuUri || SELL_IMAGES[code] || imgUri(c)}
+                        Icon={Smartphone}
+                        iconColor={PRIMARY}
+                        width={catSize}
+                        labelForWidth={homeCardW}
+                        labelFont={HEADER_FONT.title}
+                        tone={catTones[idx]}
+                        onPress={() => goPickDevice({ categoryId: c.id, categoryCode: code, categoryName: c.name })}
+                      />
+                    );
+                  })}
+                </View>
+              )}
+            </View>
 
             {/* Benefit cards */}
             <View style={{ flexDirection: 'row', paddingHorizontal: padH, marginTop: 14 }}>
@@ -350,37 +406,51 @@ export default function SellHomeScreen({ navigation }) {
               })}
             </View>
 
-            {/* How it works */}
-            <View style={{ paddingHorizontal: padH, marginTop: 18, marginBottom: 8 }}>
-              <Text style={{ fontSize: rf(15), fontWeight: '800', color: TEXT }}>How it works</Text>
-              <Text style={{ fontSize: rf(11), color: MUTED, marginTop: 2 }}>Three steps to cash in hand</Text>
+            {/* Seller overview — 2×2 cards with live counts */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: statGap, paddingHorizontal: padH, marginTop: 16 }}>
+              {SELL_STATS.map((s) => (
+                <StatCard key={s.key} stat={s} count={stats ? stats[s.key] : null} width={statW} onPress={() => openStat(s.key)} />
+              ))}
             </View>
-            <View style={{ paddingHorizontal: padH }}>
-              {STEPS.map((s) => {
-                const Icon = s.icon;
-                return (
-                  <View
-                    key={s.n}
-                    style={{
-                      flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 16,
-                      borderWidth: 1, borderColor: BORDER, paddingVertical: 10, paddingLeft: 12, paddingRight: 10, marginBottom: 8, ...cardShadow,
-                    }}
-                  >
-                    <View style={{ height: 28, width: 28, borderRadius: 14, backgroundColor: ACCENT, alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
-                      <Text style={{ color: '#FFFFFF', fontSize: rf(12.5), fontWeight: '800' }}>{s.n}</Text>
-                    </View>
-                    <View style={{ height: 36, width: 36, borderRadius: 12, backgroundColor: MINT, alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
-                      <Icon size={18} color={PRIMARY} />
-                    </View>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text numberOfLines={1} style={{ fontSize: rf(13), fontWeight: '800', color: TEXT }}>{s.title}</Text>
-                      <Text numberOfLines={1} style={{ fontSize: rf(11), color: MUTED, marginTop: 2 }}>{s.sub}</Text>
-                    </View>
-                    <ChevronRight size={17} color={MUTED} />
-                  </View>
-                );
-              })}
-            </View>
+
+            {/* Recent Sell Orders — only when the customer has sell orders. */}
+            {recent.length ? (
+              <>
+                <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: padH, marginTop: 18, marginBottom: 8 }}>
+                  <Text style={{ flex: 1, fontSize: rf(15), fontWeight: '800', color: TEXT }}>Recent Sell Orders</Text>
+                  <Pressable onPress={() => navigation.navigate('MyOrders', { initialTab: 'Sell' })} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 4 }}>
+                    <Text style={{ fontSize: rf(12.5), fontWeight: '800', color: ACCENT }}>See All</Text>
+                    <ArrowRight size={15} color={ACCENT} style={{ marginLeft: 4 }} />
+                  </Pressable>
+                </View>
+                {recent.map(({ so, p }) => {
+                  const open = !p.cancelled && !p.sold;
+                  const a = open && p.step === 2
+                    ? { t: 'View Offers', go: () => navigation.navigate('SellQuotesReceived', { sellOrderId: so.id }) }
+                    : { t: open && p.step >= 3 ? 'Track Order' : 'View Details', go: () => navigation.navigate('SellOrderTracking', { sellOrderId: so.id }) };
+                  const [bg, fg] = { red: ['#FEECEC', '#B91C1C'], green: ['#E3F6EE', '#01805A'], blue: ['#E8F0FE', '#1D4ED8'] }[p.tone] || ['#FFF4E5', '#C2410C'];
+                  const img = so.images?.front || null;
+                  return (
+                    <Pressable key={so.id} onPress={a.go} accessibilityRole="button" accessibilityLabel={so.modelName || 'Sell order'}
+                      style={{ marginHorizontal: padH, marginBottom: 8, flexDirection: 'row', alignItems: 'center', borderRadius: 14, borderWidth: 1, borderColor: BORDER, backgroundColor: '#FFFFFF', padding: 8, ...cardShadow }}>
+                      <View style={{ height: 52, width: 56, borderRadius: 10, backgroundColor: '#F4F5F7', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                        {img ? <Image source={{ uri: img }} style={{ width: '100%', height: '100%' }} resizeMode="cover" /> : <Smartphone size={24} color={ACCENT} />}
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0, marginLeft: 10 }}>
+                        <Text numberOfLines={1} style={{ fontSize: rf(13.5), fontWeight: '800', color: TEXT }}>{so.modelName || 'Device'}</Text>
+                        <View style={{ alignSelf: 'flex-start', marginTop: 4, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, backgroundColor: bg }}>
+                          <Text numberOfLines={1} style={{ fontSize: rf(11), fontWeight: '800', color: fg }}>{p.label}</Text>
+                        </View>
+                      </View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', height: 32, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1.5, borderColor: ACCENT }}>
+                        <Text style={{ fontSize: rf(11.5), fontWeight: '800', color: ACCENT }}>{a.t}</Text>
+                        <ArrowRight size={13} color={ACCENT} style={{ marginLeft: 4 }} />
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </>
+            ) : null}
           </View>
         </ScrollView>
       )}

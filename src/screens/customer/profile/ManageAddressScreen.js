@@ -12,16 +12,16 @@ import { rf, rlh } from '../../../utils/responsive';
 import PageHeader, { HeaderIconButton } from '../../../components/PageHeader';
 import { BRAND } from '../../../theme/brand';
 
-// Palette: 09AD2A · 1E1E1E · F8F8F8 · F3F3F3 · F3BF23 · F84141.
-const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
-const MINT = '#EAF8EC';
-const LINE = '#E6E6E6';
-const GREEN_LINE = 'rgba(9,173,42,0.45)';
+// Palette: 035C6C · 111111 · F3F4F6 · F3F4F6 · FAA700 · F32C26.
+const GREEN_TEXT = '#035C6C'; // #035C6C shaded for text on white
+const MINT = '#E5F3F5';
+const LINE = '#E8EAEE';
+const GREEN_LINE = 'rgba(3,92,108,0.45)';
 
 const LABEL_META = {
   Home:   { icon: Home,      color: GREEN_TEXT, bg: MINT },
-  Office: { icon: Briefcase, color: BRAND.ink,  bg: '#FEF6DA' },
-  Other:  { icon: Tag,       color: BRAND.red,  bg: '#FEECEC' },
+  Office: { icon: Briefcase, color: BRAND.ink,  bg: '#FFF4D6' },
+  Other:  { icon: Tag,       color: BRAND.red,  bg: '#FEEBEA' },
 };
 
 function ScreenHeader({ navigation, count }) {
@@ -173,7 +173,7 @@ export default function ManageAddressScreen({ navigation }) {
           className="active:opacity-85"
           style={{
             flexDirection: 'row', alignItems: 'center',
-            backgroundColor: '#F4FBF5', borderRadius: 14,
+            backgroundColor: '#F0F8F9', borderRadius: 14,
             paddingVertical: 8, paddingHorizontal: 10,
             marginBottom: 10,
             borderWidth: 1, borderColor: GREEN_LINE,

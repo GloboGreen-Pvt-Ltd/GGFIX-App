@@ -9,13 +9,14 @@ import {
 import { listProducts } from '../../../api/marketplace';
 import { resolveDeviceImageSource } from '../../../utils/images';
 import { rf } from '../../../utils/responsive';
+import { StaticTabBar } from '../../../navigation/CustomTabBar';
 import { BRAND } from '../../../theme/brand';
 
-const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
-const LINE = '#E6E6E6';
-const MINT = '#EAF8EC';
-const YELLOW_SOFT = '#FEF6DA';
-const RED_SOFT = '#FEECEC';
+const GREEN_TEXT = '#035C6C'; // #035C6C shaded for text on white
+const LINE = '#E8EAEE';
+const MINT = '#E5F3F5';
+const YELLOW_SOFT = '#FFF4D6';
+const RED_SOFT = '#FEEBEA';
 const GAP = 10;
 const cardShadow = { shadowColor: BRAND.ink, shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 1 };
 
@@ -136,11 +137,12 @@ export default function BuyCategoryScreen({ navigation, route }) {
   const runSearch = () => {
     const q = query.trim();
     if (!q) return;
-    navigation.navigate('BuyListing', { q, title: q, categoryId, categoryCode });
+    navigation.navigate('BuyListing', { q, title: q, categoryId, categoryCode, layout: 'list' });
   };
 
   if (loading) return <Loader />;
   return (
+    <View style={{ flex: 1 }}>
     <ScrollView
       style={{ flex: 1, backgroundColor: BRAND.bg }}
       contentContainerStyle={{ width: W, alignSelf: 'center', paddingHorizontal: PAD, paddingTop: 12, paddingBottom: 32 }}
@@ -187,7 +189,7 @@ export default function BuyCategoryScreen({ navigation, route }) {
             return (
               <Pressable
                 key={b.id}
-                onPress={() => navigation.navigate('BuyListing', { brandId: b.id, title: b.name })}
+                onPress={() => navigation.navigate('BuyListing', { brandId: b.id, title: b.name, layout: 'list' })}
                 className="active:opacity-80"
                 style={{
                   width: brandW, marginRight: 8, paddingVertical: 10, paddingHorizontal: 6, alignItems: 'center',
@@ -245,7 +247,7 @@ export default function BuyCategoryScreen({ navigation, route }) {
           return (
             <Pressable
               key={b.label}
-              onPress={() => navigation.navigate('BuyListing', { title: b.label, categoryId, categoryCode })}
+              onPress={() => navigation.navigate('BuyListing', { title: b.label, categoryId, categoryCode, layout: 'list' })}
               className="active:opacity-80"
               style={{ width: tileW, marginBottom: GAP, backgroundColor: '#FFFFFF', borderRadius: 16, borderWidth: 1, borderColor: LINE, overflow: 'hidden', ...cardShadow }}
             >
@@ -281,7 +283,7 @@ export default function BuyCategoryScreen({ navigation, route }) {
           return (
             <Pressable
               key={k.label}
-              onPress={() => navigation.navigate('BuyListing', { title: k.label, categoryId, categoryCode })}
+              onPress={() => navigation.navigate('BuyListing', { title: k.label, categoryId, categoryCode, layout: 'list' })}
               className="active:opacity-80"
               style={{ width: tileW, marginBottom: GAP, backgroundColor: '#FFFFFF', borderRadius: 16, borderWidth: 1, borderColor: LINE, overflow: 'hidden', ...cardShadow }}
             >
@@ -299,5 +301,7 @@ export default function BuyCategoryScreen({ navigation, route }) {
         })}
       </View>
     </ScrollView>
+    <StaticTabBar navigation={navigation} active="Buy" />
+    </View>
   );
 }

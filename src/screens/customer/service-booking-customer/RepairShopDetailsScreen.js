@@ -46,37 +46,32 @@ import PageHeader, { HeaderIconButton, HEADER } from '../../../components/PageHe
 const HERO_HEIGHT = 168;
 const MAX_W = 600;
 
-// Brand palette in the FLOW shape (09AD2A · 1E1E1E · F8F8F8 · F3F3F3 · F3BF23 · F84141).
+// Brand palette in the FLOW shape (035C6C · 111111 · F3F4F6 · F3F4F6 · FAA700 · F32C26).
 const FLOW = {
   ...BASE_FLOW,
   primary: BRAND.green,
-  deep: '#078F23', // green text / icons (#09AD2A shaded)
+  deep: '#035C6C', // green text / icons (#035C6C shaded)
   ink: BRAND.ink,
-  muted: '#6B6B6B',
-  mint: '#EAF8EC',
-  softMint: '#F4FBF5',
-  tint: '#F4FBF5',
-  border: '#E6E6E6',
+  muted: '#606E87',
+  mint: '#E5F3F5',
+  softMint: '#F0F8F9',
+  tint: '#F0F8F9',
+  border: '#E8EAEE',
   bg: BRAND.bg,
 };
-const YELLOW_SOFT = '#FEF6DA';
-const RED_SOFT = '#FEECEC';
+const YELLOW_SOFT = '#FFF4D6';
+const RED_SOFT = '#FEEBEA';
 const cardShadow = { shadowColor: BRAND.ink, shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1 };
 
-const FALLBACK_IMAGES = [
-  'https://images.unsplash.com/photo-1604754742629-3e0498a8e3e0?w=1080&q=70',
-  'https://images.unsplash.com/photo-1601784551446-20c9e07cdbdb?w=1080&q=70',
-  'https://images.unsplash.com/photo-1565376103889-fcf45953ddb4?w=1080&q=70',
-];
 
 const PRIMARY_OPTIONS = [
-  { key: 'ENQUIRY', title: 'Service Enquiry',  icon: MessageCircle, palette: ['#004C40', '#004C40'] },
-  { key: 'PICKUP',  title: 'Doorstep Pickup', icon: Truck,         palette: ['#00008B', '#2563EB'] },
+  { key: 'ENQUIRY', title: 'Service Enquiry',  icon: MessageCircle, palette: ['#035C6C', '#035C6C'] },
+  { key: 'PICKUP',  title: 'Doorstep Pickup', icon: Truck,         palette: ['#0788C9', '#0788C9'] },
 ];
 
 const FEATURE_CARDS = [
-  { key: 'REPAIR',   title: 'Repair your Phone',  icon: Smartphone,   accent: '#00008B', bg: 'bg-primary/10' },
-  { key: 'EXCHANGE', title: 'Smart Exchange',     icon: ShoppingCart, accent: '#7C3AED', bg: 'bg-primary/10' },
+  { key: 'REPAIR',   title: 'Repair your Phone',  icon: Smartphone,   accent: '#0788C9', bg: 'bg-primary/10' },
+  { key: 'EXCHANGE', title: 'Smart Exchange',     icon: ShoppingCart, accent: '#0788C9', bg: 'bg-primary/10' },
 ];
 
 const Dot = () => <View className="h-1 w-1 rounded-full bg-text-muted/50 mx-2" />;
@@ -94,6 +89,17 @@ export default function RepairShopDetailsScreen({ navigation, route }) {
   const [selected, setSelected] = useState('PICKUP');
   const [page, setPage] = useState(0);
   const [bookmarked, setBookmarked] = useState(false);
+  // Banner / logo URLs that failed to load — dropped so the fallback shows.
+  const [failed, setFailed] = useState([]);
+  // Width / height of the first shop image, so the banner keeps its shape.
+  const [ratio, setRatio] = useState(16 / 9);
+  // The shop photo from the Pickup shop list card (frontImageUrl) — passed
+  // along, else read from this shop's own record (same field).
+  const firstImage = params.shopImage || shop?.frontImageUrl || null;
+  useEffect(() => {
+    if (!firstImage) return;
+    Image.getSize(firstImage, (w, h) => { if (w > 0 && h > 0) setRatio(w / h); }, () => {});
+  }, [firstImage]);
   const scrollRef = useRef(null);
 
   const centered = { width: '100%', maxWidth: MAX_W, alignSelf: 'center' };
@@ -126,10 +132,10 @@ export default function RepairShopDetailsScreen({ navigation, route }) {
     );
   }
 
-  // Hero carousel = the shop's own banner + storefront photo; fall back to
-  // stock imagery only when the shop has uploaded neither.
-  const heroImages = [shop.bannerImageUrl, shop.frontImageUrl].filter(Boolean);
-  const images = heroImages.length ? heroImages : FALLBACK_IMAGES;
+  // Banner = the same shop photo the Pickup shop list shows (frontImageUrl).
+  // If it fails to load, or the shop has none, no banner is shown.
+  const images = [firstImage].filter((u) => u && !failed.includes(u));
+  const markFailed = (uri) => setFailed((f) => (f.includes(uri) ? f : [...f, uri]));
   const rating = Number(shop.rating || 5);
   // Live OPEN / CLOSED from the shop's hours (same logic as the pickup list).
   const open = isShopOpen(shop) ?? true;
@@ -164,14 +170,16 @@ export default function RepairShopDetailsScreen({ navigation, route }) {
   };
 
   // ---- presentation-only values ----
-  const imgBox = Math.min(112, Math.round(Math.min(SCREEN_W, MAX_W) * 0.26));
+  const bannerW = Math.min(SCREEN_W, MAX_W);
+  // Image's own aspect ratio, kept between 2.4:1 and 4:3 (contain — never cropped).
+  const bannerH = Math.round(Math.min(bannerW * 0.75, Math.max(bannerW / 2.4, bannerW / ratio)));
   const cardGap = 10;
   const tileW = Math.floor((Math.min(SCREEN_W, MAX_W) - 32 - cardGap) / 2);
   const twoCol = tileW >= 140; // collapse to one column on very narrow screens
   const subtitle = shop.tagline || shop.description
     || (shop.city ? `Your trusted device care partner in ${shop.city}` : null);
-  // One grid: the two selectable options (existing `selected` state), then the
-  // existing informational items. Only the selectable ones carry a chevron.
+  // The two selectable options (existing `selected` state) as tiles; the
+  // informational items are merged into the promo banner below them.
   const TILE = {
     ENQUIRY:  { sub: 'Get help & ask questions', tint: FLOW.mint, color: FLOW.deep },
     PICKUP:   { sub: 'We pick up from your home', tint: FLOW.mint, color: FLOW.deep },
@@ -213,7 +221,7 @@ export default function RepairShopDetailsScreen({ navigation, route }) {
       ...(isSel ? { shadowColor: BRAND.green, shadowOpacity: 0.22, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 4 } : cardShadow),
     };
     const inner = isSel ? (
-      <LinearGradient colors={[BRAND.green, '#0A9E27']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ flex: 1 }}>
+      <LinearGradient colors={[BRAND.green, '#035C6C']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ flex: 1 }}>
         {body}
         <View style={{ position: 'absolute', top: 6, right: 6, height: 20, width: 20, borderRadius: 10, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' }}>
           <Check size={12} color={FLOW.deep} strokeWidth={3} />
@@ -246,75 +254,39 @@ export default function RepairShopDetailsScreen({ navigation, route }) {
         )}
       />
       <ScrollView contentContainerStyle={{ paddingBottom: bottomSpace }} showsVerticalScrollIndicator={false}>
-        {/* Hero — soft map-style illustration (decorative only). */}
-        <LinearGradient colors={['#EAF8EC', '#F8F8F8', '#F1FAF2']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ paddingBottom: 34, overflow: 'hidden' }}>
-          <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
-            {/* map blocks */}
-            {[[0.52, 30, 70, 40], [0.7, 90, 60, 36], [0.86, 20, 54, 44], [0.6, 150, 80, 34], [0.08, 90, 70, 30], [0.3, 20, 60, 28]].map(([x, y, w, h], i) => (
-              <View key={`b${i}`} style={{ position: 'absolute', left: SCREEN_W * x, top: y, width: w, height: h, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.75)', transform: [{ rotate: '-18deg' }] }} />
-            ))}
-            {/* roads */}
-            <View style={{ position: 'absolute', left: SCREEN_W * 0.4, top: -40, width: 14, height: 320, backgroundColor: 'rgba(255,255,255,0.9)', transform: [{ rotate: '35deg' }] }} />
-            <View style={{ position: 'absolute', left: SCREEN_W * 0.1, top: 110, width: SCREEN_W * 1.2, height: 12, backgroundColor: 'rgba(255,255,255,0.8)', transform: [{ rotate: '-14deg' }] }} />
-            <View style={{ position: 'absolute', right: SCREEN_W * 0.08, top: 150, width: 12, height: 160, borderRadius: 6, backgroundColor: 'rgba(30,30,30,0.08)', transform: [{ rotate: '-30deg' }] }} />
-            {/* trees */}
-            {[[0.64, 6, 16], [0.94, 64, 18], [0.7, 196, 20], [0.9, 222, 22], [0.66, 300, 20], [0.82, 4, 14]].map(([x, y, s], i) => (
-              <View key={`t${i}`} style={{ position: 'absolute', left: SCREEN_W * x, top: y, alignItems: 'center' }}>
-                <View style={{ width: s, height: s * 1.3, borderRadius: s, backgroundColor: 'rgba(9,173,42,0.30)' }} />
-                <View style={{ width: 2, height: 10, backgroundColor: 'rgba(30,30,30,0.18)' }} />
-              </View>
-            ))}
-            {/* big map pin with store */}
-            <View style={{ position: 'absolute', right: SCREEN_W * 0.16, top: 42, alignItems: 'center' }}>
-              <MapPin size={78} color="#fff" fill={BRAND.green} strokeWidth={1.2} />
-              <View style={{ position: 'absolute', top: 16, height: 34, width: 34, borderRadius: 17, backgroundColor: BRAND.green, alignItems: 'center', justifyContent: 'center' }}>
-                <Store size={18} color="#fff" />
-              </View>
-              <View style={{ width: 28, height: 7, borderRadius: 14, backgroundColor: 'rgba(30,30,30,0.10)', marginTop: -5 }} />
-            </View>
+        {/* Banner — the shop's image, full width under the header (open / closed on top). */}
+        {images.length ? (
+        <View style={{ width: bannerW, height: bannerH, alignSelf: 'center', backgroundColor: '#F3F4F6', overflow: 'hidden' }}>
+            <ScrollView
+              ref={scrollRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={(e) => setPage(Math.round(e.nativeEvent.contentOffset.x / bannerW))}
+            >
+              {images.map((uri) => (
+                <Image key={uri} source={{ uri }} style={{ width: bannerW, height: bannerH }} resizeMode="contain" onError={() => markFailed(uri)} />
+              ))}
+            </ScrollView>
+          <View pointerEvents="none" style={{ position: 'absolute', top: 10, left: 12, flexDirection: 'row', alignItems: 'center', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: open ? BRAND.green : BRAND.red }}>
+            <View style={{ height: 6, width: 6, borderRadius: 3, backgroundColor: '#fff', marginRight: 6 }} />
+            <Text style={{ color: '#fff', fontSize: rf(10.5), fontWeight: '800', letterSpacing: 0.6 }}>{open ? 'OPEN NOW' : 'CLOSED'}</Text>
           </View>
-
-          <View style={[centered, { paddingHorizontal: 18, paddingTop: 14, paddingRight: Math.min(SCREEN_W, MAX_W) * 0.38 }]}>
-            <Text style={{ fontSize: rf(22), fontWeight: '900', color: FLOW.ink, letterSpacing: -0.5 }} numberOfLines={2}>{shop.name}</Text>
-            <View style={{ flexDirection: 'row', marginTop: 6 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: open ? BRAND.green : BRAND.red }}>
-                <View style={{ height: 6, width: 6, borderRadius: 3, backgroundColor: '#fff', marginRight: 6 }} />
-                <Text style={{ color: '#fff', fontSize: rf(10.5), fontWeight: '800', letterSpacing: 0.6 }}>{open ? 'OPEN NOW' : 'CLOSED'}</Text>
-              </View>
+          {images.length > 1 ? (
+            <View pointerEvents="none" style={{ position: 'absolute', bottom: 8, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center' }}>
+              {images.map((u, i) => (
+                <View key={u} style={{ height: 6, width: i === page ? 16 : 6, borderRadius: 3, marginHorizontal: 3, backgroundColor: i === page ? '#fff' : 'rgba(255,255,255,0.6)' }} />
+              ))}
             </View>
-            {subtitle ? (
-              <Text style={{ fontSize: rf(12.5), color: FLOW.muted, marginTop: 6, lineHeight: rf(17) }} numberOfLines={3}>{subtitle}</Text>
-            ) : null}
-          </View>
-        </LinearGradient>
+          ) : null}
+        </View>
+        ) : null}
 
         <View style={centered}>
           {/* Shop card */}
-          <View style={{ paddingHorizontal: 16, marginTop: -22 }}>
+          <View style={{ paddingHorizontal: 16, marginTop: 12 }}>
             <View style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: FLOW.border, borderRadius: 18, padding: 12, shadowColor: BRAND.ink, shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 3 }}>
               <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-                {/* Shop photos — same images as before (banner + storefront, or
-                    the stock fallback), still swipeable with page dots. */}
-                <View style={{ width: imgBox, height: imgBox, borderRadius: 14, overflow: 'hidden', backgroundColor: BRAND.line, marginRight: 11 }}>
-                  <ScrollView
-                    ref={scrollRef}
-                    horizontal
-                    pagingEnabled
-                    showsHorizontalScrollIndicator={false}
-                    onMomentumScrollEnd={(e) => setPage(Math.round(e.nativeEvent.contentOffset.x / imgBox))}
-                  >
-                    {images.map((uri, i) => (
-                      <Image key={i} source={{ uri }} style={{ width: imgBox, height: imgBox }} resizeMode="cover" />
-                    ))}
-                  </ScrollView>
-                  {images.length > 1 ? (
-                    <View pointerEvents="none" style={{ position: 'absolute', bottom: 6, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center' }}>
-                      {images.map((_, i) => (
-                        <View key={i} style={{ height: 5, width: i === page ? 14 : 5, borderRadius: 3, marginHorizontal: 2, backgroundColor: i === page ? '#fff' : 'rgba(255,255,255,0.6)' }} />
-                      ))}
-                    </View>
-                  ) : null}
-                </View>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
                     <Text style={{ flex: 1, fontSize: rf(15), fontWeight: '800', color: FLOW.ink, marginRight: 6 }} numberOfLines={2}>{shop.name}</Text>
@@ -336,6 +308,9 @@ export default function RepairShopDetailsScreen({ navigation, route }) {
                       </>
                     ) : null}
                   </View>
+                  {subtitle ? (
+                    <Text style={{ fontSize: rf(11.5), color: FLOW.muted, marginTop: 5, lineHeight: rf(16) }} numberOfLines={2}>{subtitle}</Text>
+                  ) : null}
                   <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 7 }}>
                     <MapPin size={14} color={BRAND.red} style={{ marginTop: 1 }} />
                     <Text style={{ flex: 1, fontSize: rf(11.5), color: BRAND.body, marginLeft: 6, lineHeight: rf(16) }} numberOfLines={3}>
@@ -382,13 +357,44 @@ export default function RepairShopDetailsScreen({ navigation, route }) {
           {/* Services at shop */}
           <Text style={{ fontSize: rf(16.5), fontWeight: '800', color: FLOW.ink, paddingHorizontal: 16, marginTop: 18 }} numberOfLines={2}>Services at {shop.name}</Text>
           <Text style={{ fontSize: rf(11.5), color: FLOW.muted, paddingHorizontal: 16, marginTop: 1, marginBottom: 10 }}>Choose the service you need</Text>
+          {/* The two selectable options, on their own row. */}
           <View style={{ paddingHorizontal: 16, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
             {PRIMARY_OPTIONS.map((opt) => (
               <ServiceTile key={opt.key} k={opt.key} title={opt.title} Icon={opt.icon} selectable />
             ))}
-            {infoTiles.map((f) => (
-              <ServiceTile key={f.key} k={f.key} title={f.title} Icon={f.icon} />
-            ))}
+          </View>
+
+          {/* Promo banner — the four info items merged into one card (display only). */}
+          <View style={{ paddingHorizontal: 16, marginTop: 4 }}>
+            <LinearGradient
+              colors={[BRAND.green, '#035C6C']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{ borderRadius: 18, padding: 14, overflow: 'hidden', ...cardShadow }}
+            >
+              <View pointerEvents="none" style={{ position: 'absolute', right: -30, top: -30, height: 120, width: 120, borderRadius: 60, backgroundColor: 'rgba(255,255,255,0.08)' }} />
+              <View pointerEvents="none" style={{ position: 'absolute', right: 40, bottom: -40, height: 90, width: 90, borderRadius: 45, backgroundColor: 'rgba(255,255,255,0.06)' }} />
+              <Text style={{ fontSize: rf(10), fontWeight: '800', color: 'rgba(255,255,255,0.85)', letterSpacing: 1.2 }}>WHY BOOK HERE</Text>
+              <Text style={{ fontSize: rf(15), fontWeight: '800', color: '#fff', marginTop: 2 }} numberOfLines={2}>Repair, exchange & free pickup in one place</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 10, marginHorizontal: -4 }}>
+                {infoTiles.map((f) => {
+                  const FIcon = f.icon;
+                  return (
+                    <View key={f.key} style={{ width: '50%', padding: 4 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 8, backgroundColor: 'rgba(255,255,255,0.14)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)' }}>
+                        <View style={{ height: 26, width: 26, borderRadius: 13, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', marginRight: 7 }}>
+                          <FIcon size={14} color={FLOW.deep} />
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={{ fontSize: rf(11.5), fontWeight: '800', color: '#fff' }} numberOfLines={1}>{f.title}</Text>
+                          <Text style={{ fontSize: rf(9.5), color: 'rgba(255,255,255,0.85)' }} numberOfLines={1}>{TILE[f.key]?.sub}</Text>
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            </LinearGradient>
           </View>
 
           {/* Service categories — what this shop repairs (Android / Apple). */}

@@ -5,8 +5,8 @@ import Svg, { Circle, G, Path, Rect } from 'react-native-svg';
  * Two-tone line art (ink outline + brand-green fill) for the Repair tab's
  * "Services available" and "Why Us" sections. 48×48 grid.
  */
-const INK = '#1E1E1E';
-const GREEN = '#09AD2A';
+const INK = '#111111';
+const GREEN = '#035C6C';
 const W = '#FFFFFF';
 const S = { stroke: INK, strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' };
 const T = { ...S, strokeWidth: 1.5 };

@@ -13,14 +13,14 @@ import { setSession } from '../../../store/authSlice';
 import { getSession, saveSession } from '../../../auth/session';
 import { rf } from '../../../utils/responsive';
 
-// Brand palette: green #09AD2A, green text #078F23, ink #1E1E1E, neutrals.
-const GREEN = '#09AD2A';
-const GREEN_DARK = '#078F23';
-const CHIP_BG = '#EAF8EC';
-const INK = '#1E1E1E';
-const MUTED = '#6B6B6B';
-const LINE = '#E6E6E6';
-const PAGE_BG = '#F8F8F8';
+// Brand palette: green #035C6C, green text #035C6C, ink #111111, neutrals.
+const GREEN = '#035C6C';
+const GREEN_DARK = '#035C6C';
+const CHIP_BG = '#E5F3F5';
+const INK = '#111111';
+const MUTED = '#606E87';
+const LINE = '#E8EAEE';
+const PAGE_BG = '#F3F4F6';
 
 // Left-icon labelled fields, driven from a table so the row layout stays
 // identical across all four inputs (icon chip · label · input).
@@ -230,7 +230,7 @@ export default function EditProfileScreen({ navigation }) {
             return (
               <View
                 key={f.key}
-                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 9, borderTopWidth: idx ? 1 : 0, borderTopColor: '#F3F3F3' }}
+                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 9, borderTopWidth: idx ? 1 : 0, borderTopColor: '#F3F4F6' }}
               >
                 <View
                   style={{

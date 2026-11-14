@@ -8,10 +8,10 @@ import { cleanIssueSummary } from '../../../utils/pickupEstimateMeta';
 import { rf } from '../../../utils/responsive';
 import { BRAND } from '../../../theme/brand';
 
-const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
-const MINT = '#EAF8EC';
-const LINE = '#E6E6E6';
-const MUTED = '#6B6B6B';
+const GREEN_TEXT = '#035C6C'; // #035C6C shaded for text on white
+const MINT = '#E5F3F5';
+const LINE = '#E8EAEE';
+const MUTED = '#606E87';
 
 const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 

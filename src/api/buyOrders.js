@@ -22,10 +22,10 @@ export const BUY_STATUS_LABEL = {
 export const OTP_STATUSES = ['CONFIRMED', 'ASSIGNED', 'ACCEPTED', 'PICKED_UP', 'OUT_FOR_DELIVERY'];
 export const CANCELLABLE = ['PLACED', 'CONFIRMED', 'ASSIGNED', 'ACCEPTED'];
 
-export const placeBuyOrder = (body) => marketplaceApi.post('/customer/buy-orders', body);
+export const placeBuyOrder = (body) => marketplaceApi.post('/customer/buy-orders', { body });
 export const listBuyOrders = () => marketplaceApi.get('/customer/buy-orders');
 export const getBuyOrder = (id) => marketplaceApi.get(`/customer/buy-orders/${id}`);
-export const cancelBuyOrder = (id) => marketplaceApi.post(`/customer/buy-orders/${id}/cancel`, {});
+export const cancelBuyOrder = (id) => marketplaceApi.post(`/customer/buy-orders/${id}/cancel`, { body: {} });
 
 // Fulfilment the listing allows: SHIPPING → home delivery, PICKUP → visit shop.
 // A listing with no options set is treated as visit-shop only.

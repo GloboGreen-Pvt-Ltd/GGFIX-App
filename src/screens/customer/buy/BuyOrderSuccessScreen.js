@@ -35,7 +35,6 @@ export default function BuyOrderSuccessScreen({ navigation, route }) {
             ? `Your name, phone & address were sent to ${notified.join(', ')}. Track it in My Orders.`
             : 'Your order has been placed. Track it in My Orders.'}
           chips={[
-            orderNo ? { icon: BadgeCheck, text: `#${orderNo}`, selectable: true } : null,
             status ? { text: `Status: ${status}` } : null,
           ].filter(Boolean)}
         />

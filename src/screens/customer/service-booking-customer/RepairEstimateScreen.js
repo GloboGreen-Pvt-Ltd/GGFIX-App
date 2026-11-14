@@ -102,7 +102,7 @@ export default function RepairEstimateScreen({ navigation, route }) {
       <AppHeader title="Repair Estimate" subtitle={`#${booking.bookingNumber || bookingId?.slice?.(0, 8)}`} onBack={() => navigation.goBack()} />
       <ScrollView
         contentContainerStyle={{ padding: 16, paddingBottom: insetBottom + (canDecide ? 110 : 24) }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#09AD2A" colors={['#09AD2A']} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#035C6C" colors={['#035C6C']} />}
       >
         <Card>
           <View className="flex-row items-center">
@@ -208,7 +208,7 @@ export default function RepairEstimateScreen({ navigation, route }) {
       {canDecide ? (
         <View
           className="absolute left-0 right-0 bottom-0 bg-card border-t border-border px-4 pt-3"
-          style={{ paddingBottom: insetBottom, shadowColor: '#0F172A', shadowOpacity: 0.10, shadowRadius: 16, shadowOffset: { width: 0, height: -6 }, elevation: 14 }}
+          style={{ paddingBottom: insetBottom, shadowColor: '#1C3053', shadowOpacity: 0.10, shadowRadius: 16, shadowOffset: { width: 0, height: -6 }, elevation: 14 }}
         >
           <View className="flex-row">
             <View className="flex-1 mr-2">

@@ -18,6 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Defs, Ellipse, LinearGradient as SvgGradient, Path, Stop } from 'react-native-svg';
 import { ArrowRight, CalendarClock, Phone, ShieldCheck, ShoppingCart } from 'lucide-react-native';
 import { customerLogin, requestOtp } from '../api/auth';
+import { showToast } from '../components/AppToast';
 import { AUTH_BASE } from '../api/config';
 import LegalAgreement from '../legal/LegalAgreement';
 import { hasDeviceAgreed, setLegalAgreed } from '../legal/legalConsent';
@@ -52,13 +53,13 @@ const OTP_LENGTH = 6;
 const RESEND_SECONDS = 30;
 const MOBILE_DIGITS = 10;
 
-const PAGE_BG = '#F7F8F7';
-const INK = '#1E1E1E';
-const GREEN_TEXT = '#12A02F';
-const MUTED = '#6B6B6B';
-const SOFT = '#8C8C8C';
-const LINE = '#E6E6E6';
-const DANGER = '#F84141';
+const PAGE_BG = '#F3F4F6';
+const INK = '#111111';
+const GREEN_TEXT = '#035C6C';
+const MUTED = '#606E87';
+const SOFT = '#606E87';
+const LINE = '#E8EAEE';
+const DANGER = '#F32C26';
 const HERO = require('../../assets/login-hero.png');
 const HERO_RATIO = 700 / 546; // height / width of login-hero.png
 
@@ -114,6 +115,12 @@ export default function LoginScreen({ onLogin, navigation }) {
     return msg;
   };
 
+  const otpFailToast = (e, fallback) => (/expired/i.test(String(e?.message || ''))
+    ? { type: 'warning', title: 'OTP expired', message: 'Request a new code and try again.' }
+    : e?.status === 401 || /invalid (otp|code)/i.test(String(e?.message || ''))
+      ? { type: 'error', title: 'Invalid OTP', message: 'The code you entered is incorrect.' }
+      : { type: 'error', title: 'Verification failed', message: describeError(e, fallback) });
+
   const sendOtp = async ({ resend = false } = {}) => {
     setError(null);
     setNote(null);
@@ -144,8 +151,14 @@ export default function LoginScreen({ onLogin, navigation }) {
       setSeconds(RESEND_SECONDS);
       if (resend) setNote('A new code has been sent.');
       else setStep('OTP');
+      showToast(resend
+        ? { type: 'info', title: 'OTP resent', message: `New code sent to +91 ${mobile}` }
+        : { type: 'success', title: 'OTP sent', message: `Code sent to +91 ${mobile}` });
     } catch (e) {
       setError(describeError(e, 'Could not send the code.'));
+      showToast(e?.status === 400
+        ? { type: 'warning', title: 'Account not found', message: 'Tap "Create account" to sign up.' }
+        : { type: 'error', title: 'Could not send OTP', message: describeError(e, 'Could not send the code.') });
     } finally {
       setLoading(false);
     }
@@ -164,9 +177,11 @@ export default function LoginScreen({ onLogin, navigation }) {
     try {
       setLoading(true);
       const data = await customerLogin({ mobile, otp: entered });
+      showToast({ type: 'success', title: 'Login successful', message: 'OTP verified. Welcome back!' });
       onLogin(data);
     } catch (e) {
       setError(describeError(e, 'Authentication failed'));
+      showToast(otpFailToast(e, 'Authentication failed'));
       // Wrong code → wipe the boxes and re-focus so the retry is one action.
       // A network/server failure keeps the digits: they were probably right and
       // re-typing six of them to retry a dropped request is pure friction.
@@ -215,11 +230,11 @@ export default function LoginScreen({ onLogin, navigation }) {
         showsVerticalScrollIndicator={false}
       >
         <View style={{ paddingHorizontal: 40 * k }}>
-          <Image source={require('../../assets/logo.png')} style={s.logo} resizeMode="contain" accessibilityLabel="GGFIX" />
+          <Image source={require('../../assets/logo.png')} style={s.logo} resizeMode="contain" accessibilityLabel="NearGFix" />
           {step === 'MOBILE' ? (
             <>
               <Text style={s.h1}>Login with{'\n'}<Text style={{ color: GREEN_TEXT }}>mobile number</Text></Text>
-              <Text style={s.sub}>Welcome to GGFIX Customer App</Text>
+              <Text style={s.sub}>Welcome to NearGFix Customer App</Text>
             </>
           ) : (
             <>
@@ -278,13 +293,13 @@ function MobileStep({ s, k, mobile, setMobile, loading, error, onSubmit, onCreat
     <View>
       <Text style={s.label}>Mobile number</Text>
       <View style={s.inputBox}>
-        <Phone size={19 * k} color="#7A7A7A" strokeWidth={2} />
+        <Phone size={19 * k} color="#606E87" strokeWidth={2} />
         <View style={s.inputDivider} />
         <TextInput
           value={mobile}
           onChangeText={(v) => setMobile(v.replace(/[^0-9]/g, '').slice(0, MOBILE_DIGITS))}
           placeholder="9876543210"
-          placeholderTextColor="#BDBDBD"
+          placeholderTextColor="#8E97A9"
           keyboardType="number-pad"
           maxLength={MOBILE_DIGITS}
           returnKeyType="done"
@@ -401,7 +416,7 @@ function PillButton({ s, k, label, loading, onPress }) {
       className="active:opacity-90"
       style={s.ctaShadow}
     >
-      <LinearGradient colors={['#22B53D', '#13982C']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={s.cta}>
+      <LinearGradient colors={['#035C6C', '#035C6C']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={s.cta}>
         {loading ? (
           <ActivityIndicator color="#FFFFFF" />
         ) : (
@@ -426,9 +441,9 @@ function ErrorBox({ s, msg }) {
 
 function Features({ s, k }) {
   const items = [
-    { Icon: CalendarClock, label: 'Book\nrepairs', color: '#1FA33A', bg: '#E2F4E5' },
-    { Icon: ShoppingCart, label: 'Buy and sell\nyour devices', color: '#E5A50A', bg: '#FCF1D3' },
-    { Icon: ShieldCheck, label: 'Trusted\n& secure', color: '#E8323A', bg: '#FCE3E3' },
+    { Icon: CalendarClock, label: 'Book\nrepairs', color: '#035C6C', bg: '#E5F3F5' },
+    { Icon: ShoppingCart, label: 'Buy and sell\nyour devices', color: '#FAA700', bg: '#FFF4D6' },
+    { Icon: ShieldCheck, label: 'Trusted\n& secure', color: '#F32C26', bg: '#FEEBEA' },
   ];
   return (
     <View style={s.features}>
@@ -456,26 +471,26 @@ function Backdrop({ k }) {
       <Svg width={W} height={H}>
         <Defs>
           <SvgGradient id="wedge" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor="#8ED89D" />
-            <Stop offset="1" stopColor="#5BC274" />
+            <Stop offset="0" stopColor="#C7E6EA" />
+            <Stop offset="1" stopColor="#609138" />
           </SvgGradient>
           <SvgGradient id="deep" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor="#2DAE5C" />
-            <Stop offset="1" stopColor="#14915A" />
+            <Stop offset="0" stopColor="#609138" />
+            <Stop offset="1" stopColor="#609138" />
           </SvgGradient>
         </Defs>
         {/* faint washes, top-left and mid-left */}
-        <Circle cx={30 * k} cy={70 * k} r={210 * k} fill="#EFF4F0" fillOpacity={0.7} />
-        <Circle cx={-30 * k} cy={330 * k} r={150 * k} fill="#E6F4E9" fillOpacity={0.8} />
+        <Circle cx={30 * k} cy={70 * k} r={210 * k} fill="#F3F4F6" fillOpacity={0.7} />
+        <Circle cx={-30 * k} cy={330 * k} r={150 * k} fill="#E5F3F5" fillOpacity={0.8} />
         {/* green wedge on the right edge, behind the card's top corner */}
         <Path d={`M${W} ${245 * k} L${W} ${345 * k} L${W - 66 * k} ${310 * k} Z`} fill="url(#wedge)" />
         {/* bottom-left waves */}
-        <Ellipse cx={-6 * k} cy={H + 22 * k} rx={128 * k} ry={140 * k} fill="#CBEED2" />
-        <Ellipse cx={-16 * k} cy={H + 26 * k} rx={104 * k} ry={116 * k} fill="#93DBA7" />
+        <Ellipse cx={-6 * k} cy={H + 22 * k} rx={128 * k} ry={140 * k} fill="#C7E6EA" />
+        <Ellipse cx={-16 * k} cy={H + 26 * k} rx={104 * k} ry={116 * k} fill="#9ABEC4" />
         <Ellipse cx={-28 * k} cy={H + 18 * k} rx={78 * k} ry={86 * k} fill="url(#deep)" />
         {/* bottom-right waves */}
-        <Ellipse cx={W + 8 * k} cy={H + 30 * k} rx={124 * k} ry={128 * k} fill="#CBEED2" />
-        <Ellipse cx={W + 16 * k} cy={H + 34 * k} rx={100 * k} ry={104 * k} fill="#93DBA7" />
+        <Ellipse cx={W + 8 * k} cy={H + 30 * k} rx={124 * k} ry={128 * k} fill="#C7E6EA" />
+        <Ellipse cx={W + 16 * k} cy={H + 34 * k} rx={100 * k} ry={104 * k} fill="#9ABEC4" />
         <Ellipse cx={W + 26 * k} cy={H + 28 * k} rx={80 * k} ry={82 * k} fill="url(#deep)" />
       </Svg>
     </View>
@@ -498,15 +513,15 @@ const makeStyles = (k) => StyleSheet.create({
   changeLink: { fontSize: 12.5 * k, fontWeight: '700', color: GREEN_TEXT },
   inputBox: {
     flexDirection: 'row', alignItems: 'center', height: 46 * k, paddingLeft: 17 * k, borderRadius: 13 * k,
-    backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E9E9E9',
+    backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E8EAEE',
     shadowColor: '#000000', shadowOpacity: 0.03, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1,
   },
-  inputDivider: { width: 1, height: 22 * k, backgroundColor: '#E3E3E3', marginHorizontal: 14 * k },
+  inputDivider: { width: 1, height: 22 * k, backgroundColor: '#E8EAEE', marginHorizontal: 14 * k },
   input: { flex: 1, height: '100%', fontSize: 14.5 * k, color: INK, letterSpacing: 0.3 },
 
   ctaShadow: {
     marginTop: 18 * k, borderRadius: 24 * k,
-    shadowColor: '#13982C', shadowOpacity: 0.3, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 5,
+    shadowColor: '#035C6C', shadowOpacity: 0.3, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 5,
   },
   cta: { height: 48 * k, borderRadius: 24 * k, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   ctaText: { color: '#FFFFFF', fontSize: 13.5 * k, fontWeight: '800', letterSpacing: 2.2 * k },
@@ -521,25 +536,25 @@ const makeStyles = (k) => StyleSheet.create({
   otpWrap: { position: 'relative', height: 50 * k },
   otpRow: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', height: 50 * k },
   otpBox: {
-    width: 42 * k, height: 50 * k, borderRadius: 12 * k, borderWidth: 1, borderColor: '#E9E9E9', backgroundColor: '#FFFFFF',
+    width: 42 * k, height: 50 * k, borderRadius: 12 * k, borderWidth: 1, borderColor: '#E8EAEE', backgroundColor: '#FFFFFF',
     alignItems: 'center', justifyContent: 'center',
   },
-  otpBoxActive: { borderColor: '#13982C', borderWidth: 1.5 },
-  otpBoxFilled: { borderColor: '#9ED8AA', backgroundColor: '#F4FBF5' },
+  otpBoxActive: { borderColor: '#035C6C', borderWidth: 1.5 },
+  otpBoxFilled: { borderColor: '#C7E6EA', backgroundColor: '#F0F8F9' },
   otpChar: { fontSize: 20 * k, fontWeight: '800', color: INK },
-  otpCharEmpty: { fontSize: 16 * k, color: '#CFCFCF' },
+  otpCharEmpty: { fontSize: 16 * k, color: '#8E97A9' },
   // Fixed-size overlay (never part of the row's layout) — invisible, catches typing / paste / SMS autofill.
   otpHiddenInput: { position: 'absolute', left: 0, top: 0, width: '100%', height: 50 * k, padding: 0, margin: 0, opacity: 0, color: 'transparent', backgroundColor: 'transparent' },
   note: { fontSize: 12.5 * k, color: GREEN_TEXT, marginTop: 10 * k, textAlign: 'center' },
   resendRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 22 * k },
 
-  errorBox: { marginTop: 12 * k, borderRadius: 12 * k, paddingHorizontal: 12 * k, paddingVertical: 9 * k, backgroundColor: '#FEECEC', borderWidth: 1, borderColor: 'rgba(248,65,65,0.3)' },
+  errorBox: { marginTop: 12 * k, borderRadius: 12 * k, paddingHorizontal: 12 * k, paddingVertical: 9 * k, backgroundColor: '#FEEBEA', borderWidth: 1, borderColor: 'rgba(243,44,38,0.3)' },
   errorText: { fontSize: 12.5 * k, lineHeight: 17 * k, color: DANGER },
 
   features: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 18 * k, paddingHorizontal: 16 * k },
   feature: { flex: 1, alignItems: 'center' },
   featureIcon: { width: 35 * k, height: 35 * k, borderRadius: 17.5 * k, alignItems: 'center', justifyContent: 'center' },
-  featureText: { marginTop: 8 * k, fontSize: 12 * k, lineHeight: 15 * k, color: '#333333', textAlign: 'center' },
-  featureDivider: { width: 1, height: 30 * k, marginTop: 18 * k, backgroundColor: '#E1E1E1' },
+  featureText: { marginTop: 8 * k, fontSize: 12 * k, lineHeight: 15 * k, color: '#111111', textAlign: 'center' },
+  featureDivider: { width: 1, height: 30 * k, marginTop: 18 * k, backgroundColor: '#E8EAEE' },
   footnote: { marginTop: 26 * k, fontSize: 11.5 * k, color: SOFT, textAlign: 'center' },
 });

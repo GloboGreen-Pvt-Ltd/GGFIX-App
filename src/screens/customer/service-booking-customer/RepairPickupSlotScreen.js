@@ -10,22 +10,22 @@ import { rf } from '../../../utils/responsive';
 import { FLOW as BASE_FLOW, FlowCta, FlowDecor, FlowHeader, useHideStackHeader } from './FlowChrome';
 import { BRAND, BRAND_FLOW } from '../../../theme/brand';
 
-// Brand palette in the FLOW shape (09AD2A · 1E1E1E · F8F8F8 · F3F3F3 · F3BF23 · F84141).
+// Brand palette in the FLOW shape (035C6C · 111111 · F3F4F6 · F3F4F6 · FAA700 · F32C26).
 const FLOW = {
   ...BASE_FLOW,
   primary: BRAND.green,
-  deep: '#078F23', // green text / icons (#09AD2A shaded)
+  deep: '#035C6C', // green text / icons (#035C6C shaded)
   ink: BRAND.ink,
-  muted: '#6B6B6B',
-  mint: '#EAF8EC',
-  softMint: '#F4FBF5',
-  tint: '#F4FBF5',
-  border: '#E6E6E6',
+  muted: '#606E87',
+  mint: '#E5F3F5',
+  softMint: '#F0F8F9',
+  tint: '#F0F8F9',
+  border: '#E8EAEE',
   bg: BRAND.bg,
 };
-const GREEN_LINE = 'rgba(9,173,42,0.45)';
-const YELLOW_SOFT = '#FEF6DA';
-const RED_SOFT = '#FEECEC';
+const GREEN_LINE = 'rgba(3,92,108,0.45)';
+const YELLOW_SOFT = '#FFF4D6';
+const RED_SOFT = '#FEEBEA';
 const cardShadow = { shadowColor: BRAND.ink, shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1 };
 
 function next7Days() {
@@ -40,6 +40,33 @@ function next7Days() {
 }
 
 const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+// Shop windows (e.g. 10:00–20:00) are offered as one-hour slots; a shorter
+// tail stays as it is. Times go to the server as "HH:mm".
+const toMin = (t) => { const [h, m] = String(t || '').split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+const hhmm = (mins) => `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+function hourlySlots(list) {
+  const out = [];
+  const seen = new Set();
+  list.forEach((s) => {
+    const a = toMin(s.startTime);
+    const b = toMin(s.endTime);
+    if (!(b > a)) { out.push(s); return; }
+    for (let t = a; t < b; t += 60) {
+      const e = Math.min(t + 60, b);
+      if (!seen.has(`${t}-${e}`)) { seen.add(`${t}-${e}`); out.push({ ...s, startTime: hhmm(t), endTime: hhmm(e) }); }
+    }
+  });
+  return out.sort((x, y) => toMin(x.startTime) - toMin(y.startTime));
+}
+// 12-hour label: "10:00 - 11:00 AM", "11:00 AM - 12:00 PM".
+function slotLabel(s) {
+  const a = toMin(s?.startTime);
+  const b = toMin(s?.endTime);
+  const h12 = (m) => `${Math.floor(m / 60) % 12 || 12}:${String(m % 60).padStart(2, '0')}`;
+  const ap = (m) => (Math.floor(m / 60) % 24 < 12 ? 'AM' : 'PM');
+  return ap(a) === ap(b) ? `${h12(a)} - ${h12(b)} ${ap(b)}` : `${h12(a)} ${ap(a)} - ${h12(b)} ${ap(b)}`;
+}
 
 // Compare slot times tolerant of "HH:mm" vs "HH:mm:ss" (booking stores seconds).
 const sameSlot = (a, b) =>
@@ -71,7 +98,7 @@ export default function RepairPickupSlotScreen({ navigation, route }) {
           pickupSlotStart: slot?.startTime,
           pickupSlotEnd: slot?.endTime,
         });
-        notify('Rescheduled', `Pickup moved to ${pickupDate}, ${(slot?.startTime || '').slice(0, 5)} - ${(slot?.endTime || '').slice(0, 5)}.`);
+        notify('Rescheduled', `Pickup moved to ${pickupDate}, ${slotLabel(slot)}.`);
         navigation.goBack();
       } catch (e) {
         notify('Error', e?.message || 'Could not reschedule');
@@ -131,13 +158,13 @@ export default function RepairPickupSlotScreen({ navigation, route }) {
   // JS Date.getDay() is 0=Sun..6=Sat — convert to ISO before matching.
   const isoDow = ((days[dayIdx].getDay() + 6) % 7) + 1;
   const slotsForDay = slots.filter((s) => s.dayOfWeek == null || s.dayOfWeek === isoDow);
-  const slotsToShow = pickupOff ? [] : (slotsForDay.length ? slotsForDay : (slots.length ? [] : [
+  const slotsToShow = hourlySlots(pickupOff ? [] : (slotsForDay.length ? slotsForDay : (slots.length ? [] : [
     { startTime: '09:00', endTime: '11:00' },
     { startTime: '11:00', endTime: '13:00' },
     { startTime: '13:00', endTime: '15:00' },
     { startTime: '15:00', endTime: '17:00' },
     { startTime: '17:00', endTime: '19:00' },
-  ]));
+  ])));
 
   return (
     <View style={{ flex: 1, backgroundColor: FLOW.bg }}>
@@ -192,7 +219,7 @@ export default function RepairPickupSlotScreen({ navigation, route }) {
                   }}
                 >
                   {active ? (
-                    <LinearGradient colors={[BRAND.green, '#0A9E27']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
+                    <LinearGradient colors={[BRAND.green, '#035C6C']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
                   ) : null}
                   <Text style={{ fontSize: rf(10), fontWeight: '700', letterSpacing: 0.5, color: active ? 'rgba(255,255,255,0.9)' : FLOW.muted }}>
                     {WEEKDAY[d.getDay()].toUpperCase()}
@@ -225,7 +252,7 @@ export default function RepairPickupSlotScreen({ navigation, route }) {
           ) : null}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -3 }}>
             {slotsToShow.map((s, i) => {
-              const label = `${(s.startTime || '').slice(0, 5)} - ${(s.endTime || '').slice(0, 5)}`;
+              const label = slotLabel(s);
               const active = sameSlot(slot, s);
               return (
                 <View key={i} style={{ width: '50%', padding: 3 }}>

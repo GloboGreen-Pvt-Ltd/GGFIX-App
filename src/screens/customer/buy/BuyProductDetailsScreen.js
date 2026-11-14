@@ -160,7 +160,7 @@ export default function BuyProductDetailsScreen({ route, navigation }) {
 
   // Buy Now: straight to Place Order with just this product (the cart is untouched).
   const buyNow = () => {
-    navigation.navigate('BuyPlaceOrder', { items: [{ product: { ...p, id: p.id || productId, shopName: shop?.name || p.shopName }, quantity: 1 }] });
+    navigation.navigate('BuyFulfillment', { items: [{ product: { ...p, id: p.id || productId, shopName: shop?.name || p.shopName }, quantity: 1 }] });
   };
 
   if (loading) return <Loader />;
@@ -184,6 +184,12 @@ export default function BuyProductDetailsScreen({ route, navigation }) {
   // full screening/condition/accessory/warranty answers in a JSON blob.
   let assessment = {};
   try { assessment = p.assessmentJson ? JSON.parse(p.assessmentJson) : {}; } catch (_) {}
+  // Partner listings store accessories as plain strings and the warranty as a
+  // code (+ end date); show both the same way as customer-sell answers.
+  if (Array.isArray(assessment.accessories)) assessment.accessories = assessment.accessories.filter((a) => (typeof a === 'string' ? a.trim() : a));
+  if (!assessment.warrantyLabel && assessment.warranty && assessment.warranty !== 'NONE') {
+    assessment.warrantyLabel = `${String(assessment.warranty).replace(/_/g, ' ').toLowerCase().replace(/^\w/, (ch) => ch.toUpperCase())} warranty${assessment.warrantyValidTill ? ` till ${assessment.warrantyValidTill}` : ''}`;
+  }
   const hasSummary = !!(
     assessment.screeningAnswers?.length ||
     assessment.conditions?.length ||
@@ -259,7 +265,7 @@ export default function BuyProductDetailsScreen({ route, navigation }) {
 
           <Text style={[styles.title, { marginTop: 12 }]}>{p.title}</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-            <Text style={[styles.price, { flex: 1 }]}>{priced ? `₹${Number(p.price).toLocaleString('en-IN')}` : 'Price on request'}</Text>
+            <Text style={[styles.price, { flex: 1 }]}>{priced ? `₹${Number(p.price).toLocaleString('en-IN')}` : 'Price on request'}{priced ? <Text style={{ fontSize: rf(11), fontWeight: '700', color: MUTED }}>  Fixed Price</Text> : null}</Text>
             {p.conditionLabel ? (
               <View style={styles.condChip}><Text style={styles.condText}>{p.conditionLabel}</Text></View>
             ) : null}
@@ -364,7 +370,7 @@ export default function BuyProductDetailsScreen({ route, navigation }) {
                   {assessment.accessories.map((a, i) => (
                     <View key={i} style={styles.summaryItem}>
                       <Check />
-                      <Text style={styles.summaryItemText}>{a.label || a.accessoryCode}</Text>
+                      <Text style={styles.summaryItemText}>{typeof a === 'string' ? a : a?.label || a?.name || a?.accessoryCode}</Text>
                     </View>
                   ))}
                 </>
@@ -407,6 +413,17 @@ export default function BuyProductDetailsScreen({ route, navigation }) {
               </>
             )}
           </Pressable>
+          {p.shopId ? (
+            <Pressable
+              onPress={() => navigation.navigate('ShopDetails', { shopId: p.shopId })}
+              accessibilityRole="button"
+              accessibilityLabel="Visit shop"
+              style={{ height: 50, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1.5, borderColor: BRAND.green, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}
+            >
+              <Ionicons name="storefront-outline" size={17} color={BRAND.green} />
+              <Text style={{ fontSize: rf(10.5), fontWeight: '800', color: BRAND.green }}>Visit Shop</Text>
+            </Pressable>
+          ) : null}
           <Pressable
             onPress={buyNow}
             disabled={adding || buying}

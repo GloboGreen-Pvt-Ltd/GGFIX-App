@@ -29,7 +29,7 @@ const STATUS_STEP = {};
   [3, 'ACCEPTED', 'OFFER_ACCEPTED', 'QUOTATION_ACCEPTED', 'QUOTE_ACCEPTED', 'SHOP_SELECTED', 'SELECTED'],
   [4, 'ORDER_CREATED', 'SELL_ORDER_CREATED', 'CONFIRMED', 'ORDER_CONFIRMED', 'PROCESSING', 'IN_PROGRESS'],
   [5, 'PICKUP_ASSIGNED', 'PICKUP_SCHEDULED', 'BUYER_ASSIGNED', 'OUT_FOR_PICKUP', 'PICKUP_IN_PROGRESS', 'PICKED_UP', 'DEVICE_PICKED_UP', 'DEVICE_RECEIVED', 'UNDER_INSPECTION', 'INSPECTION_PENDING'],
-  [6, 'DEVICE_VERIFIED', 'VERIFIED', 'INSPECTED', 'INSPECTION_COMPLETED', 'INSPECTION_DONE'],
+  [6, 'DEVICE_VERIFIED', 'VERIFIED', 'INSPECTED', 'INSPECTION_COMPLETED', 'INSPECTION_DONE', 'PRICE_REVISION_PENDING', 'REVISION_REJECTED'],
   [7, 'FINAL_PRICE_CONFIRMED', 'PRICE_CONFIRMED', 'FINAL_PRICE_ACCEPTED', 'PRICE_FINALIZED', 'PAYMENT_PENDING', 'AWAITING_PAYMENT'],
   [8, 'PAYMENT_COMPLETED', 'PAID', 'PAYMENT_DONE', 'PAYMENT_SUCCESS', 'PAYMENT_RECEIVED'],
   [9, 'SOLD', 'COMPLETED', 'SELLING_COMPLETED', 'CLOSED'],
@@ -37,6 +37,19 @@ const STATUS_STEP = {};
 const CANCELLED = new Set(['CANCELLED', 'CANCELED', 'REJECTED', 'EXPIRED', 'WITHDRAWN', 'DECLINED']);
 const PAID_WORDS = /^(PAID|SUCCESS|SUCCESSFUL|COMPLETED|CAPTURED|SETTLED|DONE)$/;
 const CHOSEN_QUOTE = new Set(['ACCEPTED', 'SELECTED', 'CHOSEN', 'APPROVED']);
+// Pickup → inspection events, from the status or their own timestamps. A later
+// event implies the earlier ones; nothing advances because time passed.
+const ASSIGNED = new Set(['PICKUP_ASSIGNED', 'BUYER_ASSIGNED']);
+const ON_THE_WAY = new Set(['OUT_FOR_PICKUP', 'PICKUP_IN_PROGRESS', 'PICKUP_STARTED', 'ON_THE_WAY']);
+const PICKED_UP = new Set(['PICKED_UP', 'DEVICE_PICKED_UP', 'DEVICE_RECEIVED', 'COLLECTED']);
+const INSPECTING = new Set(['UNDER_INSPECTION', 'INSPECTION_STARTED', 'INSPECTION_IN_PROGRESS']);
+// "14:00[:00]" (server LocalTime) → "2:00 PM".
+const hm = (t) => {
+  const m = /^(\d{1,2}):(\d{2})/.exec(String(t || ''));
+  if (!m) return t || '';
+  const h = Number(m[1]);
+  return `${h % 12 || 12}:${m[2]} ${h < 12 ? 'AM' : 'PM'}`;
+};
 
 const up = (v) => String(v ?? '').trim().toUpperCase();
 const num = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : null; };
@@ -55,7 +68,7 @@ export function sellProgress(so, quotes = []) {
     phone: first(so?.pickupPersonPhone, so?.pickupPerson?.phone, so?.buyerPhone, so?.buyer?.phone, so?.assignedToPhone),
     assignedAt: first(so?.pickupAssignedAt, so?.buyerAssignedAt, so?.assignedAt),
     date: first(so?.pickupDate, so?.scheduledPickupDate, so?.scheduledAt),
-    slot: [so?.pickupSlotStart, so?.pickupSlotEnd].filter(Boolean).join(' – ') || first(so?.pickupSlot),
+    slot: [so?.pickupSlotStart, so?.pickupSlotEnd].filter(Boolean).map(hm).join(' – ') || first(so?.pickupSlot),
   };
   const verifiedAt = first(so?.verifiedAt, so?.deviceVerifiedAt, so?.inspectedAt, so?.inspectionCompletedAt);
   const verified = !!verifiedAt || so?.deviceVerified === true || /VERIFIED|PASSED|COMPLETED/.test(up(first(so?.verificationStatus, so?.inspectionStatus)));
@@ -64,7 +77,7 @@ export function sellProgress(so, quotes = []) {
   const priceConfirmed = !!confirmedAt || !!confirmedPrice || so?.finalPriceConfirmed === true;
   const payStatus = up(first(so?.paymentStatus, so?.payment?.status, so?.payoutStatus));
   const paidAt = first(so?.paidAt, so?.paymentCompletedAt, so?.payment?.paidAt, so?.payment?.completedAt);
-  const paid = !!paidAt || PAID_WORDS.test(payStatus);
+  const paid = !!paidAt || PAID_WORDS.test(payStatus) || STATUS_STEP[status] === 8; // server status PAID: the customer confirmed the payout
 
   const rawStep = STATUS_STEP[status] ?? 1;
   let step = cancelled ? 0 : rawStep;
@@ -82,6 +95,22 @@ export function sellProgress(so, quotes = []) {
   // SOLD only after full completion: a buyer exists and payment isn't known-unpaid.
   if (step === LAST && (!(so?.shopId || chosen) || (payStatus && !paid))) step = Math.min(ev, LAST - 1);
   const sold = !cancelled && step === LAST;
+
+  // Inspection starts only on its own event (or once verified); being picked
+  // up, or the order merely having a pickup, doesn't start it.
+  const inspectionStartedAt = first(so?.inspectionStartedAt);
+  const inspecting = step >= 6 || INSPECTING.has(status) || !!inspectionStartedAt;
+  const pickedUpAt = first(so?.pickedUpAt, so?.devicePickedUpAt, so?.deviceReceivedAt, so?.collectedAt);
+  const pickedUp = inspecting || PICKED_UP.has(status) || !!pickedUpAt;
+  const onTheWayAt = first(so?.pickupStartedAt, so?.outForPickupAt);
+  const onTheWay = pickedUp || ON_THE_WAY.has(status) || !!onTheWayAt;
+  Object.assign(pickup, {
+    assigned: onTheWay || ASSIGNED.has(status) || !!(pickup.name || pickup.phone || pickup.assignedAt),
+    onTheWay,
+    onTheWayAt,
+    pickedUp,
+    pickedUpAt,
+  });
 
   const quoted = num(chosen?.quotationPrice) ?? (so?.shopId ? num(so?.finalPrice) : null);
   // Final price exists once confirmed (fields) or the journey is past that step.
@@ -104,7 +133,8 @@ export function sellProgress(so, quotes = []) {
     step,
     total: SELL_STEPS.length,
     steps: SELL_STEPS.map((s, i) => ({ ...s, done: i <= step && !(cancelled && i > step), at: i <= step ? times[i] || null : null })),
-    next: cancelled || sold ? null : SELL_STEPS[step + 1] || null,
+    // Pickup assigned but the device not collected yet: pickup comes next, not inspection.
+    next: cancelled || sold ? null : step === 5 && !pickedUp ? { key: 'PICKED_UP', label: 'Device pickup', short: 'Pickup' } : SELL_STEPS[step + 1] || null,
     label,
     tone: cancelled ? 'red' : sold ? 'green' : step >= 3 ? 'blue' : step === 2 ? 'green' : 'orange',
     bucket: cancelled ? 'CANCELLED' : sold ? 'COMPLETED' : 'PENDING',
@@ -118,6 +148,7 @@ export function sellProgress(so, quotes = []) {
     price: { quoted, final, deductions, bestQuote: num(best?.quotationPrice) },
     payment,
     pickup,
+    inspection: { started: inspecting, startedAt: inspectionStartedAt },
   };
 }
 

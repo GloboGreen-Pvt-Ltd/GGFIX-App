@@ -2,6 +2,17 @@ import { useEffect, useState } from 'react';
 import { getDeviceCategories, getModel } from '../api/masterData';
 import { resolveSpecCategory, SPEC_CATEGORY } from './deviceSpecs';
 
+/** An IMEI is exactly 15 digits — the one rule every IMEI field uses. */
+export const IMEI_LENGTH = 15;
+/** For an IMEI field's onChangeText: digits only, capped at 15. */
+export const cleanImei = (v) => String(v || '').replace(/\D/g, '').slice(0, IMEI_LENGTH);
+export const isValidImei = (v) => /^\d{15}$/.test(String(v || ''));
+/** Message for a partly typed IMEI, '' when empty or valid. */
+export function imeiError(v) {
+  const n = String(v || '').replace(/\D/g, '').length;
+  return n && n !== IMEI_LENGTH ? `IMEI must be exactly 15 digits (${n} entered). Dial *#06# to see it.` : '';
+}
+
 /**
  * IMEI applies to mobile phones only — tablets, laptops, smartwatches and audio
  * devices have no IMEI to capture, so their IMEI field, row and "IMEI required"
