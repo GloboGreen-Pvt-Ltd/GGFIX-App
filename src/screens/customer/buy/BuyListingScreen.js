@@ -1,24 +1,37 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Image, Linking, PanResponder } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Image, PanResponder, TextInput, useWindowDimensions } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { Loader } from '../../../components/ui';
 import { BRAND } from '../../../theme/brand';
 import { listProducts } from '../../../api/marketplace';
-import { getBrandsForCategory, getModelsByBrand } from '../../../api/masterData';
+import { getBrandsForCategory, getModelsByBrand, getDeviceCategories } from '../../../api/masterData';
 import { listNearbyShops, listShops } from '../../../api/shops';
 import { useCustomerLocation } from '../../../hooks/useCustomerLocation';
 import { rf } from '../../../utils/responsive';
+import { StaticTabBar } from '../../../navigation/CustomTabBar';
 import { resolveDeviceImageSource } from '../../../utils/images';
 
-const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
-const LINE = '#E6E6E6';
-const MINT = '#EAF8EC';
+const GREEN_TEXT = '#035C6C'; // #035C6C shaded for text on white
+const LINE = '#E8EAEE';
+const MINT = '#E5F3F5';
 
 // Customer-side radius for the marketplace listing. User-adjustable via the
 // slider; falls back to "show all" when we can't resolve a location at all.
 const RADIUS_DEFAULT = 20;
 const RADIUS_MIN = 1;
 const RADIUS_MAX = 50;
+
+// Hearted listings — kept on this phone (the marketplace has no wishlist API).
+const WISH_KEY = 'ggfix.buyWishlist.v1';
+const SORTS = [
+  { key: 'relevance', label: 'Relevance' },
+  { key: 'price_asc', label: 'Price: Low to High' },
+  { key: 'price_desc', label: 'Price: High to Low' },
+  { key: 'nearest', label: 'Nearest' },
+];
+const CAT_ORDER = ['MOBILE', 'SMARTPHONE', 'LAPTOP', 'TABLET', 'SMARTWATCH', 'WATCH', 'AUDIO', 'ACCESSORY', 'ACCESSORIES'];
+const catRank = (c) => { const i = CAT_ORDER.indexOf((c.code || '').toUpperCase()); return i === -1 ? CAT_ORDER.length : i; };
 
 // Lightweight single-value slider — same pattern used on RepairPickupShops.
 // No extra dependency; works on web/iOS/Android via PanResponder.
@@ -157,10 +170,28 @@ const styles = StyleSheet.create({
   emptyIcon: { height: 56, width: 56, borderRadius: 28, backgroundColor: MINT, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   emptyText: { fontSize: rf(13.5), fontWeight: '800', color: BRAND.ink, textAlign: 'center' },
   emptyHint: { fontSize: rf(11.5), color: BRAND.muted, textAlign: 'center', marginTop: 4 },
+  // Browse grid (reference "Browse Devices").
+  search: { flexDirection: 'row', alignItems: 'center', height: 44, borderRadius: 14, paddingHorizontal: 14, backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: LINE },
+  chip: { height: 34, paddingHorizontal: 16, borderRadius: 999, borderWidth: 1, borderColor: LINE, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  chipOn: { backgroundColor: GREEN_TEXT, borderColor: GREEN_TEXT },
+  chipText: { fontSize: rf(12.5), fontWeight: '700', color: BRAND.ink },
+  results: { fontSize: rf(13), fontWeight: '700', color: BRAND.ink },
+  radiusChip: { flexDirection: 'row', alignItems: 'center', marginLeft: 8, paddingHorizontal: 8, height: 24, borderRadius: 999, backgroundColor: MINT },
+  radiusChipText: { marginLeft: 3, fontSize: rf(11), fontWeight: '700', color: GREEN_TEXT },
+  sortText: { fontSize: rf(12.5), fontWeight: '700', color: BRAND.ink },
+  gridCard: { borderRadius: 16, borderWidth: 1, borderColor: LINE, backgroundColor: '#FFFFFF', padding: 10, shadowColor: '#111111', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 1 },
+  gridImg: { height: 120, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  listImg: { width: 72, height: 80, borderRadius: 12, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  gridTitle: { fontSize: rf(13), fontWeight: '800', color: BRAND.ink, minHeight: rf(32) },
+  gridPrice: { fontSize: rf(16), fontWeight: '800', color: GREEN_TEXT, marginTop: 4 },
+  condChip: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: '#E3F6EE', maxWidth: '100%' },
+  condText: { fontSize: rf(11), fontWeight: '800', color: '#01805A' },
+  gridMeta: { fontSize: rf(10.5), color: BRAND.muted },
+  heart: { position: 'absolute', top: 8, right: 8, height: 30, width: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.9)' },
 });
 
 export default function BuyListingScreen({ navigation, route }) {
-  const { categoryId, categoryCode, categoryName, title, brandId, q, maxPrice, sort } = route?.params || {};
+  const { categoryId, categoryCode, categoryName, title, brandId, q, maxPrice, minPrice, sort } = route?.params || {};
   const [items, setItems] = useState([]);
   // modelId → catalogue image, for products listed without a photo.
   const [modelImages, setModelImages] = useState(new Map());
@@ -171,12 +202,42 @@ export default function BuyListingScreen({ navigation, route }) {
   const [shopMap, setShopMap] = useState(new Map());
   const [radiusKm, setRadiusKm] = useState(RADIUS_DEFAULT);
   const { lat, lng, addressLabel } = useCustomerLocation();
+  const [cats, setCats] = useState([]);
+  const [search, setSearch] = useState(q || '');
+  const [sortBy, setSortBy] = useState(sort || 'relevance');
+  const [sortOpen, setSortOpen] = useState(false);
+  const [showRadius, setShowRadius] = useState(false);
+  const [wish, setWish] = useState(new Set());
+  const listMode = route?.params?.layout === 'list';
+  const [condTab, setCondTab] = useState('all'); // list layout: all | new | refurb
+
+  useEffect(() => {
+    getDeviceCategories().then((list) => setCats((list || []).filter((c) => c.isActive !== false).sort((a, b) => catRank(a) - catRank(b) || (a.name || '').localeCompare(b.name || '')))).catch(() => {});
+    AsyncStorage.getItem(WISH_KEY).then((raw) => setWish(new Set(JSON.parse(raw || '[]')))).catch(() => {});
+  }, []);
 
   useLayoutEffect(() => {
-    if (categoryName || title) {
-      navigation.setOptions({ title: categoryName || title });
-    }
-  }, [navigation, categoryName, title]);
+    // List layout ("Buy Mobile Phones") opens from a category; Browse keeps the grid.
+    navigation.setOptions(listMode
+      ? {
+        title: `Buy ${categoryName || title || 'Devices'}`,
+        subtitle: '',
+        headerRight: () => (
+          <TouchableOpacity onPress={() => navigation.navigate('MyCart')} hitSlop={8} accessibilityRole="button" accessibilityLabel="My cart" style={{ padding: 6 }}>
+            <Ionicons name="cart-outline" size={23} color={BRAND.ink} />
+          </TouchableOpacity>
+        ),
+      }
+      : {
+        title: 'Buy',
+        subtitle: categoryName || title || 'Devices',
+        headerRight: () => (
+          <TouchableOpacity onPress={() => navigation.navigate('Notifications')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Notifications" style={{ padding: 6 }}>
+            <Ionicons name="notifications-outline" size={22} color={BRAND.ink} />
+          </TouchableOpacity>
+        ),
+      });
+  }, [navigation, categoryName, title, listMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -219,6 +280,7 @@ export default function BuyListingScreen({ navigation, route }) {
         let filtered = allowedModelIds
           ? (products || []).filter((p) => p.modelId && allowedModelIds.has(p.modelId))
           : (products || []);
+        if (Number(minPrice) > 0) filtered = filtered.filter((p) => Number(p.price) > Number(minPrice));
         if (priceCeil != null) {
           filtered = filtered.filter((p) => {
             const price = Number(p.price);
@@ -240,7 +302,7 @@ export default function BuyListingScreen({ navigation, route }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [categoryId, categoryCode, brandId, title, q, maxPrice, sort]);
+  }, [categoryId, categoryCode, brandId, title, q, maxPrice, minPrice, sort]);
 
   // Resolve which shops are within RADIUS_KM, and also build a name/address
   // lookup. Nearby query gives us pre-computed distanceKm too. When the user's
@@ -297,141 +359,239 @@ export default function BuyListingScreen({ navigation, route }) {
   }, [items, nearbyShopIds, shopMap]);
 
   const radiusFilterActive = nearbyShopIds != null;
+  const { width } = useWindowDimensions();
+  const contentW = Math.min(width, 720);
+  const cardW = Math.floor((contentW - 32 - 10) / 2);
+  const activeCat = categoryId || null;
 
-  if (loading) return <Loader />;
+  // List layout tabs: New vs Refurbished from each listing's own condition label
+  // (no label → counted under All only).
+  const condOf = (p) => (!p.conditionLabel ? null : /^(brand\s*)?new$|sealed|unused/i.test(String(p.conditionLabel).trim()) ? 'new' : 'refurb');
+  const condCount = useMemo(() => visibleItems.reduce((n, p) => { const c = condOf(p); if (c) n[c] += 1; return n; }, { new: 0, refurb: 0 }), [visibleItems]);
+
+  // Search box filters the loaded listings (title / shop); Sort re-orders them.
+  const shown = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    let list = needle
+      ? visibleItems.filter((p) => [p.title, p.shopName, p.storageLabel, p.color].filter(Boolean).join(' ').toLowerCase().includes(needle))
+      : visibleItems;
+    if (listMode && condTab !== 'all') list = list.filter((p) => condOf(p) === condTab);
+    if (sortBy === 'price_asc' || sortBy === 'price_desc') {
+      const val = (p) => (Number(p.price) > 0 ? Number(p.price) : null);
+      list = [...list].sort((a, b) => {
+        const x = val(a); const y = val(b);
+        if (x == null || y == null) return (x == null) - (y == null);
+        return sortBy === 'price_asc' ? x - y : y - x;
+      });
+    } else if (sortBy === 'nearest') {
+      list = [...list].sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity));
+    }
+    return list;
+  }, [visibleItems, search, sortBy, listMode, condTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pickCategory = (c) => navigation.setParams(c
+    ? { categoryId: c.id, categoryCode: (c.code || '').toUpperCase(), categoryName: c.name, title: c.name, brandId: undefined }
+    : { categoryId: undefined, categoryCode: undefined, categoryName: undefined, title: undefined, brandId: undefined });
+
+  const toggleWish = (id) => setWish((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    AsyncStorage.setItem(WISH_KEY, JSON.stringify([...next])).catch(() => {});
+    return next;
+  });
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scroll}>
-      {(categoryName || title) ? (
-        <View style={styles.categoryBar}>
-          <Text style={styles.categoryLabel}>Showing products in</Text>
-          <Text style={styles.categoryName}>{categoryName || title}</Text>
-        </View>
-      ) : null}
-
-      {radiusFilterActive ? (
-        <View style={styles.sliderCard}>
-          <View style={styles.sliderHeaderRow}>
-            <Text style={styles.sliderLabel}>SEARCH RADIUS</Text>
-            <View style={styles.sliderValuePill}>
-              <Text style={styles.sliderValueText}>{radiusKm} km</Text>
-            </View>
-          </View>
-          <RadiusSlider min={RADIUS_MIN} max={RADIUS_MAX} value={radiusKm} onChange={setRadiusKm} />
-          <View style={styles.sliderEndsRow}>
-            <Text style={styles.sliderEndText}>{RADIUS_MIN} km</Text>
-            <Text style={styles.sliderEndText}>{RADIUS_MAX} km</Text>
-          </View>
-          {addressLabel ? (
-            <View style={[styles.radiusBar, { marginTop: 6, marginBottom: 0 }]}>
-              <Ionicons name="location" size={12} color={BRAND.green} />
-              <Text style={styles.radiusHint} numberOfLines={1}>{addressLabel}</Text>
-            </View>
-          ) : null}
-        </View>
-      ) : (
-        <View style={styles.radiusBar}>
-          <Ionicons name="location-outline" size={14} color={BRAND.green} />
-          <Text style={styles.radiusHint}>Enable location to see shops near you.</Text>
-        </View>
-      )}
-
-      {!visibleItems.length ? (
-        <View style={styles.emptyCard}>
-          <View style={styles.emptyIcon}>
-            <Ionicons name="search" size={24} color={BRAND.green} />
-          </View>
-          <Text style={styles.emptyText}>
-            {radiusFilterActive
-              ? `No products within ${radiusKm} km`
-              : (categoryName ? `No ${categoryName.toLowerCase()} products yet` : 'No products yet')}
-          </Text>
-          {radiusFilterActive && radiusKm < RADIUS_MAX ? (
-            <Text style={styles.emptyHint}>Drag the slider to search a wider area.</Text>
-          ) : null}
-        </View>
-      ) : visibleItems.map((p) => {
-        const onView = () => navigation.navigate('BuyProductDetails', { productId: p.id });
-        // .avif Cloudinary URLs render blank on Android — normalise, then fall
-        // back to the model's catalogue image.
-        const img = resolveDeviceImageSource({ url: p.imageUrl }) || modelImages.get(p.modelId) || null;
-        const onCall = (e) => {
-          e?.stopPropagation?.();
-          if (p.shopPhone) Linking.openURL(`tel:${p.shopPhone}`);
-        };
-        const onMap = (e) => {
-          e?.stopPropagation?.();
-          const shop = p.shopId ? shopMap.get(p.shopId) : null;
-          const lat = shop?.latitude;
-          const lng = shop?.longitude;
-          if (lat != null && lng != null) {
-            Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`);
-          } else if (p.shopLocation) {
-            Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.shopLocation)}`);
-          }
-        };
-        return (
-        <TouchableOpacity key={p.id} style={styles.card} onPress={onView} activeOpacity={0.9}>
-          <View style={styles.body}>
-            <View style={styles.thumb}>
-              {img ? (
-                <Image source={{ uri: img }} style={styles.thumbImg} resizeMode="cover" />
-              ) : (
-                <Ionicons name="phone-portrait-outline" size={32} color={BRAND.green} />
-              )}
-            </View>
+    <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+      <ScrollView contentContainerStyle={{ width: '100%', maxWidth: 720, alignSelf: 'center', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
+        {listMode ? (
+          // Banner: category · what's sold here (photo = first live listing).
+          <View style={{ marginHorizontal: -16, marginTop: -10, paddingHorizontal: 16, paddingVertical: 16, backgroundColor: '#E3F6EE', flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.title} numberOfLines={2}>{p.title || 'Device'}</Text>
-              <View style={styles.metaRow}>
-                <Ionicons name="cube-outline" size={12} color={BRAND.muted} style={styles.metaIcon} />
-                <Text style={styles.metaText} numberOfLines={1}>
-                  {[p.storageLabel, p.color].filter(Boolean).join(' · ') || '—'}
-                </Text>
-              </View>
-              <View style={styles.metaRow}>
-                <Ionicons name="storefront-outline" size={12} color={BRAND.muted} style={styles.metaIcon} />
-                <Text style={styles.metaStrong} numberOfLines={1}>
-                  {p.shopName || 'Shop not linked'}
-                </Text>
-              </View>
-              {p.shopLocation ? (
-                <View style={styles.metaRow}>
-                  <Ionicons name="location-outline" size={12} color={BRAND.muted} style={styles.metaIcon} />
-                  <Text style={styles.metaText} numberOfLines={1}>{p.shopLocation}</Text>
-                </View>
-              ) : null}
-              <Text style={styles.price}>
-                {Number.isFinite(Number(p.price)) && Number(p.price) > 0
-                  ? `₹${Number(p.price).toLocaleString('en-IN')}`
-                  : 'Price on request'}
-              </Text>
+              <Text style={{ fontSize: rf(22), fontWeight: '800', color: BRAND.ink }}>Buy {categoryName || title || 'Devices'}</Text>
+              <Text style={{ fontSize: rf(12.5), color: BRAND.ink, marginTop: 4 }}>New & Refurbished · Fixed Price · Verified Shops</Text>
             </View>
-            {p.distanceKm != null ? (
-              <View style={styles.distChip}>
-                <Ionicons name="navigate" size={10} color={GREEN_TEXT} />
-                <Text style={styles.distText}>{Number(p.distanceKm).toFixed(1)} km</Text>
+            {(() => { const u = shown[0] && (resolveDeviceImageSource({ url: shown[0].imageUrl }) || modelImages.get(shown[0].modelId)); return u ? <Image source={{ uri: u }} style={{ width: 92, height: 80 }} resizeMode="contain" /> : null; })()}
+          </View>
+        ) : null}
+
+        {/* Search */}
+        <View style={styles.search}>
+          <Ionicons name="search" size={18} color={BRAND.green} />
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search devices, brands..."
+            placeholderTextColor="#8E97A9"
+            returnKeyType="search"
+            autoCorrect={false}
+            style={{ flex: 1, marginLeft: 8, fontSize: rf(13), color: BRAND.ink, padding: 0 }}
+          />
+          {search ? (
+            <TouchableOpacity onPress={() => setSearch('')} hitSlop={8} accessibilityLabel="Clear search">
+              <Ionicons name="close-circle" size={17} color="#B5BDCB" />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
+        {listMode ? (
+          // All / New / Refurbished with live counts · Filter opens sort.
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 12 }}>
+            {[['all', 'All', visibleItems.length], ['new', 'New', condCount.new], ['refurb', 'Refurbished', condCount.refurb]].map(([k, label, n]) => (
+              <TouchableOpacity key={k} onPress={() => setCondTab(k)} activeOpacity={0.85} style={[styles.chip, { paddingHorizontal: 12 }, condTab === k ? styles.chipOn : null]} accessibilityRole="tab" accessibilityState={{ selected: condTab === k }}>
+                <Text style={[styles.chipText, condTab === k ? { color: '#FFFFFF' } : null]}>{label} ({loading ? '…' : n})</Text>
+              </TouchableOpacity>
+            ))}
+            <View style={{ flex: 1 }} />
+            <TouchableOpacity onPress={() => setSortOpen((v) => !v)} activeOpacity={0.85} style={[styles.chip, { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 }]} accessibilityRole="button" accessibilityLabel="Filter">
+              <Ionicons name="options-outline" size={15} color={BRAND.ink} />
+              <Text style={[styles.chipText, { marginLeft: 4 }]}>Filter</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {/* Category chips */}
+        {listMode ? null : <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 12 }}>
+          {[null, ...cats].map((c) => {
+            const on = c ? activeCat === c.id : !activeCat;
+            return (
+              <TouchableOpacity key={c ? c.id : 'all'} onPress={() => pickCategory(c)} activeOpacity={0.85} style={[styles.chip, on ? styles.chipOn : null]} accessibilityRole="button" accessibilityState={{ selected: on }}>
+                <Text style={[styles.chipText, on ? { color: '#FFFFFF' } : null]}>{c ? c.name : 'All'}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>}
+
+        {/* Results · radius · sort (list layout: opened from the header filter icon) */}
+        {listMode && !sortOpen ? null : <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Text style={styles.results}>{loading ? 'Loading…' : `${shown.length} Result${shown.length === 1 ? '' : 's'}`}</Text>
+          {radiusFilterActive ? (
+            <TouchableOpacity onPress={() => setShowRadius((v) => !v)} style={styles.radiusChip} accessibilityRole="button">
+              <Ionicons name="location-outline" size={13} color={GREEN_TEXT} />
+              <Text style={styles.radiusChipText}>{radiusKm} km</Text>
+            </TouchableOpacity>
+          ) : null}
+          <View style={{ flex: 1 }} />
+          <TouchableOpacity onPress={() => setSortOpen((v) => !v)} style={{ flexDirection: 'row', alignItems: 'center' }} accessibilityRole="button">
+            <Text style={styles.sortText}>Sort: {SORTS.find((s) => s.key === sortBy)?.label}</Text>
+            <Ionicons name={sortOpen ? 'chevron-up' : 'chevron-down'} size={15} color={BRAND.ink} style={{ marginLeft: 2 }} />
+          </TouchableOpacity>
+        </View>}
+        {sortOpen ? (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+            {SORTS.filter((s) => s.key !== 'nearest' || radiusFilterActive).map((s) => (
+              <TouchableOpacity key={s.key} onPress={() => { setSortBy(s.key); setSortOpen(false); }} style={[styles.chip, { height: 30 }, sortBy === s.key ? styles.chipOn : null]}>
+                <Text style={[styles.chipText, sortBy === s.key ? { color: '#FFFFFF' } : null]}>{s.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : null}
+        {radiusFilterActive && showRadius ? (
+          <View style={[styles.sliderCard, { marginTop: 8 }]}>
+            <View style={styles.sliderHeaderRow}>
+              <Text style={styles.sliderLabel}>SEARCH RADIUS</Text>
+              <View style={styles.sliderValuePill}><Text style={styles.sliderValueText}>{radiusKm} km</Text></View>
+            </View>
+            <RadiusSlider min={RADIUS_MIN} max={RADIUS_MAX} value={radiusKm} onChange={setRadiusKm} />
+            {addressLabel ? <Text style={styles.radiusHint} numberOfLines={1}>{addressLabel}</Text> : null}
+          </View>
+        ) : null}
+
+        {/* Grid */}
+        {loading ? (
+          <View style={{ paddingVertical: 40 }}><Loader /></View>
+        ) : !shown.length ? (
+          <View style={[styles.emptyCard, { marginTop: 12 }]}>
+            <View style={styles.emptyIcon}><Ionicons name="search" size={24} color={BRAND.green} /></View>
+            <Text style={styles.emptyText}>
+              {search ? 'No devices match your search' : radiusFilterActive ? `No products within ${radiusKm} km` : (categoryName ? `No ${categoryName.toLowerCase()} products yet` : 'No products yet')}
+            </Text>
+            {!search && radiusFilterActive && radiusKm < RADIUS_MAX ? <Text style={styles.emptyHint}>Tap the km chip to search a wider area.</Text> : null}
+          </View>
+        ) : (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 }}>
+            {shown.map((p) => {
+              // .avif Cloudinary URLs render blank on Android — normalise, then fall
+              // back to the model's catalogue image.
+              const img = resolveDeviceImageSource({ url: p.imageUrl }) || modelImages.get(p.modelId) || null;
+              const priced = Number.isFinite(Number(p.price)) && Number(p.price) > 0;
+              const liked = wish.has(p.id);
+              const heart = (
+                <TouchableOpacity onPress={() => toggleWish(p.id)} hitSlop={8} style={styles.heart} accessibilityRole="button" accessibilityLabel={liked ? 'Remove from wishlist' : 'Add to wishlist'}>
+                  <Ionicons name={liked ? 'heart' : 'heart-outline'} size={19} color={liked ? BRAND.red : BRAND.ink} />
+                </TouchableOpacity>
+              );
+              if (listMode) {
+                return (
+                  <View key={p.id} style={[styles.gridCard, { width: '100%', padding: 12 }]}>
+                    {(() => {
+                      // Only a real fact as a tag: listed in the last 7 days.
+                      const isNew = p.createdAt && Date.now() - new Date(p.createdAt).getTime() < 7 * 86400000;
+                      const cond = condOf(p) === 'new' ? 'New' : condOf(p) === 'refurb' ? 'Refurbished' : p.conditionLabel || null;
+                      return (
+                        <TouchableOpacity onPress={() => navigation.navigate('BuyProductDetails', { productId: p.id })} activeOpacity={0.9} style={{ flexDirection: 'row' }} accessibilityRole="button" accessibilityLabel={p.title || 'Device'}>
+                          <View style={{ width: 96 }}>
+                            {isNew ? <View style={{ alignSelf: 'flex-start', backgroundColor: '#2F7BEB', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2, marginBottom: 4 }}><Text style={{ fontSize: rf(10), fontWeight: '800', color: '#FFFFFF' }}>New Arrival</Text></View> : null}
+                            <View style={[styles.listImg, { width: 96, height: 104 }]}>
+                              {img ? <Image source={{ uri: img }} style={{ width: '100%', height: '100%' }} resizeMode="contain" /> : <Ionicons name="phone-portrait-outline" size={30} color={BRAND.green} />}
+                            </View>
+                          </View>
+                          <View style={{ flex: 1, minWidth: 0, marginLeft: 12, paddingRight: 24 }}>
+                            <Text style={[styles.gridTitle, { fontSize: rf(15) }]} numberOfLines={2}>{p.title || 'Device'}</Text>
+                            {cond ? <Text style={[styles.gridMeta, { marginTop: 3 }]} numberOfLines={1}>{cond}</Text> : null}
+                            <Text style={[styles.gridPrice, { fontSize: rf(18), marginTop: 6 }]}>{priced ? `₹${Number(p.price).toLocaleString('en-IN')}` : 'Price on request'}</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+                              {p.shopName ? <Ionicons name="storefront-outline" size={13} color={BRAND.ink} /> : null}
+                              {p.shopName ? <Text style={[styles.gridMeta, { marginLeft: 3, color: BRAND.ink, fontWeight: '700', flexShrink: 1 }]} numberOfLines={1}>{p.shopName}</Text> : null}
+                              {p.distanceKm != null ? <Text style={[styles.gridMeta, { marginLeft: 6 }]}>· {Number(p.distanceKm).toFixed(1)} km</Text> : null}
+                              <View style={{ flex: 1 }} />
+                              <View style={{ backgroundColor: '#E3F6EE', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3 }}><Text style={{ fontSize: rf(10.5), fontWeight: '800', color: GREEN_TEXT }}>Fixed Price</Text></View>
+                            </View>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })()}
+                    {heart}
+                  </View>
+                );
+              }
+              return (
+                <View key={p.id} style={[styles.gridCard, { width: cardW }]}>
+                  <TouchableOpacity onPress={() => navigation.navigate('BuyProductDetails', { productId: p.id })} activeOpacity={0.9} accessibilityRole="button" accessibilityLabel={p.title || 'Device'}>
+                    <View style={styles.gridImg}>
+                      {img ? <Image source={{ uri: img }} style={{ width: '78%', height: '100%' }} resizeMode="contain" /> : <Ionicons name="phone-portrait-outline" size={36} color={BRAND.green} />}
+                    </View>
+                    <Text style={styles.gridTitle} numberOfLines={2}>{p.title || 'Device'}</Text>
+                    <Text style={styles.gridPrice}>{priced ? `₹${Number(p.price).toLocaleString('en-IN')}` : 'Price on request'}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                      {p.conditionLabel ? <View style={styles.condChip}><Text style={styles.condText} numberOfLines={1}>{p.conditionLabel}</Text></View> : null}
+                      {p.distanceKm != null ? <Text style={styles.gridMeta}>{Number(p.distanceKm).toFixed(1)} km</Text> : null}
+                    </View>
+                  </TouchableOpacity>
+                  {/* Sibling of the card's button: a button inside a button is ambiguous. */}
+                  {heart}
+                </View>
+              );
+            })}
+          </View>
+        )}
+        {!radiusFilterActive && !loading ? (
+          <View style={[styles.radiusBar, { marginTop: 12 }]}>
+            <Ionicons name="location-outline" size={14} color={BRAND.green} />
+            <Text style={styles.radiusHint}>Enable location to see shops near you.</Text>
+          </View>
+        ) : null}
+        {listMode ? (
+          <View style={{ flexDirection: 'row', marginTop: 16, paddingVertical: 12, borderRadius: 16, backgroundColor: '#F2FBF7' }}>
+            {[['shield-checkmark-outline', 'Verified\nShops'], ['bicycle-outline', 'Home\nDelivery'], ['storefront-outline', 'Visit & Buy\nat Shop'], ['ribbon-outline', 'Warranty on\nProducts']].map(([icon, label]) => (
+              <View key={label} style={{ flex: 1, alignItems: 'center' }}>
+                <Ionicons name={icon} size={22} color={BRAND.green} />
+                <Text style={{ fontSize: rf(10.5), fontWeight: '700', color: BRAND.ink, textAlign: 'center', marginTop: 4 }}>{label}</Text>
               </View>
-            ) : null}
+            ))}
           </View>
-          <View style={styles.actionsRow}>
-            <TouchableOpacity style={styles.action} onPress={onView}>
-              <Ionicons name="eye-outline" color={BRAND.green} size={15} />
-              <Text style={[styles.actionText, { color: GREEN_TEXT }]}>View</Text>
-            </TouchableOpacity>
-            <View style={styles.actionDivider} />
-            <TouchableOpacity style={styles.action} onPress={onCall} disabled={!p.shopPhone}>
-              <Ionicons name="call-outline" color={p.shopPhone ? BRAND.green : '#C9C9C9'} size={15} />
-              <Text style={[styles.actionText, { color: p.shopPhone ? BRAND.ink : '#C9C9C9' }]}>Call Shop</Text>
-            </TouchableOpacity>
-            <View style={styles.actionDivider} />
-            <TouchableOpacity style={styles.action} onPress={onMap}>
-              <Ionicons name="location-outline" color={BRAND.red} size={15} />
-              <Text style={[styles.actionText, { color: BRAND.ink }]}>Location</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-        );
-      })}
-    </ScrollView>
+        ) : null}
+      </ScrollView>
+      <StaticTabBar navigation={navigation} active="Buy" />
+    </View>
   );
 }

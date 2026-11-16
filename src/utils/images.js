@@ -9,6 +9,12 @@ export function normalizeDeviceImageUrl(url) {
   if (!url) return null;
   const s = String(url);
   if (s.startsWith('data:')) return s;
+  // Server-relative media paths ("/uploads/x.jpg", "uploads/x.jpg") → absolute on the API origin.
+  if (s.startsWith('//')) return `https:${s}`;
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(s) && /[/.]/.test(s)) {
+    const origin = String(process.env.EXPO_PUBLIC_API_ORIGIN || '').replace(/\/+$/, '');
+    if (origin) return `${origin}/${s.replace(/^\/+/, '')}`;
+  }
   if (!s.includes(CLOUDINARY_HOST)) return s;
   if (!UNSUPPORTED_EXT.test(s)) return s;
   if (/\/upload\/[^/]*f_(jpg|png|webp|auto)/i.test(s)) return s;

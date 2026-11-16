@@ -1,9 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import {
-  Search, ShoppingCart, Bell, ChevronRight, X, Plus, SlidersHorizontal,
-  LayoutGrid, Tag, BadgeCheck, RotateCcw, TrendingUp, Smartphone, ClipboardList,
+  Search, ShoppingCart, History, Bell, ChevronRight, X, Plus, SlidersHorizontal,
+  LayoutGrid, Tag, BadgeCheck, TrendingUp, Smartphone, ClipboardList, Store, ArrowRight, User, MapPin, Package,
+  CheckCircle2, Cpu, Percent, Star, Zap,
 } from 'lucide-react-native';
 import { EmptyState, Loader } from '../../../components/rnr';
 import { notify } from '../../../components/confirm';
@@ -12,20 +13,20 @@ import { listProducts, getCart, addToCart } from '../../../api/marketplace';
 import { getUnreadCount } from '../../../api/notifications';
 import { resolveDeviceImageSource } from '../../../utils/images';
 import { rf } from '../../../utils/responsive';
-import { tintFor } from '../../../theme/categoryTints';
-import PageHeader, { HeaderIconButton } from '../../../components/PageHeader';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// Partner app Buy palette — green #09AD2A, ink #1E1E1E, neutrals #F8F8F8 / #F3F3F3.
-const GREEN = '#09AD2A';
-const GREEN_DARK = '#078F23';   // green text / icons
-const GREEN_LIGHT = '#EAF8EC';  // tiles, icon circles
-const INK = '#1E1E1E';
-const MUTED = '#6B6B6B';
-const HINT = '#8E8E8E';
-const FIELD = '#F3F3F3';
-const LINE = '#E6E6E6';
-const PAGE_BG = '#F8F8F8';
-const RED = '#F84141';
+// Partner app Buy palette — green #035C6C, ink #111111, neutrals #F3F4F6 / #F3F4F6.
+const GREEN = '#035C6C';
+const GREEN_DARK = '#035C6C';   // green text / icons
+const GREEN_LIGHT = '#E5F3F5';  // tiles, icon circles
+const INK = '#111111';
+const MUTED = '#606E87';
+const HINT = '#8E97A9';
+const FIELD = '#F3F4F6';
+const LINE = '#E8EAEE';
+const PAGE_BG = '#FFFFFF';
+const RED = '#F32C26';
+const YELLOW = '#FFD60A';
 
 const MAX_W = 720;
 const PAD = 16;
@@ -48,14 +49,6 @@ function sortCategories(list) {
   };
   return [...list].sort((a, b) => rank(a) - rank(b) || (a.name || '').localeCompare(b.name || ''));
 }
-
-// Trust strip — the same three claims this page made before, in the
-// Partner strip layout.
-const TRUST = [
-  { icon: Tag, title: 'Best Prices', sub: 'Everyday' },
-  { icon: BadgeCheck, title: 'Original', sub: '& Certified' },
-  { icon: RotateCcw, title: 'Easy Returns', sub: '& Support' },
-];
 
 const SORTS = [
   { key: 'default', label: 'Recommended' },
@@ -86,30 +79,6 @@ function pricing(p) {
 // NOTE: Pressables take plain style objects only — NativeWind's cssInterop
 // drops function-form `style={({ pressed }) => ...}` on native. Press feedback
 // uses the `active:` className.
-function CategoryChip({ label, size, isAll, active, uri, photo, code, onPress }) {
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} className="active:opacity-80" style={{ width: size, marginRight: 10, alignItems: 'center' }}>
-      <View
-        style={{
-          height: size, width: size, borderRadius: 14, overflow: 'hidden', alignItems: 'center', justifyContent: 'center',
-          backgroundColor: isAll ? GREEN_LIGHT : tintFor(code), borderWidth: active ? 2 : 0, borderColor: GREEN_DARK,
-        }}
-      >
-        {isAll ? (
-          <LayoutGrid size={20} color={GREEN_DARK} />
-        ) : uri ? (
-          <Image resizeMethod="resize" source={{ uri }} style={photo ? { width: '86%', height: '86%' } : { width: size * 0.6, height: size * 0.6 }} resizeMode="contain" />
-        ) : (
-          <Smartphone size={20} color={GREEN_DARK} />
-        )}
-      </View>
-      <Text numberOfLines={1} style={{ marginTop: 4, fontSize: rf(10), textAlign: 'center', color: active ? GREEN_DARK : INK, fontWeight: active ? '800' : '600' }}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
 function SectionHead({ icon, title, onViewAll }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: PAD, marginTop: 18, marginBottom: 10 }}>
@@ -125,79 +94,76 @@ function SectionHead({ icon, title, onViewAll }) {
   );
 }
 
-// Vertical deal card (reference "Deals Of The Day" layout): condition badge,
-// photo, ₹ OFF chip, 2-line title, spec chips, then -% · price · MRP.
-// Only real listing fields are shown; discount bits need a real higher MRP.
-function DealCard({ product, width, onPress, onAdd, adding }) {
+// Header icon with an optional red dot (unread) or count badge (cart).
+function HeaderBadgeIcon({ Icon, label, dot, count, onPress }) {
+  return (
+    <Pressable onPress={onPress} hitSlop={6} accessibilityRole="button" accessibilityLabel={label} style={{ height: 40, width: 38, alignItems: 'center', justifyContent: 'center' }}>
+      <Icon size={24} color={INK} strokeWidth={2} />
+      {dot ? <View style={{ position: 'absolute', top: 7, right: 7, height: 9, width: 9, borderRadius: 5, backgroundColor: RED, borderWidth: 1.5, borderColor: '#FFFFFF' }} /> : null}
+      {count ? (
+        <View style={{ position: 'absolute', top: 2, right: 0, minWidth: 17, height: 17, borderRadius: 9, backgroundColor: RED, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 }}>
+          <Text style={{ fontSize: 10, fontWeight: '800', color: '#FFFFFF' }}>{count > 99 ? '99+' : count}</Text>
+        </View>
+      ) : null}
+    </Pressable>
+  );
+}
+
+// Deal of the Day card: badge, photo, 2-line title, rating (when the listing
+// has one), price · MRP · % off (only with a real higher MRP), Add to Cart + Buy Now.
+function DealCard({ product, width, onPress, onAdd, onBuy, adding }) {
   const { price, old, off } = pricing(product);
   const uri = imageOf(product);
-  const badge = product.conditionLabel || product.condition;
-  const chips = [product.storageLabel, product.color].filter(Boolean);
+  const badge = product.badge || (product.bestseller || product.isBestseller ? 'Bestseller' : null) || product.conditionLabel;
+  const rating = Number(product.rating ?? product.averageRating);
+  const reviews = Number(product.reviewCount ?? product.ratingCount);
   const imgH = Math.round(width * 0.62);
-  // The card body and the add-to-cart button are SIBLING tap targets — a button
-  // nested inside another button is invalid on web (and ambiguous for screen readers).
   return (
-    <View style={{ width, marginRight: 12, borderRadius: 14, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: LINE, ...cardShadow }}>
-      <Pressable
-        onPress={onPress}
-        accessibilityRole="button"
-        accessibilityLabel={product.title || 'Product'}
-        className="active:opacity-90"
-        style={{ padding: 10 }}
-      >
-        <View style={{ height: 20, flexDirection: 'row', alignItems: 'center', paddingRight: 30 }}>
+    <View style={{ width, marginRight: 10, borderRadius: 14, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: LINE, ...cardShadow }}>
+      <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={product.title || 'Product'} className="active:opacity-90" style={{ padding: 10, paddingBottom: 6 }}>
+        <View style={{ height: 20, flexDirection: 'row', alignItems: 'center' }}>
           {badge ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', borderRadius: 999, paddingLeft: 3, paddingRight: 7, paddingVertical: 2, backgroundColor: INK, maxWidth: '100%' }}>
-              <BadgeCheck size={12} color={GREEN} />
-              <Text numberOfLines={1} style={{ marginLeft: 3, fontSize: rf(8.5), fontWeight: '800', color: '#FFFFFF', letterSpacing: 0.3, flexShrink: 1 }}>
-                {String(badge).toUpperCase()}
-              </Text>
+            <View style={{ borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, backgroundColor: '#2563EB', maxWidth: '100%' }}>
+              <Text numberOfLines={1} style={{ fontSize: rf(9.5), fontWeight: '800', color: '#FFFFFF' }}>{badge}</Text>
             </View>
           ) : null}
         </View>
-        <View style={{ height: imgH, marginTop: 6, alignItems: 'center', justifyContent: 'center' }}>
-          {uri ? (
-            <Image resizeMethod="resize" source={{ uri }} style={{ width: '82%', height: '100%' }} resizeMode="contain" />
-          ) : (
+        <View style={{ height: imgH, marginTop: 4, alignItems: 'center', justifyContent: 'center' }}>
+          {uri ? <Image resizeMethod="resize" source={{ uri }} style={{ width: '86%', height: '100%' }} resizeMode="contain" /> : (
             <View style={{ width: imgH * 0.7, height: imgH * 0.7, borderRadius: 16, backgroundColor: GREEN_LIGHT, alignItems: 'center', justifyContent: 'center' }}>
               <Smartphone size={30} color={GREEN_DARK} />
             </View>
           )}
         </View>
-        <View style={{ height: 22, marginTop: 8, justifyContent: 'center' }}>
-          {old ? (
-            <View style={{ alignSelf: 'flex-start', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: GREEN_LIGHT }}>
-              <Text numberOfLines={1} style={{ fontSize: rf(10.5), fontWeight: '700', color: GREEN_DARK }}>{inr(old - price)} OFF</Text>
-            </View>
+        <Text numberOfLines={2} style={{ marginTop: 8, fontSize: rf(12.5), lineHeight: rf(16), minHeight: rf(32), fontWeight: '600', color: INK }}>{product.title || 'Device'}</Text>
+        <View style={{ height: 20, marginTop: 4, flexDirection: 'row', alignItems: 'center' }}>
+          {rating > 0 ? (
+            <>
+              <View style={{ flexDirection: 'row', alignItems: 'center', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, backgroundColor: '#16A34A' }}>
+                <Star size={10} color="#FFFFFF" fill="#FFFFFF" />
+                <Text style={{ marginLeft: 3, fontSize: rf(10.5), fontWeight: '800', color: '#FFFFFF' }}>{rating.toFixed(1)}</Text>
+              </View>
+              {reviews > 0 ? <Text style={{ marginLeft: 5, fontSize: rf(10.5), color: MUTED }}>({reviews >= 1000 ? `${(reviews / 1000).toFixed(1)}K` : reviews})</Text> : null}
+            </>
           ) : null}
         </View>
-        <Text numberOfLines={2} style={{ marginTop: 5, fontSize: rf(12), lineHeight: rf(16), minHeight: rf(32), fontWeight: '800', color: INK }}>
-          {product.title || 'Device'}
-        </Text>
-        <View style={{ height: 22, marginTop: 5, flexDirection: 'row', alignItems: 'center', overflow: 'hidden' }}>
-          {chips.map((c, i) => (
-            <View key={c} style={{ marginLeft: i ? 5 : 0, borderRadius: 4, borderWidth: 1, borderColor: LINE, paddingHorizontal: 5, paddingVertical: 1, flexShrink: 1 }}>
-              <Text numberOfLines={1} style={{ fontSize: rf(10), fontWeight: '600', color: MUTED }}>{c}</Text>
-            </View>
-          ))}
-        </View>
-        <View style={{ flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', marginTop: 8 }}>
-          {off > 0 ? <Text style={{ fontSize: rf(13), fontWeight: '500', color: RED, marginRight: 6 }}>-{off}%</Text> : null}
-          <Text numberOfLines={1} style={{ fontSize: rf(14), fontWeight: '800', color: INK, marginRight: 6 }}>{price != null ? inr(price) : 'Price on request'}</Text>
-          {old ? <Text numberOfLines={1} style={{ fontSize: rf(10.5), color: HINT, textDecorationLine: 'line-through' }}>{inr(old)}</Text> : null}
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', marginTop: 4 }}>
+          <Text numberOfLines={1} style={{ fontSize: rf(15), fontWeight: '800', color: INK, marginRight: 6 }}>{price != null ? inr(price) : 'Price on request'}</Text>
+          {old ? <Text numberOfLines={1} style={{ fontSize: rf(10.5), color: HINT, textDecorationLine: 'line-through', marginRight: 6 }}>{inr(old)}</Text> : null}
+          {off > 0 ? <Text style={{ fontSize: rf(11), fontWeight: '800', color: '#16A34A' }}>{off}% off</Text> : null}
         </View>
       </Pressable>
-      <Pressable
-        onPress={onAdd}
-        disabled={adding}
-        hitSlop={8}
-        accessibilityRole="button"
-        accessibilityLabel="Add to cart"
-        className="active:opacity-80"
-        style={{ position: 'absolute', top: 8, right: 8, height: 30, width: 30, borderRadius: 15, backgroundColor: GREEN_LIGHT, alignItems: 'center', justifyContent: 'center', opacity: adding ? 0.5 : 1 }}
-      >
-        <Plus size={16} color={GREEN_DARK} strokeWidth={2.6} />
-      </Pressable>
+      <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 8, paddingBottom: 10 }}>
+        <Pressable onPress={onAdd} disabled={adding} accessibilityRole="button" accessibilityLabel="Add to cart" className="active:opacity-80"
+          style={{ flex: 1, height: 32, borderRadius: 8, borderWidth: 1, borderColor: '#C9CED6', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', opacity: adding ? 0.5 : 1 }}>
+          <ShoppingCart size={12} color={INK} />
+          <Text numberOfLines={1} style={{ marginLeft: 3, fontSize: rf(10.5), fontWeight: '800', color: INK }}>Add to Cart</Text>
+        </Pressable>
+        <Pressable onPress={onBuy} disabled={adding} accessibilityRole="button" accessibilityLabel="Buy now" className="active:opacity-80"
+          style={{ flex: 1, height: 32, borderRadius: 8, backgroundColor: YELLOW, alignItems: 'center', justifyContent: 'center', opacity: adding ? 0.5 : 1 }}>
+          <Text numberOfLines={1} style={{ fontSize: rf(10.5), fontWeight: '800', color: INK }}>Buy Now</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -234,6 +200,8 @@ export default function BuyHomeScreen({ navigation }) {
   const [sortBy, setSortBy] = useState('default');
   const [maxPrice, setMaxPrice] = useState(null);
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const bannerRef = useRef(null);
 
   useEffect(() => {
     (async () => {
@@ -282,6 +250,7 @@ export default function BuyHomeScreen({ navigation }) {
       categoryCode: (c.code || '').toUpperCase(),
       categoryName: c.name,
       title: c.name,
+      layout: 'list',
     });
   };
   const openAll = () => navigation.navigate('BuyListing', {});
@@ -299,12 +268,12 @@ export default function BuyHomeScreen({ navigation }) {
     });
   };
 
-  const add = async (p) => {
+  const add = async (p, buyNow) => {
     setAdding(p.id);
     try {
       await addToCart(p.id, 1);
-      notify('Added', 'Added to cart');
       refreshHeader();
+      if (buyNow) navigation.navigate('MyCart'); else notify('Added', 'Added to cart');
     } catch (e) { notify('Error', e.message); }
     finally { setAdding(null); }
   };
@@ -312,15 +281,28 @@ export default function BuyHomeScreen({ navigation }) {
   const contentW = Math.min(width, MAX_W);
   const bannerW = contentW - PAD * 2;
   const bannerH = Math.round(bannerW / bannerRatio);
-  const chipSize = width < 360 ? 50 : 56;
   // Two deal cards per screen with the next one peeking in (reference layout).
-  const dealW = Math.max(150, Math.round((contentW - PAD - 12) / 2.15));
+  const dealW = Math.max(160, Math.round((contentW - PAD - 10) / 2.1));
+  const tileW = Math.round((contentW - PAD * 2 - 8 * 4) / 4.6);
+  // Fallback hero photo: the first live listing that has one.
+  const heroImage = products.map(imageOf).find(Boolean) || null;
   const centered = { width: '100%', maxWidth: MAX_W, alignSelf: 'center' };
 
   // Deals: listings with a real discount first (largest first), then the rest.
   const deals = [...products]
     .sort((a, b) => pricing(b).off - pricing(a).off)
-    .slice(0, 3);
+    .slice(0, 10);
+
+  // Auto-scroll the banners every 3.5 s (loops back to the first).
+  useEffect(() => {
+    if (buyBanners.length < 2 || !bannerW) return undefined;
+    const t = setInterval(() => {
+      const next = (slide + 1) % buyBanners.length;
+      bannerRef.current?.scrollTo({ x: next * bannerW, animated: true });
+      setSlide(next);
+    }, 3500);
+    return () => clearInterval(t);
+  }, [slide, buyBanners.length, bannerW]);
 
   const onBannerScroll = (e) => {
     const i = Math.round(e.nativeEvent.contentOffset.x / (bannerW || 1));
@@ -328,174 +310,159 @@ export default function BuyHomeScreen({ navigation }) {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: PAGE_BG }}>
-      {/* ---------- Header: back · Buy · bell + cart, then search + Filters ---------- */}
-      <PageHeader
-        title="Buy"
-        subtitle="Devices & spares"
-        onBack={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Home'))}
-        sideWidth={120}
-        right={(
-          <>
-            <HeaderIconButton icon={ClipboardList} label="My buy orders" onPress={() => navigation.navigate('MyOrders', { initialTab: 'Buy' })} />
-            <View style={{ width: 6 }} />
-            <HeaderIconButton icon={Bell} label="Notifications" onPress={() => navigation.navigate('Notifications')} badge={unread} badgeColor="#EF4444" />
-            <View style={{ width: 6 }} />
-            <HeaderIconButton icon={ShoppingCart} label="Cart" onPress={() => navigation.navigate('MyCart')} badge={cartCount} badgeColor="#F59E0B" badgeText={INK} />
-          </>
-        )}
-      >
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 14 }}>
-          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: FIELD, borderRadius: 16, borderWidth: 1, borderColor: LINE, paddingHorizontal: 14, height: 46 }}>
-            <Pressable onPress={() => runSearch()} hitSlop={6} accessibilityLabel="Search">
-              <Search size={18} color={GREEN} />
-            </Pressable>
-            <TextInput
-              value={searchText}
-              onChangeText={setSearchText}
-              onSubmitEditing={() => runSearch()}
-              returnKeyType="search"
-              autoCapitalize="none"
-              autoCorrect={false}
-              placeholder="Search mobiles, spares, accessories..."
-              placeholderTextColor={HINT}
-              style={{ flex: 1, marginLeft: 10, color: INK, fontSize: rf(13), padding: 0, outlineStyle: 'none' }}
-            />
-            {searchText ? (
-              <Pressable onPress={() => setSearchText('')} hitSlop={6} accessibilityLabel="Clear search" style={{ height: 28, width: 28, alignItems: 'center', justifyContent: 'center' }}>
-                <X size={14} color={MUTED} />
-              </Pressable>
-            ) : null}
-          </View>
-          <Pressable
-            onPress={() => setShowFilters(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Filters"
-            className="active:opacity-80"
-            style={{
-              marginLeft: 8, height: 46, paddingHorizontal: 14, borderRadius: 16, flexDirection: 'row', alignItems: 'center',
-              backgroundColor: activeFilters > 0 ? GREEN : '#FFFFFF', borderWidth: 1, borderColor: activeFilters > 0 ? GREEN : LINE,
-            }}
-          >
-            <SlidersHorizontal size={16} color={activeFilters > 0 ? '#FFFFFF' : INK} />
-            <Text style={{ marginLeft: 6, fontSize: rf(13), fontWeight: '800', color: activeFilters > 0 ? '#FFFFFF' : INK }}>Filters</Text>
-            {activeFilters > 0 ? (
-              <View style={{ marginLeft: 6, paddingHorizontal: 6, borderRadius: 999, backgroundColor: '#FFFFFF' }}>
-                <Text style={{ fontSize: rf(10), fontWeight: '800', color: GREEN_DARK }}>{activeFilters}</Text>
-              </View>
-            ) : null}
-          </Pressable>
+    <View style={{ flex: 1, backgroundColor: PAGE_BG, paddingTop: insets.top }}>
+      {/* ---------- Header: brand · bell · history · cart ---------- */}
+      <View style={[centered, { flexDirection: 'row', alignItems: 'center', paddingHorizontal: PAD, paddingTop: 8, paddingBottom: 6 }]}>
+        <Image source={require('../../../../assets/logo.png')} style={{ width: 42, height: 42 }} resizeMode="contain" />
+        <View style={{ flex: 1, marginLeft: 8 }}>
+          <Text style={{ fontSize: rf(20), fontWeight: '800', color: GREEN }}>NearGFix</Text>
+          <Text style={{ fontSize: rf(11.5), color: INK, marginTop: -1 }}>Buy • Sell • Repair</Text>
         </View>
-      </PageHeader>
+        <HeaderBadgeIcon Icon={Bell} label="Notifications" dot={unread > 0} onPress={() => navigation.navigate('Notifications')} />
+        <HeaderBadgeIcon Icon={History} label="Order History" onPress={() => navigation.navigate('MyOrders', { initialTab: 'Buy' })} />
+        <HeaderBadgeIcon Icon={ShoppingCart} label="My Cart" count={cartCount} onPress={() => navigation.navigate('MyCart')} />
+      </View>
 
       <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 120 }}>
         <View style={centered}>
-          {/* Hero — admin "Buy" banner artwork only (its text is baked in). */}
+          {/* Search + filters box */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, marginHorizontal: PAD, gap: 8 }}>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1, borderColor: LINE, paddingHorizontal: 12, height: 46, ...cardShadow }}>
+              <Pressable onPress={() => runSearch()} hitSlop={6} accessibilityLabel="Search">
+                <Search size={19} color={INK} />
+              </Pressable>
+              <TextInput
+                value={searchText}
+                onChangeText={setSearchText}
+                onSubmitEditing={() => runSearch()}
+                returnKeyType="search"
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="Search for mobiles, laptops, tablets, accessories..."
+                placeholderTextColor={HINT}
+                style={{ flex: 1, marginLeft: 10, color: INK, fontSize: rf(12.5), padding: 0, outlineStyle: 'none' }}
+              />
+              {searchText ? (
+                <Pressable onPress={() => setSearchText('')} hitSlop={6} accessibilityLabel="Clear search" style={{ height: 28, width: 28, alignItems: 'center', justifyContent: 'center' }}>
+                  <X size={14} color={MUTED} />
+                </Pressable>
+              ) : null}
+            </View>
+            <Pressable onPress={() => setShowFilters(true)} accessibilityRole="button" accessibilityLabel="Filters"
+              style={{ height: 46, width: 46, borderRadius: 14, borderWidth: 1, borderColor: activeFilters > 0 ? GREEN : LINE, backgroundColor: activeFilters > 0 ? GREEN : '#F4FAFB', alignItems: 'center', justifyContent: 'center' }}>
+              <SlidersHorizontal size={19} color={activeFilters > 0 ? '#FFFFFF' : GREEN} />
+            </Pressable>
+          </View>
+
+          {/* Hero — admin "Buy" banners when published, else the built-in hero. */}
           {buyBanners.length ? (
             <View style={{ marginTop: 14 }}>
-              <View style={{ marginHorizontal: PAD, height: bannerH, borderRadius: 24, overflow: 'hidden', backgroundColor: '#FFFFFF', ...cardShadow }}>
-                <ScrollView
-                  horizontal
-                  pagingEnabled
-                  showsHorizontalScrollIndicator={false}
-                  onScroll={onBannerScroll}
-                  scrollEventThrottle={16}
-                  style={{ width: bannerW, height: bannerH, flexGrow: 0 }}
-                >
+              <View style={{ marginHorizontal: PAD, height: bannerH, borderRadius: 18, overflow: 'hidden', backgroundColor: '#FFFFFF', ...cardShadow }}>
+                <ScrollView ref={bannerRef} horizontal pagingEnabled showsHorizontalScrollIndicator={false} onScroll={onBannerScroll} scrollEventThrottle={16} style={{ width: bannerW, height: bannerH, flexGrow: 0 }}>
                   {buyBanners.map((b) => (
-                    <Pressable
-                      key={b.key}
-                      onPress={openAll}
-                      accessibilityRole="imagebutton"
-                      accessibilityLabel="Buy offer banner"
-                      style={{ width: bannerW, height: bannerH }}
-                    >
+                    <Pressable key={b.key} onPress={openAll} accessibilityRole="imagebutton" accessibilityLabel="Buy offer banner" style={{ width: bannerW, height: bannerH }}>
                       <Image resizeMethod="resize" source={{ uri: b.uri }} style={{ width: bannerW, height: bannerH }} resizeMode="contain" />
                     </Pressable>
                   ))}
                 </ScrollView>
               </View>
               {buyBanners.length > 1 ? (
-                <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 10 }}>
-                  {buyBanners.map((b, i) => (
-                    <View
-                      key={b.key}
-                      style={{ height: 6, width: i === slide ? 18 : 6, borderRadius: 3, marginHorizontal: 3, backgroundColor: i === slide ? GREEN : '#D6D6D6' }}
-                    />
-                  ))}
+                <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 8 }}>
+                  {buyBanners.map((b, i) => <View key={b.key} style={{ height: 6, width: i === slide ? 18 : 8, borderRadius: 3, marginHorizontal: 3, backgroundColor: i === slide ? GREEN : '#D2D6DD' }} />)}
                 </View>
               ) : null}
             </View>
-          ) : null}
-
-          {/* Category strip — "All" plus each category; tapping opens its listing. */}
-          {loading ? (
-            <View style={{ paddingVertical: 24 }}><Loader label="Loading categories..." /></View>
-          ) : cats.length === 0 ? (
-            <View style={{ paddingHorizontal: PAD, paddingTop: 14 }}>
-              <EmptyState title="No categories yet" description="The admin hasn't published any device categories." />
-            </View>
           ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: PAD, paddingTop: 16, paddingBottom: 2 }}>
-              <CategoryChip label="All" isAll active size={chipSize} onPress={openAll} />
-              {cats.map((c) => {
-                const menuUri = menuImages[categoryMenuKey(c.name)] || menuImages[categoryMenuKey(c.code)] || null;
-                return (
-                  <CategoryChip
-                    key={c.id}
-                    label={c.name}
-                    code={c.code}
-                    size={chipSize}
-                    uri={menuUri || imageOf(c)}
-                    photo={!!menuUri}
-                    onPress={() => openCategory(c)}
-                  />
-                );
-              })}
+            <Pressable onPress={openAll} accessibilityRole="button" accessibilityLabel="Shop now"
+              style={{ marginHorizontal: PAD, marginTop: 14, borderRadius: 18, overflow: 'hidden', backgroundColor: '#CFEFF0', flexDirection: 'row', alignItems: 'center', padding: 16, minHeight: 150 }}>
+              <View style={{ flex: 1.15, minWidth: 0 }}>
+                <Text style={{ fontSize: rf(19), lineHeight: rf(23), fontWeight: '800', color: INK }}>Buy Devices{'\n'}from Verified Shops</Text>
+                {['Genuine Products', 'Warranty Options', 'Pickup or Home Delivery'].map((t) => (
+                  <View key={t} style={{ flexDirection: 'row', alignItems: 'center', marginTop: 5 }}>
+                    <CheckCircle2 size={13} color={GREEN} />
+                    <Text style={{ marginLeft: 5, fontSize: rf(11), color: INK }}>{t}</Text>
+                  </View>
+                ))}
+                <View style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', marginTop: 10, height: 34, paddingHorizontal: 16, borderRadius: 999, backgroundColor: YELLOW }}>
+                  <Text style={{ fontSize: rf(13), fontWeight: '800', color: INK }}>Shop Now</Text>
+                  <ArrowRight size={15} color={INK} style={{ marginLeft: 6 }} />
+                </View>
+              </View>
+              {heroImage ? <Image source={{ uri: heroImage }} style={{ flex: 1, height: 120 }} resizeMode="contain" /> : null}
+            </Pressable>
+          )}
+
+          {/* Categories (admin images) + Spares + More */}
+          {loading ? (
+            <View style={{ paddingVertical: 16 }}><Loader label="Loading categories..." /></View>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 16 }} contentContainerStyle={{ gap: 8, paddingHorizontal: PAD, paddingBottom: 4 }}>
+              {[...cats.map((c) => ({ key: c.id, name: c.name, uri: menuImages[categoryMenuKey(c.name)] || menuImages[categoryMenuKey(c.code)] || imageOf(c), onPress: () => openCategory(c) })),
+                { key: 'spare', name: 'Spares', uri: menuImages[categoryMenuKey('Spare Parts')] || null, onPress: () => navigation.navigate('BuyListing', { q: 'spare', title: 'Spare Parts' }) },
+                { key: 'more', name: 'More', uri: null, onPress: () => navigation.navigate('BuyDevices') },
+              ].map((t) => (
+                <Pressable key={t.key} onPress={t.onPress} accessibilityRole="button" accessibilityLabel={t.name}
+                  style={{ width: tileW, height: tileW * 0.95, borderRadius: 14, borderWidth: 1, borderColor: LINE, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2, ...cardShadow }}>
+                  {t.uri ? <Image source={{ uri: t.uri }} style={{ width: tileW * 0.6, height: tileW * 0.48 }} resizeMode="contain" />
+                    : (
+                      <View style={{ height: tileW * 0.48, width: tileW * 0.48, borderRadius: tileW, backgroundColor: GREEN_LIGHT, alignItems: 'center', justifyContent: 'center' }}>
+                        {t.key === 'more' ? <LayoutGrid size={20} color={GREEN} /> : t.key === 'spare' ? <Cpu size={20} color={GREEN} /> : <Smartphone size={20} color={GREEN} />}
+                      </View>
+                    )}
+                  <Text numberOfLines={1} style={{ marginTop: 6, fontSize: rf(11), fontWeight: '700', color: INK }}>{t.name}</Text>
+                </Pressable>
+              ))}
             </ScrollView>
           )}
 
+          {/* Quick actions */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 14 }} contentContainerStyle={{ gap: 8, paddingHorizontal: PAD, paddingBottom: 4 }}>
+            {[
+              { key: 'deals', title: 'Deals', sub: 'Best offers', Icon: Percent, fg: '#B45309', bg: '#FEF3C7', onPress: () => navigation.navigate('BuyListing', { sort: 'price_asc', title: 'Deals & Offers' }) },
+              { key: 'shops', title: 'Nearby Shops', sub: 'Buy from local shops', Icon: Store, fg: GREEN, bg: GREEN_LIGHT, onPress: () => navigation.navigate('NearbyShops') },
+              { key: 'orders', title: 'My Orders', sub: 'Track & manage', Icon: Package, fg: '#2563EB', bg: '#E0ECFF', onPress: () => navigation.navigate('MyOrders', { initialTab: 'Buy', view: 'buy' }) },
+              { key: 'cart', title: 'My Cart', sub: `${cartCount} ${cartCount === 1 ? 'item' : 'items'}`, Icon: ShoppingCart, fg: '#16A34A', bg: '#DCFCE7', onPress: () => navigation.navigate('MyCart') },
+            ].map(({ key, title, sub, Icon, fg, bg, onPress }) => (
+              <Pressable key={key} onPress={onPress} accessibilityRole="button" accessibilityLabel={title}
+                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 10, borderRadius: 14, borderWidth: 1, borderColor: LINE, backgroundColor: '#FFFFFF', ...cardShadow }}>
+                <View style={{ height: 38, width: 38, borderRadius: 19, backgroundColor: bg, alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon size={19} color={fg} strokeWidth={2.4} />
+                </View>
+                <View style={{ marginLeft: 8 }}>
+                  <Text style={{ fontSize: rf(13), fontWeight: '800', color: INK }}>{title}</Text>
+                  <Text style={{ fontSize: rf(11), color: MUTED, marginTop: 1 }}>{sub}</Text>
+                </View>
+              </Pressable>
+            ))}
+          </ScrollView>
+
+          {/* Deal of the Day — real live listings, best discount first */}
           {deals.length ? (
             <>
-              <SectionHead icon={<TrendingUp size={17} color={GREEN_DARK} />} title="Deals for You" onViewAll={openAll} />
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: PAD, paddingVertical: 4 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: PAD, marginTop: 18, marginBottom: 10 }}>
+                <Zap size={20} color="#F59E0B" fill="#F59E0B" />
+                <Text style={{ flex: 1, marginLeft: 6, fontSize: rf(16), fontWeight: '800', color: INK }}>Deal of the Day</Text>
+                <Pressable onPress={openAll} className="active:opacity-70" style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 4 }}>
+                  <Text style={{ fontSize: rf(12.5), fontWeight: '800', color: GREEN }}>View All</Text>
+                  <ArrowRight size={15} color={GREEN} style={{ marginLeft: 4 }} />
+                </Pressable>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: PAD, paddingBottom: 6 }}>
                 {deals.map((p) => (
-                  <DealCard
-                    key={p.id}
-                    product={p}
-                    width={dealW}
-                    adding={adding === p.id}
+                  <DealCard key={p.id} product={p} width={dealW} adding={adding === p.id}
                     onPress={() => navigation.navigate('BuyProductDetails', { productId: p.id })}
                     onAdd={() => add(p)}
-                  />
+                    onBuy={() => add(p, true)} />
                 ))}
               </ScrollView>
             </>
           ) : null}
-
-          {/* Trust strip */}
-          <View style={{ paddingHorizontal: PAD, marginTop: 14 }}>
-            <View style={{ flexDirection: 'row', backgroundColor: '#FFFFFF', borderRadius: 16, paddingVertical: 12, paddingHorizontal: 6, ...cardShadow }}>
-              {TRUST.map((t) => {
-                const Icon = t.icon;
-                return (
-                  <View key={t.title} style={{ flex: 1, alignItems: 'center', paddingHorizontal: 2 }}>
-                    <View style={{ height: 36, width: 36, borderRadius: 18, backgroundColor: GREEN_LIGHT, alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
-                      <Icon size={17} color={GREEN} strokeWidth={2.3} />
-                    </View>
-                    <Text numberOfLines={1} style={{ fontSize: rf(10.5), fontWeight: '800', color: INK, textAlign: 'center' }}>{t.title}</Text>
-                    <Text numberOfLines={1} style={{ fontSize: rf(9), color: MUTED, textAlign: 'center', marginTop: 1 }}>{t.sub}</Text>
-                  </View>
-                );
-              })}
-            </View>
-          </View>
         </View>
       </ScrollView>
 
       {/* Filters sheet — Sort + Max price, applied to the listing (with any search text). */}
       <Modal visible={showFilters} transparent animationType="slide" onRequestClose={() => setShowFilters(false)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(16,24,20,0.45)', justifyContent: 'flex-end' }}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(28,48,83,0.45)', justifyContent: 'flex-end' }}>
           <Pressable style={{ flex: 1 }} onPress={() => setShowFilters(false)} accessibilityLabel="Close filters" />
           <View style={{ backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 24 }}>
             <View style={{ alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: LINE, marginBottom: 12 }} />

@@ -38,8 +38,16 @@ import {
   Plus,
   Check,
   X,
+  LayoutGrid,
 } from 'lucide-react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getTabBarTotalHeight, isTabletWidth } from '../../navigation/customerTabBarMetrics';
+// Partner app dashboard components (copied as-is into components/dashboard).
+import { getSizeClass, withAlpha, Touchable } from '../../components/dashboard/theme';
+import { DashboardSection } from '../../components/dashboard/DashboardSection';
+import { DashboardSearchBar } from '../../components/dashboard/DashboardSearchBar';
+import { DashboardToolGroups } from '../../components/dashboard/DashboardToolGroups';
+import { ion, mci } from '../../components/dashboard/solidIcons';
 import { EmptyState, Loader } from '../../components/rnr';
 import { getDeviceCategories, getBanners, getCategoryMenuImages, categoryMenuKey } from '../../api/masterData';
 import { listNearbyShops } from '../../api/shops';
@@ -52,30 +60,35 @@ import { selectSession } from '../../store/authSlice';
 import { useCustomerLocation } from '../../hooks/useCustomerLocation';
 import { tokens as baseTokens } from '../../theme/colors';
 import { BRAND } from '../../theme/brand';
-import { tintFor } from '../../theme/categoryTints';
+import { tintFor, cardPastels } from '../../theme/categoryTints';
+import CategoryGridCard, { HOME_MAX_W, homePad, homeRailCardWidth, homeRailGap } from '../../components/CategoryGridCard';
 import { rf, rlh } from '../../utils/responsive';
 import { isShopOpen } from '../../utils/shopHours';
 import { useCurrentDevice, deviceName, deviceTitle, roughEstimate } from '../../utils/currentDevice';
+import { SellFinalPricePopup } from './sell/SellFinalPrice';
 
-// Home colours: the brand palette mapped onto the token names this screen
-// uses (other screens keep the shared tokens).
+// Home colours: the Partner app's dashboard palette (components/dashboard/
+// theme PAL) mapped onto the token names this screen uses — Home is laid out
+// with the Partner dashboard components, so it wears the same colours.
 const tokens = {
   ...baseTokens,
-  primary: BRAND.green,
-  primarySoft: '#EAF8EC',
-  text: BRAND.ink,
-  textMuted: '#6B6B6B',
-  textSubtle: '#8E8E8E',
+  primary: '#035C6C',
+  primarySoft: '#E5F3F5',
+  text: '#111111',
+  textMuted: '#6B7280',
+  textSubtle: '#9CA3AF',
   card: '#FFFFFF',
-  border: '#E6E6E6',
-  surfaceMuted: BRAND.line,
-  background: BRAND.bg,
-  warning: BRAND.yellow,
-  danger: BRAND.red,
-  accent: BRAND.yellow,
+  border: '#E5E7EB',
+  surfaceMuted: '#F3F4F6',
+  background: '#F3F4F6',
+  warning: '#FAA700',
+  danger: '#F32C26',
+  accent: '#FAA700',
 };
-// Green for text on light backgrounds (#09AD2A shaded for legibility).
-const GREEN_TEXT = '#078F23';
+// Teal for accent text on light backgrounds (Partner PINE).
+const GREEN_TEXT = '#035C6C';
+// Partner DashboardHeader band behind the identity row + search.
+const HEADER_TINT = '#E2F2F4';
 
 // Icon fallback keyed by the admin-derived category CODE ("Mobile" -> MOBILE).
 // Each tint colour also drives the circular tile background on the per-service
@@ -120,6 +133,16 @@ const ORDERS_GRID = [
   { label: 'Sell',    icon: Tag,         tab: 'Sell',    color: BRAND.red,   bg: '#FEECEC' },
   { label: 'Enquiry', icon: MessageCircle, tab: 'Enquiry', color: GREEN_TEXT, bg: '#EAF8EC' },
 ];
+
+// Solid glyphs for the Quick Access tiles — the Partner Home tool tiles use
+// filled Ionicons / MaterialCommunity glyphs (white on a brand disc).
+const QUICK_GLYPHS = {
+  Service: mci('wrench'),
+  Pickup: mci('truck'),
+  Buy: ion('cart'),
+  Sell: ion('pricetag'),
+  Enquiry: ion('chatbubble'),
+};
 
 // Preferred display order for category tiles (backend returns them
 // alphabetically). Unknown codes fall to the end, alphabetically.
@@ -169,8 +192,8 @@ const HERO_SLIDES = [
     title1: 'Fast. Trusted.',
     title2: 'Tech Solutions',
     cta: 'Explore Now',
-    bg: ['#EAF8EC', '#CDEFD5'],
-    accent: GREEN_TEXT,
+    bg: ['#FFFFFF', '#E5F3F5'],
+    accent: '#035C6C',
     route: 'Repair',
   },
   {
@@ -179,8 +202,8 @@ const HERO_SLIDES = [
     title1: 'Up to 30% Off',
     title2: 'Screen Repairs',
     cta: 'Book Now',
-    bg: ['#FEECEC', '#FBD3D3'],
-    accent: BRAND.red,
+    bg: ['#FFFFFF', '#FEEAE9'],
+    accent: '#F32C26',
     route: 'Repair',
   },
   {
@@ -189,8 +212,8 @@ const HERO_SLIDES = [
     title1: 'Sell & Earn',
     title2: 'Best Resale Value',
     cta: 'Sell Now',
-    bg: ['#FEF6DA', '#FBE6A2'],
-    accent: BRAND.ink,
+    bg: ['#FFFFFF', '#EBF6E7'],
+    accent: '#4A7029',
     route: 'Sell',
   },
   {
@@ -199,8 +222,8 @@ const HERO_SLIDES = [
     title1: 'Free Pickup',
     title2: 'At Your Doorstep',
     cta: 'Book Pickup',
-    bg: ['#F8F8F8', '#EDEDED'],
-    accent: GREEN_TEXT,
+    bg: ['#FFFFFF', '#E6F3FA'],
+    accent: '#0788C9',
     route: 'RepairSelectDevice',
     params: { flow: 'REPAIR' },
   },
@@ -223,8 +246,8 @@ const PROMO_BANNERS = [
     title: 'Up to 30% OFF',
     sub: 'on Screen Repairs',
     cta: 'Book Now',
-    bg: ['#EAF8EC', '#CDEFD5'],
-    accent: tokens.primary,
+    bg: ['#E5F3F5'],
+    accent: '#035C6C',
     titleColor: tokens.text,
     icon: Smartphone,
     route: 'Repair',
@@ -234,8 +257,8 @@ const PROMO_BANNERS = [
     title: 'Exchange & Save',
     sub: 'Best value on old devices',
     cta: 'Get Offer',
-    bg: ['#FEF6DA', '#FBE6A2'],
-    accent: BRAND.ink,
+    bg: ['#E8F1FE'],
+    accent: '#2563EB',
     titleColor: tokens.text,
     icon: Repeat,
     route: 'Sell',
@@ -245,8 +268,8 @@ const PROMO_BANNERS = [
     title: 'Free Pickup',
     sub: 'Doorstep in 15–30 min',
     cta: 'Try Now',
-    bg: ['#FEECEC', '#FBD3D3'],
-    accent: BRAND.red,
+    bg: ['#EBF6E7'],
+    accent: '#4A7029',
     titleColor: tokens.text,
     icon: Truck,
     route: 'RepairSelectDevice',
@@ -265,13 +288,14 @@ const TRUST_BADGES = [
 const DONE_STATES = new Set(['COMPLETED', 'CANCELLED', 'DELIVERED', 'CLOSED', 'REJECTED']);
 
 // Keep content readable on tablets/large screens.
-const MAX_CONTENT_W = 720;
+const MAX_CONTENT_W = HOME_MAX_W; // shared with CategoryGridCard (Home rail card width)
 
 export default function HomeScreen({ navigation }) {
   const session = useSelector(selectSession);
   const currentDevice = useCurrentDevice();
   const { lat, lng, addressLabel: gpsLabel, source: locSource, loading: locating, detectGps } = useCustomerLocation();
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [shops, setShops] = useState([]);
   const [address, setAddress] = useState(null);
@@ -295,14 +319,21 @@ export default function HomeScreen({ navigation }) {
   const [unread, setUnread] = useState(0);
   const [cartCount, setCartCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  // Quick Access panel's measured width — drives the tile size (Partner tool grid).
+  const [toolPanelW, setToolPanelW] = useState(0);
+
+  // Nearby shops follow the location shown in the header: the picked saved
+  // address when it has coordinates, otherwise the hook's (GPS / default).
+  const qLat = !gpsMode && address?.latitude != null ? Number(address.latitude) : lat;
+  const qLng = !gpsMode && address?.longitude != null ? Number(address.longitude) : lng;
 
   const load = useCallback(async () => {
     try {
       const [s, a, c, orders, unreadCount, chats, cart, b] = await Promise.all([
         listNearbyShops({
-          lat: lat ?? undefined,
-          lng: lng ?? undefined,
-          radiusKm: lat != null && lng != null ? 20 : undefined,
+          lat: qLat ?? undefined,
+          lng: qLng ?? undefined,
+          radiusKm: qLat != null && qLng != null ? 20 : undefined,
         }).catch(() => []),
         listAddresses().catch(() => []),
         getDeviceCategories().catch(() => []),
@@ -325,17 +356,18 @@ export default function HomeScreen({ navigation }) {
           .sort((m, n) => (m.sortOrder ?? 0) - (n.sortOrder ?? 0)),
       );
       setAddresses(a || []);
-      // Keep the user's explicit dropdown pick across refocus/refresh; only
-      // auto-select the default address on the very first load.
+      // Keep the user's explicit dropdown pick across refocus/refresh, but
+      // swap in its latest saved copy so an edit made on Manage Address shows
+      // here (default address if it was deleted). Before any pick: the default.
       const def = a.find((x) => x.isDefault) || a[0] || null;
-      if (!locPickedRef.current) setAddress(def);
+      setAddress((cur) => (locPickedRef.current && cur ? a.find((x) => x.id === cur.id) || def : def));
       const active = (orders || []).find((o) => !DONE_STATES.has(String(o.status).toUpperCase()));
       setOngoing(active || (orders || [])[0] || null);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [lat, lng]);
+  }, [qLat, qLng]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -375,17 +407,8 @@ export default function HomeScreen({ navigation }) {
   // the dropdown, or when there's no saved address to fall back to.
   const showGps = gpsMode || !address;
 
-  // Include the pincode at the end of the address detail line so the
-  // header looks like "Bhuvanagiri, Cuddalore - 608501".
-  const savedDetail = address
-    ? (() => {
-        const parts = [address.line1 || address.locality, address.city].filter(Boolean);
-        const head = parts.join(', ');
-        const pin = address.pincode ? String(address.pincode).trim() : '';
-        if (head && pin) return `${head} - ${pin}`;
-        return head || pin || '';
-      })()
-    : '';
+  // Header detail line, e.g. "Bhuvanagiri, Cuddalore - 608501".
+  const savedDetail = shortAddress(address);
 
   const locationTop = showGps
     ? (locating ? 'Locating…' : 'Current Location')
@@ -423,6 +446,38 @@ export default function HomeScreen({ navigation }) {
   const isTablet = width >= 700;
   const centered = { width: '100%', maxWidth: MAX_CONTENT_W, alignSelf: 'center' };
 
+  // Partner dashboard layout scale (DashboardScreen): side padding and the
+  // gap between sections, by size class.
+  const sizeClass = getSizeClass(width);
+  const PAD = homePad(width);
+  const SECTION_GAP = sizeClass === 'tablet' ? 24 : sizeClass === 'large' ? 22 : 20;
+
+  // Quick Access as a Partner "tool group": a white rounded panel holding a
+  // wrapping grid of icon-disc tiles. All five fit one row on phones (four
+  // under 360dp); tablets use the Partner six-column grid.
+  const toolGridPad = sizeClass === 'tablet' ? 12 : 8;
+  const toolGap = sizeClass === 'tablet' ? 12 : 8;
+  const toolColumns = width >= 600 ? 6 : width < 360 ? 4 : 5;
+  const toolContentW = toolPanelW > 0 ? toolPanelW - toolGridPad * 2 - 2 : Math.max(0, contentW - PAD * 2 - toolGridPad * 2 - 2);
+  const toolCardW = Math.floor(Math.max(0, (toolContentW - toolGap * (toolColumns - 1)) / toolColumns));
+  const toolPanelStyle = {
+    marginHorizontal: PAD,
+    marginTop: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingTop: 8,
+    paddingBottom: 2,
+    shadowColor: '#111111',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
+  };
+  const quickTools = ORDERS_GRID.map((it) => ({ key: it.tab, label: it.label, icon: QUICK_GLYPHS[it.tab] || it.icon, iconColor: '#FFFFFF', tab: it.tab }));
+  const openQuickTool = (tool) => navigation.navigate(['Buy', 'Sell'].includes(tool.tab) ? 'MyOrders' : 'RepairOrders', { initialTab: tool.tab });
+
   // Per-service category routing — each rail drops the customer straight into
   // that service's flow with the tapped category pre-selected (mirrors the
   // routes CategoryServiceMenu uses). "See all" jumps to the service tab.
@@ -444,177 +499,121 @@ export default function HomeScreen({ navigation }) {
     <View className="flex-1" style={{ backgroundColor: tokens.background }}>
       {/* Top app bar — brand mark + location header, then a full-width search
           row. White header (reference) with the location dropdown on tap. */}
-      <SafeAreaView edges={['top']} style={{ backgroundColor: tokens.card }}>
-        <View className="flex-row items-center px-4 pt-2.5 pb-2" style={centered}>
-          {/* Brand mark — green "GG" monogram; taps through to Profile. */}
-          <Pressable
-            onPress={() => navigation.navigate('Profile')}
-            className="h-11 w-11 rounded-full items-center justify-center active:opacity-80 mr-2.5"
-            style={{ backgroundColor: tokens.primary }}
-          >
-            <Text className="text-white font-black" style={{ fontSize: rf(15), letterSpacing: 0.5 }}>GG</Text>
-          </Pressable>
-          {/* Location — bold label + chevron on top, pinned address below. */}
-          <Pressable
-            onPress={onLocationPress}
-            className="flex-1 active:opacity-80 mr-2"
-          >
-            <View className="flex-row items-center">
-              <Text className="font-extrabold text-text mr-1" style={{ fontSize: rf(16) }} numberOfLines={1}>
-                {locationTop}
-              </Text>
-              <ChevronDown size={16} color={tokens.text} />
+      {/* Partner DashboardHeader layout: a light-cyan band holding the
+          identity row (GG mark + location, white circular actions on the
+          right) and the pill search bar below it. */}
+      <SafeAreaView edges={['top']} style={{ backgroundColor: HEADER_TINT }}>
+        <View style={[centered, { paddingHorizontal: PAD }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, paddingBottom: 10 }}>
+            {/* Brand mark — "GG" monogram; taps through to Profile. */}
+            <Touchable
+              onPress={() => navigation.navigate('Profile')}
+              accessibilityRole="button"
+              accessibilityLabel="Profile"
+              hitSlop={4}
+              style={{
+                height: sizeClass === 'tablet' ? 44 : 40, width: sizeClass === 'tablet' ? 44 : 40,
+                borderRadius: sizeClass === 'tablet' ? 22 : 20, marginRight: 10,
+                alignItems: 'center', justifyContent: 'center', backgroundColor: tokens.primary,
+                borderWidth: 1.5, borderColor: '#FFFFFF',
+              }}
+              pressedStyle={{ opacity: 0.6 }}
+            >
+              <Text style={{ color: '#FFFFFF', fontWeight: '900', fontSize: rf(14), letterSpacing: 0.5 }}>GG</Text>
+            </Touchable>
+            {/* Location — bold label + chevron on top, pinned address below. */}
+            <Touchable
+              onPress={onLocationPress}
+              accessibilityRole="button"
+              accessibilityLabel={`Location: ${locationTop}. Change location`}
+              style={{ flex: 1, minWidth: 0, marginRight: 10 }}
+              pressedStyle={{ opacity: 0.6 }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={{ flexShrink: 1, fontSize: sizeClass === 'tablet' ? 22 : sizeClass === 'large' ? 20 : 19, lineHeight: (sizeClass === 'tablet' ? 22 : sizeClass === 'large' ? 20 : 19) + 5, fontWeight: '800', color: '#111111', marginRight: 2 }} numberOfLines={1}>
+                  {locationTop}
+                </Text>
+                <ChevronDown size={18} color="#111111" />
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 1 }}>
+                <MapPin size={12} color={tokens.primary} style={{ marginRight: 3 }} />
+                <Text style={{ flex: 1, fontSize: sizeClass === 'tablet' ? 14 : 13, color: tokens.textMuted }} numberOfLines={1}>
+                  {locationDetail}
+                </Text>
+              </View>
+            </Touchable>
+            {/* Right: cart · notifications as white circles (Partner header actions). */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 0, gap: sizeClass === 'tablet' ? 14 : 8 }}>
+              <HeaderAction icon={ShoppingCart} label="My Cart" badge={cartCount} badgeColor="#111111" onPress={() => navigation.navigate('MyCart')} size={sizeClass === 'tablet' ? 38 : 34} />
+              <HeaderAction icon={Bell} label="Notifications" badge={unread} badgeColor={tokens.danger} onPress={() => navigation.navigate('Notifications')} size={sizeClass === 'tablet' ? 38 : 34} />
             </View>
-            <View className="flex-row items-center mt-0.5">
-              <MapPin size={11} color={tokens.primary} style={{ marginRight: 3 }} />
-              <Text className="text-text-muted flex-1" style={{ fontSize: rf(11.5) }} numberOfLines={1}>
-                {locationDetail}
-              </Text>
-            </View>
-          </Pressable>
-          {/* Right-side actions: search, cart, notifications — outlined circles. */}
-          <IconCircle
-            icon={ShoppingCart}
-            onPress={() => navigation.navigate('MyCart')}
-            badge={cartCount}
-            badgeColor={tokens.text}
-            label="My Cart"
-          />
-          <IconCircle
-            icon={Bell}
-            onPress={() => navigation.navigate('Notifications')}
-            badge={unread}
-            badgeColor={tokens.danger}
-            label="Notifications"
-            last
-          />
-        </View>
+          </View>
 
-        {/* Search row — magnifier, placeholder and camera / mic / QR actions. */}
-        <View className="px-4 pb-3 pt-1" style={centered}>
-          <Pressable
-            onPress={openSearch}
-            accessibilityRole="search"
-            accessibilityLabel="Search for products, repair, or brands"
-            className="flex-row items-center pl-4 pr-2 active:opacity-80"
-            style={{
-              backgroundColor: tokens.card, borderWidth: 1, borderColor: tokens.border, height: 54, borderRadius: 27,
-              shadowColor: BRAND.ink, shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1,
-            }}
-          >
-            <Search size={20} color={tokens.text} />
-            <Text className="text-text-muted ml-2.5 flex-1" style={{ fontSize: rf(13) }} numberOfLines={1}>
-              Search for products, repair, or brands...
-            </Text>
-            {/* Each icon is its own tap target (the bar itself opens text search). */}
-            <BarIcon icon={Camera} label="Search product by camera" onPress={openScanDevice} />
-            <BarIcon icon={Mic} label="Voice search" onPress={openVoice} />
-          </Pressable>
+          {/* Search box — Partner pill bar: magnifier + placeholder (opens
+              search), then camera product search and voice search. */}
+          <View style={{ paddingBottom: 10, marginHorizontal: -Math.max(0, PAD - 10) }}>
+            <DashboardSearchBar
+              pad={0}
+              placeholder="Search for products, repair, or brands..."
+              onSearchPress={openSearch}
+              onCameraPress={openScanDevice}
+              onVoicePress={openVoice}
+            />
+          </View>
         </View>
       </SafeAreaView>
 
       <ScrollView
         className="flex-1"
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#09AD2A" colors={['#09AD2A']} />}
-        contentContainerStyle={{ paddingBottom: 32 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#9CA3AF" colors={[tokens.primary]} />}
+        contentContainerStyle={{ paddingBottom: 32 + getTabBarTotalHeight(isTabletWidth(width), insets.bottom) }}
       >
         <View style={centered}>
-          {/* Hero promo carousel — full-bleed banner with device artwork,
-              headline, CTA and paging dots. */}
-          <HeroBanner navigation={navigation} contentW={contentW} banners={banners} />
+          {/* Hero promo carousel — Partner banner frame (radius 20, artwork
+              at its own ratio, teal paging dots). */}
+          <HeroBanner navigation={navigation} contentW={contentW} banners={banners} pad={PAD} />
 
           {/* Sell This Device — auto-detected from the phone the app runs on
               (model + RAM/storage). "Sell Now" opens the Sell flow for a real
-              shop quote; the ₹ figure here is only a rough teaser estimate. */}
+              shop quote; the ₹ figure here is only a rough teaser estimate.
+              Drawn as a Partner shortcut card: white fading into the card's
+              tint, a soft shadow in its own colour, the device photo along the
+              bottom-right edge. */}
           {currentDevice.ready && (deviceName(currentDevice) || currentDevice.storageGb || currentDevice.image) ? (
-            <View style={{ paddingHorizontal: 16, marginTop: 12 }}>
-              <Pressable
+            <View style={{ paddingHorizontal: PAD, marginTop: 4 }}>
+              <SellDeviceCard
+                height={sizeClass === 'tablet' ? 128 : 112}
+                image={currentDevice.image}
+                title={deviceTitle(currentDevice)}
+                estimate={roughEstimate(currentDevice).toLocaleString('en-IN')}
                 onPress={() => navigation.navigate('SellSelectDevice', { flow: 'SELL' })}
-                className="active:opacity-90 flex-row items-center"
-                style={{
-                  backgroundColor: '#FFFFFF', borderRadius: 20, borderWidth: 1, borderColor: tokens.border,
-                  paddingVertical: 8, paddingLeft: 10, paddingRight: 10, overflow: 'hidden',
-                  shadowColor: BRAND.ink, shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1,
-                }}
-              >
-                {currentDevice.image ? (
-                  <Image resizeMethod="resize"
-                    source={{ uri: currentDevice.image }}
-                    style={{ height: 64, width: 64, marginRight: 12 }}
-                    resizeMode="contain"
-                  />
-                ) : (
-                  <View
-                    style={{
-                      height: 60, width: 60, borderRadius: 16,
-                      backgroundColor: tokens.primarySoft,
-                      alignItems: 'center', justifyContent: 'center', marginRight: 12,
-                    }}
-                  >
-                    <Smartphone size={28} color={tokens.primary} />
-                  </View>
-                )}
-                <View style={{ flex: 1, paddingRight: 8 }}>
-                  <Text style={{ color: GREEN_TEXT, fontWeight: '800', fontSize: rf(12) }}>Sell This Device</Text>
-                  <Text style={{ color: tokens.text, fontWeight: '800', fontSize: rf(13.5), marginTop: 2 }} numberOfLines={1}>
-                    {deviceTitle(currentDevice)}
-                  </Text>
-                  <Text style={{ color: tokens.textMuted, fontSize: rf(12), marginTop: 2 }} numberOfLines={1}>
-                    Get up to <Text style={{ color: GREEN_TEXT, fontWeight: '800' }}>₹{roughEstimate(currentDevice).toLocaleString('en-IN')}</Text>
-                  </Text>
-                </View>
-                <View className="flex-row items-center rounded-full" style={{ backgroundColor: tokens.primary, paddingHorizontal: 14, paddingVertical: 10 }}>
-                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: rf(12.5), marginRight: 5 }}>Sell Now</Text>
-                  <ArrowRight size={14} color="#fff" />
-                </View>
-              </Pressable>
+              />
             </View>
           ) : null}
 
           {/* Quick Access — one tile per order type, before the category
               rails. Service / Pickup open Repair Orders; Buy / Sell open My Orders. */}
-          <SectionHeader
-            title="Quick Access"
-          />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, columnGap: 8 }}>
-            {ORDERS_GRID.map((it) => {
-              const Icon = it.icon;
-              return (
-                <Pressable
-                  key={it.tab}
-                  onPress={() => navigation.navigate(['Buy', 'Sell'].includes(it.tab) ? 'MyOrders' : 'RepairOrders', { initialTab: it.tab })}
-                  className="active:opacity-90"
-                  style={{
-                    width: 100, flexDirection: 'row', alignItems: 'center',
-                    backgroundColor: tokens.card, borderRadius: 16,
-                    borderWidth: 1, borderColor: tokens.border,
-                    paddingVertical: 10, paddingLeft: 6, paddingRight: 4,
-                    shadowColor: BRAND.ink, shadowOpacity: 0.03, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1,
-                  }}
-                >
-                  <View
-                    style={{
-                      height: 28, width: 28, borderRadius: 9,
-                      backgroundColor: it.bg,
-                      alignItems: 'center', justifyContent: 'center', marginRight: 5,
-                    }}
-                  >
-                    <Icon size={16} color={it.color} />
-                  </View>
-                  <Text
-                    style={{ flex: 1, color: tokens.text, fontWeight: '700', fontSize: rf(10) }}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.85}
-                  >
-                    {it.label}
-                  </Text>
-                  {contentW >= 440 ? <ChevronRight size={12} color={tokens.textMuted} /> : null}
-                </Pressable>
-              );
-            })}
-          </ScrollView>
+          {/* Quick Access — Partner tool group: colour disc + title, then a
+              white rounded panel with the five order-type tiles (solid brand
+              discs, white glyphs). Service / Pickup open Repair Orders;
+              Buy / Sell open My Orders; Enquiry opens its tab. */}
+          <View style={{ marginTop: SECTION_GAP }}>
+            <DashboardToolGroups
+              groups={[{ label: 'Quick Access', items: quickTools, icon: LayoutGrid, color: '#035C6C' }]}
+              pad={PAD}
+              panelStyle={toolPanelStyle}
+              onPanelLayout={(e) => {
+                const w = Math.round(e.nativeEvent.layout.width);
+                if (w && w !== toolPanelW) setToolPanelW(w);
+              }}
+              gridPad={toolGridPad}
+              columns={toolColumns}
+              cardWidth={toolCardW}
+              gap={toolGap}
+              onPress={openQuickTool}
+            />
+          </View>
 
           {/* Shop by category, split by service. Each rail lists every
               published category and drops the customer into that service's
@@ -629,6 +628,9 @@ export default function HomeScreen({ navigation }) {
                 title="Repair"
                 categories={categories}
                 contentW={contentW}
+                pad={PAD}
+                gap={SECTION_GAP}
+                rail={0}
                 onPick={pickRepair}
                 onSeeAll={() => navigation.navigate('Repair')}
                 menuImages={menuArt.REPAIR}
@@ -637,6 +639,9 @@ export default function HomeScreen({ navigation }) {
                 title="Sell"
                 categories={categories}
                 contentW={contentW}
+                pad={PAD}
+                gap={SECTION_GAP}
+                rail={1}
                 onPick={pickSell}
                 onSeeAll={() => navigation.navigate('Sell')}
                 menuImages={menuArt.SELL}
@@ -646,6 +651,9 @@ export default function HomeScreen({ navigation }) {
                 title="Buy"
                 categories={categories}
                 contentW={contentW}
+                pad={PAD}
+                gap={SECTION_GAP}
+                rail={2}
                 onPick={pickBuy}
                 onSeeAll={() => navigation.navigate('Buy')}
                 menuImages={menuArt.BUY}
@@ -657,13 +665,12 @@ export default function HomeScreen({ navigation }) {
           {/* Nearby shops — photo-led card with a green shop badge, rating row
               and quick chat / call round buttons. */}
           {shops.length > 0 ? (
-            <>
-              <SectionHeader
+            <View style={{ marginTop: SECTION_GAP }}>
+              <DashboardSection
                 title={shopsTitle}
-                action="See all"
-                onAction={() => navigation.navigate('NearbyShops')}
+                pad={PAD}
               />
-              <View className="px-4">
+              <View style={{ paddingHorizontal: PAD }}>
                 {shops.slice(0, 3).map((s) => (
                   <View key={s.id} className="mb-2.5">
                     <NearbyShopCard
@@ -675,38 +682,46 @@ export default function HomeScreen({ navigation }) {
                   </View>
                 ))}
               </View>
-            </>
+            </View>
           ) : null}
 
           {/* Promo strip — two half-width offer cards side by side (like the
               reference); any further offers scroll in from the right. */}
+          {/* Partner shortcut-card styling: white fading into the card's
+              tint, a 1px border and soft shadow in the card's own colour. */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 2, columnGap: 8 }}
-            style={{ marginTop: 14 }}
+            contentContainerStyle={{ paddingHorizontal: PAD, paddingVertical: 4, columnGap: 10 }}
+            style={{ marginTop: SECTION_GAP - 4 }}
             decelerationRate="fast"
           >
             {PROMO_BANNERS.map((p) => {
               const Icon = p.icon;
-              const cardW = Math.floor((contentW - 32 - 8) / 2);
+              const cardW = Math.floor((contentW - PAD * 2 - 10) / (sizeClass === 'tablet' ? 3 : 2));
               return (
-                <Pressable
+                <Touchable
                   key={p.key}
                   onPress={() => navigation.navigate(p.route, p.params)}
-                  style={{ width: cardW }}
-                  className="active:opacity-90"
+                  accessibilityRole="button"
+                  accessibilityLabel={`${p.title}, ${p.sub}`}
+                  style={{
+                    width: cardW, borderRadius: 18, overflow: 'hidden', backgroundColor: '#FFFFFF',
+                    borderWidth: 1, borderColor: withAlpha(p.accent, 0.14),
+                    shadowColor: p.accent, shadowOpacity: 0.14, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 2,
+                  }}
+                  pressedStyle={{ opacity: 0.85 }}
                 >
                   <LinearGradient
-                    colors={p.bg}
+                    colors={['#FFFFFF', '#FFFFFF']}
                     start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={{ borderRadius: 18, padding: 12, height: 104, overflow: 'hidden', justifyContent: 'space-between' }}
+                    end={{ x: 0, y: 1 }}
+                    style={{ padding: 12, height: 108, justifyContent: 'space-between' }}
                   >
                     <View
                       pointerEvents="none"
                       className="items-center justify-center"
-                      style={{ position: 'absolute', right: -14, bottom: -14, height: 78, width: 78, borderRadius: 39, backgroundColor: 'rgba(255,255,255,0.55)' }}
+                      style={{ position: 'absolute', right: -14, bottom: -14, height: 78, width: 78, borderRadius: 39, backgroundColor: withAlpha(p.accent, 0.1) }}
                     >
                       <Icon size={28} color={p.accent} style={{ marginRight: 8, marginBottom: 8 }} />
                     </View>
@@ -728,23 +743,28 @@ export default function HomeScreen({ navigation }) {
                       <ArrowRight size={12} color="#FFFFFF" />
                     </View>
                   </LinearGradient>
-                </Pressable>
+                </Touchable>
               );
             })}
           </ScrollView>
 
-          {/* Trust strip — four reassurance badges in one soft card, icon
-              beside a two-line label. */}
-          <View style={{ paddingHorizontal: 16, marginTop: 14 }}>
+          {/* Trust strip — four reassurance badges in one Partner panel
+              (radius 16, hairline border, soft shadow), icon beside a two-line label. */}
+          <View style={{ paddingHorizontal: PAD, marginTop: SECTION_GAP - 6 }}>
             <View
               className="flex-row items-stretch"
               style={{
                 backgroundColor: '#FFFFFF',
                 borderWidth: 1,
-                borderColor: tokens.border,
-                borderRadius: 18,
+                borderColor: '#E5E7EB',
+                borderRadius: 16,
                 paddingVertical: 10,
                 paddingHorizontal: 2,
+                shadowColor: '#111111',
+                shadowOpacity: 0.05,
+                shadowRadius: 10,
+                shadowOffset: { width: 0, height: 3 },
+                elevation: 1,
               }}
             >
               {TRUST_BADGES.map((b, i) => {
@@ -797,54 +817,88 @@ export default function HomeScreen({ navigation }) {
         onChooseAddress={chooseAddress}
         onAddAddress={addAddress}
       />
+
+      {/* Sell: the shop revised the price after inspection → Final Price Request popup (server pending state). */}
+      <SellFinalPricePopup navigation={navigation} />
     </View>
   );
 }
 
-// Search-bar icon button (camera / mic / QR) with a comfortable touch target.
-function BarIcon({ icon: Icon, label, onPress }) {
+// Partner DashboardHeader action: a white circle on the light-cyan band with
+// an optional count badge.
+function HeaderAction({ icon: Icon, onPress, badge = 0, badgeColor, label, size = 34 }) {
   return (
-    <Pressable
+    <Touchable
       onPress={onPress}
-      hitSlop={6}
       accessibilityRole="button"
-      accessibilityLabel={label}
-      className="items-center justify-center rounded-full active:opacity-60"
-      style={{ height: 38, width: 38, marginLeft: 2 }}
+      accessibilityLabel={badge > 0 ? `${label}, ${badge} new` : label}
+      hitSlop={Math.max(0, Math.round((44 - size) / 2))}
+      style={{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF' }}
+      pressedStyle={{ opacity: 0.6 }}
     >
-      <Icon size={20} color={tokens.text} />
-    </Pressable>
+      <Icon size={size >= 38 ? 16 : 15} color="#111111" strokeWidth={2} />
+      {badge > 0 ? (
+        <View
+          style={{
+            position: 'absolute', top: -3, right: -3, minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: 9,
+            alignItems: 'center', justifyContent: 'center', backgroundColor: badgeColor || tokens.danger, borderWidth: 1.5, borderColor: '#FFFFFF',
+          }}
+        >
+          <Text style={{ fontSize: 10, fontWeight: '700', color: '#FFFFFF' }}>{badge > 9 ? '9+' : badge}</Text>
+        </View>
+      ) : null}
+    </Touchable>
   );
 }
 
-// Outlined circular header action button with an optional count badge.
-function IconCircle({ icon: Icon, onPress, badge = 0, badgeColor, last, label }) {
+// "Sell This Device" as a Partner shortcut card (DashboardShortcutCards):
+// white fading into the card's tint, a 1px border and soft shadow in the card's
+// own colour, the device photo along the bottom-right edge, text + CTA left.
+const SELL_TONE = '#4A7029';
+const SELL_BG = '#EBF6E7';
+function SellDeviceCard({ height, image, title, estimate, onPress }) {
+  const photoH = Math.round(height * 0.86);
   return (
-    <Pressable
+    <Touchable
       onPress={onPress}
-      hitSlop={4}
       accessibilityRole="button"
-      accessibilityLabel={label}
-      className="rounded-full items-center justify-center active:opacity-80"
+      accessibilityLabel={`Sell this device, ${title}, get up to ₹${estimate}`}
       style={{
-        height: 38,
-        width: 38,
-        backgroundColor: tokens.card,
-        borderWidth: 1,
-        borderColor: tokens.border,
-        marginRight: last ? 0 : 6,
+        height, borderRadius: 18, backgroundColor: '#FFFFFF', overflow: 'hidden',
+        borderWidth: 1, borderColor: withAlpha(SELL_TONE, 0.14),
+        shadowColor: SELL_TONE, shadowOpacity: 0.14, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 2,
       }}
+      pressedStyle={{ opacity: 0.85 }}
     >
-      <Icon size={18} color={tokens.text} strokeWidth={2} />
-      {badge > 0 ? (
-        <View
-          className="absolute -top-1 -right-1 rounded-full min-w-[17px] h-[17px] px-1 items-center justify-center"
-          style={{ backgroundColor: badgeColor || tokens.primary, borderWidth: 1.5, borderColor: tokens.card }}
-        >
-          <Text className="text-white font-bold" style={{ fontSize: rf(9) }}>{badge > 9 ? '9+' : badge}</Text>
+      <LinearGradient
+        pointerEvents="none"
+        colors={['#FFFFFF', '#FFFFFF']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
+      />
+      {/* Photo / decoration along the card's bottom-right edge. */}
+      <View pointerEvents="none" style={{ position: 'absolute', right: 10, bottom: -2, alignItems: 'center' }}>
+        {image ? (
+          <Image resizeMethod="resize" source={{ uri: image }} style={{ width: Math.round(photoH * 0.8), height: photoH }} resizeMode="contain" />
+        ) : (
+          <View style={{ marginBottom: 10, marginRight: 6, opacity: 0.9 }}>
+            <Smartphone size={Math.round(height * 0.42)} color={SELL_TONE} strokeWidth={1.6} />
+          </View>
+        )}
+      </View>
+      <View style={{ flex: 1, justifyContent: 'center', paddingLeft: 14, paddingRight: Math.round(photoH * 0.8) + 18 }}>
+        <Text style={{ fontSize: 13, fontWeight: '800', color: SELL_TONE }} numberOfLines={1}>Sell This Device</Text>
+        <Text style={{ fontSize: 15, lineHeight: 20, fontWeight: '800', color: '#111111', marginTop: 2 }} numberOfLines={1}>{title}</Text>
+        <Text style={{ fontSize: 12.5, color: '#6B7280', marginTop: 1 }} numberOfLines={1}>
+          Get up to <Text style={{ color: SELL_TONE, fontWeight: '800' }}>₹{estimate}</Text>
+        </Text>
+        <View style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', backgroundColor: SELL_TONE, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, marginTop: 7 }}>
+          <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 12, marginRight: 4 }}>Sell Now</Text>
+          <ArrowRight size={13} color="#FFFFFF" />
         </View>
-      ) : null}
-    </Pressable>
+      </View>
+    </Touchable>
   );
 }
 
@@ -944,6 +998,15 @@ function NearbyShopCard({ shop, onPress, onChat, onCall }) {
 // Location picker bottom-sheet. Opened by tapping the header location pill.
 // Lists "Use current location" (GPS) first with a navigation icon, then every
 // saved address, then an "Add new address" action — the Swiggy/Zomato pattern.
+// "Area, District - Pincode" from a saved address — the current fields (area /
+// district, set by the address form) first, the legacy columns after.
+function shortAddress(a) {
+  if (!a) return '';
+  const head = [a.area || a.locality || a.addressLine || a.line1, a.district || a.city].filter(Boolean).join(', ');
+  const pin = a.pincode ? String(a.pincode).trim() : '';
+  return head && pin ? `${head} - ${pin}` : head || pin;
+}
+
 function LocationSheet({
   open, onClose, addresses, activeId, gpsMode, gpsLabel, gpsResolved,
   locating, onChooseGps, onChooseAddress, onAddAddress,
@@ -1013,7 +1076,7 @@ function LocationSheet({
               <ScrollView style={{ maxHeight: 260 }} showsVerticalScrollIndicator={false}>
                 {addresses.map((a) => {
                   const active = !gpsMode && a.id === activeId;
-                  const detail = [a.line1 || a.locality, a.city, a.pincode].filter(Boolean).join(', ');
+                  const detail = shortAddress(a);
                   return (
                     <Pressable
                       key={a.id}
@@ -1088,11 +1151,14 @@ const BANNER_RATIO = 2076 / 757;
 // each slide is that banner's full-bleed artwork (title + CTAs are baked into
 // the image, so we don't overlay the admin title on top). Falls back to the
 // built-in gradient slides when the banner feed is empty or unreachable.
-function HeroBanner({ navigation, contentW, banners = [] }) {
+function HeroBanner({ navigation, contentW, banners = [], pad = 16 }) {
   const [idx, setIdx] = useState(0);
   const [failed, setFailed] = useState({});
+  // One page = the carousel's real width (measured), so swiping always lands
+  // on a whole slide — on phones, tablets and in landscape alike.
+  const [pageW, setPageW] = useState(contentW);
   const onScroll = (e) => {
-    const w = e.nativeEvent.layoutMeasurement.width || contentW || 1;
+    const w = e.nativeEvent.layoutMeasurement.width || pageW || 1;
     const i = Math.round(e.nativeEvent.contentOffset.x / w);
     if (i !== idx) setIdx(i);
   };
@@ -1100,20 +1166,27 @@ function HeroBanner({ navigation, contentW, banners = [] }) {
   // Rows without artwork (the feed has `Slider-0` rows with a null image) are
   // skipped — never drawn with the placeholder hero-banner.png.
   const slides = banners.filter((b) => imgUri(b) && !failed[b.id]);
-  // Explicit pixel size from the screen width so every slide is exactly one
-  // banner tall on every device (px-4 = 16px each side).
-  const bannerW = contentW - 32;
-  const bannerH = Math.round(bannerW / BANNER_RATIO);
+  // Partner banner frame: height from the first artwork's OWN ratio (read via
+  // Image.getSize, clamped), drawn with `contain` so it's never cropped.
+  const [ratio, setRatio] = useState(BANNER_RATIO);
+  const firstUri = slides[0] ? imgUri(slides[0]) : null;
+  useEffect(() => {
+    if (!firstUri) return;
+    Image.getSize(firstUri, (w, h) => { if (w > 0 && h > 0) setRatio(Math.min(3.2, Math.max(1.5, w / h))); }, () => {});
+  }, [firstUri]);
+  const bannerW = Math.max(0, pageW - pad * 2);
+  const bannerH = Math.round(bannerW / ratio);
 
   const useApi = slides.length > 0;
   const dotCount = useApi ? slides.length : HERO_SLIDES.length;
 
   return (
-    <View className="mt-3">
+    <View style={{ marginTop: 12, marginBottom: 16, width: '100%', maxWidth: contentW, alignSelf: 'center' }}>
       <ScrollView
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
+        onLayout={(e) => { const w = Math.round(e.nativeEvent.layout.width); if (w && w !== pageW) setPageW(w); }}
         onScroll={onScroll}
         scrollEventThrottle={16}
         decelerationRate="fast"
@@ -1124,41 +1197,42 @@ function HeroBanner({ navigation, contentW, banners = [] }) {
               const uri = imgUri(b);
               const [route, params] = bannerRoute(b);
               return (
-                <View key={b.id} style={{ width: contentW, height: bannerH }} className="px-4">
-                  <Pressable
+                <View key={b.id} style={{ width: pageW, height: bannerH, paddingHorizontal: pad }}>
+                  <Touchable
                     onPress={() => navigation.navigate(route, params)}
-                    className="active:opacity-95"
                     accessibilityRole="imagebutton"
                     accessibilityLabel={b.title || 'Promotional banner'}
+                    style={{ borderRadius: 20, overflow: 'hidden', backgroundColor: '#FFFFFF' }}
+                    pressedStyle={{ opacity: 0.9 }}
                   >
                     <Image resizeMethod="resize"
                       source={{ uri }}
-                      style={{
-                        width: bannerW,
-                        height: bannerH,
-                        borderRadius: 18,
-                        backgroundColor: tokens.surfaceMuted,
-                      }}
-                      resizeMode="cover"
+                      style={{ width: bannerW, height: bannerH }}
+                      resizeMode="contain"
                       onError={() => setFailed((f) => ({ ...f, [b.id]: true }))}
                     />
-                  </Pressable>
+                  </Touchable>
                 </View>
               );
             })
           : HERO_SLIDES.map((s) => (
-              <View key={s.key} style={{ width: contentW }} className="px-4">
-                <Pressable
+              <View key={s.key} style={{ width: pageW, paddingHorizontal: pad }}>
+                <Touchable
                   onPress={() => navigation.navigate(s.route, s.params)}
-                  className="active:opacity-95"
+                  accessibilityRole="button"
+                  accessibilityLabel={`${s.title1} ${s.title2}`}
+                  style={{
+                    borderRadius: 20, overflow: 'hidden', backgroundColor: '#FFFFFF',
+                    borderWidth: 1, borderColor: withAlpha(s.accent, 0.14),
+                    shadowColor: s.accent, shadowOpacity: 0.14, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 2,
+                  }}
+                  pressedStyle={{ opacity: 0.9 }}
                 >
                   <LinearGradient
                     colors={s.bg}
                     start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
+                    end={{ x: 0, y: 1 }}
                     style={{
-                      borderRadius: 20,
-                      overflow: 'hidden',
                       minHeight: 168,
                       flexDirection: 'row',
                       alignItems: 'center',
@@ -1202,12 +1276,12 @@ function HeroBanner({ navigation, contentW, banners = [] }) {
                     </View>
                     <Image resizeMethod="resize" source={HERO_BANNER_IMAGE} style={{ flex: 1, height: 138 }} resizeMode="contain" />
                   </LinearGradient>
-                </Pressable>
+                </Touchable>
               </View>
             ))}
       </ScrollView>
       {dotCount > 1 ? (
-        <View className="flex-row justify-center items-center mt-2.5">
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 9 }}>
           {Array.from({ length: dotCount }).map((_, i) => (
             <View
               key={i}
@@ -1216,7 +1290,7 @@ function HeroBanner({ navigation, contentW, banners = [] }) {
                 height: 6,
                 borderRadius: 3,
                 marginHorizontal: 3,
-                backgroundColor: i === idx ? tokens.primary : tokens.border,
+                backgroundColor: i === idx ? '#035C6C' : '#E5E7EB',
               }}
             />
           ))}
@@ -1227,134 +1301,45 @@ function HeroBanner({ navigation, contentW, banners = [] }) {
 }
 
 // Per-service category rail — a titled section (Repair / Sell / Buy) with a
-// "See all" action over a horizontal strip of circular category tiles. Tapping
-// a tile calls `onPick(category)` which routes into that service's flow. The
-// tile visuals mirror the old discovery rail (admin image, else a coded icon).
-function CategoryRail({ title, categories, contentW, onPick, onSeeAll, imageOverrides, menuImages }) {
-  // Five tiles fit one row edge to edge (like the reference); any extra
-  // categories keep the same tile size and scroll.
-  const itemW = Math.floor(((contentW || 360) - 24) / 5);
-  const ring = Math.min(66, itemW - 10);
-  const disc = ring - 6;
-  // Failed loads (uri -> count): one quiet retry, then the category icon
-  // instead of an empty disc.
-  const [failed, setFailed] = useState({});
-  const onImageError = (uri, e) => {
-    // Dev builds only — shows in the Expo terminal (not as an on-screen warning).
-    if (__DEV__) console.log('[home image failed]', uri, e?.nativeEvent?.error || '');
-    setFailed((f) => ({ ...f, [uri]: (f[uri] || 0) + 1 }));
-  };
+// "See all" action over one row of category cards. Tapping a card calls
+// `onPick(category)`, which routes into that service's flow. Every card is
+// the shared CategoryGridCard in `uniform` mode, so all 15 cards on Home
+// (3 rails × 5) are exactly the same size: 4 per row (5 → 4 + 1), no scrolling, equal
+// image box, two-line label box. Pastels per rail and category come from
+// theme/categoryTints (shared with the Repair / Sell / Buy tabs).
+function CategoryRail({ title, categories, contentW, pad = 16, gap = 20, rail = 0, onPick, onSeeAll, imageOverrides, menuImages }) {
+  const w = contentW || 360;
+  // 4 per row; width from CategoryGridCard so other screens can match Home's cards.
+  const gapX = homeRailGap(w);
+  const tile = homeRailCardWidth(w, pad);
+  const tones = cardPastels(rail, categories.map((c) => c.code || c.name));
   return (
-    <>
-      <SectionHeader title={title} action="See all" onAction={onSeeAll} />
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        scrollEnabled={categories.length > 5}
-        contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 2, paddingBottom: 4 }}
-      >
-        {categories.map((c) => {
+    <View style={{ marginTop: gap }}>
+      <DashboardSection title={title} pad={pad} />
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: gapX, paddingHorizontal: pad, paddingTop: 2, paddingBottom: 6 }}>
+        {categories.map((c, idx) => {
           const code = (c.code || '').toUpperCase();
           const meta = CODE_META[code] || DEFAULT_META;
-          const Icon = meta.icon;
           // Row-specific admin art first, then the old per-row override, then
           // the shared category image.
-          const art = menuImages && (menuImages[categoryMenuKey(c.name)] || menuImages[categoryMenuKey(c.code)]);
-          const uri = art || (imageOverrides && imageOverrides[code]) || imgUri(c);
+          const menuArt = menuImages && (menuImages[categoryMenuKey(c.name)] || menuImages[categoryMenuKey(c.code)]);
+          const uri = menuArt || (imageOverrides && imageOverrides[code]) || imgUri(c);
           return (
-            <Pressable
+            <CategoryGridCard
               key={c.id}
+              uniform
+              name={c.name}
+              uri={uri}
+              Icon={meta.icon}
+              iconColor={meta.color}
+              width={tile}
+              tone={{ bg: '#FFFFFF', border: '#E5E7EB' }}
               onPress={() => onPick(c)}
-              className="items-center active:opacity-80"
-              style={{ width: itemW }}
-            >
-              <View
-                className="rounded-full items-center justify-center"
-                style={{
-                  width: ring,
-                  height: ring,
-                  borderRadius: ring / 2,
-                  // This View draws only the ring + border. The circular CLIP is
-                  // done by the inner View below — NOT here. On Android a single
-                  // View that combines borderWidth + borderRadius + overflow
-                  // 'hidden' fails to clip its <Image> child, so the square image
-                  // corners showed through the circle. Keeping the border here and
-                  // the clip on a borderless inner View is the reliable fix.
-                  backgroundColor: meta.tint,
-                  borderWidth: 1,
-                  borderColor: tokens.border,
-                }}
-              >
-                {uri && (failed[uri] || 0) < 2 ? (
-                  // Borderless clip disc, sized 2px smaller than the ring. An
-                  // exact half-size borderRadius (30 of 60) is a guaranteed circle
-                  // on both platforms — unlike an oversized 999 value on Android.
-                  // `contain` + padding shows the WHOLE device centered (never
-                  // cropped by the circle), so devices of different shapes read as
-                  // a uniform row instead of getting their edges cut off.
-                  <View
-                    style={{
-                      width: disc,
-                      height: disc,
-                      borderRadius: disc / 2,
-                      overflow: 'hidden',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: 4,
-                    }}
-                  >
-                    <Image
-                      key={`${uri}#${failed[uri] || 0}`}
-                      resizeMethod="resize"
-                      source={{ uri }}
-                      // Fixed pixel size (not %) so Android knows the target
-                      // size up front and decodes the image down to it.
-                      style={{ width: disc - 8, height: disc - 8 }}
-                      resizeMode="contain"
-                      onError={(e) => onImageError(uri, e)}
-                    />
-                  </View>
-                ) : (
-                  <Icon size={26} color={meta.color} />
-                )}
-              </View>
-              <Text
-                className="font-bold text-text text-center mt-1.5"
-                style={{ fontSize: rf(10.5), paddingHorizontal: 1 }}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.8}
-              >
-                {c.name}
-              </Text>
-            </Pressable>
+            />
           );
         })}
-      </ScrollView>
-    </>
-  );
-}
-
-// Local SectionHeader so the heading rhythm (16/14, accent action) stays
-// consistent across rails without depending on the legacy rnr SectionHeader
-// signature.
-function SectionHeader({ title, action, onAction }) {
-  return (
-    <View className="flex-row items-end justify-between px-4 mt-5 mb-2.5">
-      <Text className="font-extrabold text-text" style={{ fontSize: rf(15) }} numberOfLines={1}>
-        {title}
-      </Text>
-      {action ? (
-        <Pressable onPress={onAction} className="active:opacity-70 flex-row items-center">
-          <Text
-            className="font-extrabold mr-0.5"
-            style={{ color: GREEN_TEXT, fontSize: rf(12) }}
-          >
-            {action}
-          </Text>
-          <ChevronRight size={14} color={tokens.primary} />
-        </Pressable>
-      ) : null}
+      </View>
     </View>
   );
 }
+

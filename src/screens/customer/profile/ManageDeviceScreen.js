@@ -3,7 +3,7 @@ import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   Smartphone, Laptop, Watch, Tablet, Headphones, Volume2,
-  Plus, Pencil, Trash2, Star, ChevronRight, HardDrive, Hash,
+  Plus, Pencil, Trash2, Star, ChevronRight, HardDrive, Hash, LayoutGrid,
 } from 'lucide-react-native';
 import { Loader, EmptyState } from '../../../components/rnr';
 import { confirm, notify } from '../../../components/confirm';
@@ -16,8 +16,8 @@ import { rf } from '../../../utils/responsive';
 import { resolveSpecCategory } from '../../../utils/deviceSpecs';
 import { imeiApplies } from '../../../utils/imeiPolicy';
 
-const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
-const LINE = '#E6E6E6';
+const GREEN_TEXT = '#035C6C'; // #035C6C shaded for text on white
+const LINE = '#E8EAEE';
 const cardShadow = { shadowColor: BRAND.ink, shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 1 };
 
 const CATEGORY_META = {
@@ -173,7 +173,8 @@ export default function ManageDeviceScreen({ navigation }) {
     try { await setDefaultSavedDevice(id); load(); } catch (e) { notify('Error', e.message); }
   };
 
-  const onAdd = () => navigation.navigate('SelectCategory', { flow: 'PROFILE' });
+  // Add → the one-page device picker (same as Repair).
+  const onAdd = () => navigation.navigate('DeviceDetails', { flow: 'PROFILE' });
 
   const onEdit = (d) => navigation.navigate('SelectVariant', {
     flow: 'PROFILE',
@@ -207,116 +208,124 @@ export default function ManageDeviceScreen({ navigation }) {
 
   if (loading) return <Loader label="Loading your devices..." />;
 
-  return (
-    <View style={{ flex: 1, backgroundColor: BRAND.bg }}>
-      {/* Filter chips */}
-      <View style={{ backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: LINE, paddingHorizontal: 12, paddingVertical: 8 }}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 8 }}>
-          {FILTERS.map((f) => {
-            const count = f.key === 'ALL'
-              ? items.length
-              : items.filter((d) => deviceCode(d) === f.key).length;
-            return (
-              <FilterChip
-                key={f.key}
-                label={count > 0 ? `${f.label} (${count})` : f.label}
-                active={filter === f.key}
-                onPress={() => setFilter(f.key)}
-              />
-            );
-          })}
-        </ScrollView>
-      </View>
+  // Service-orders design: white category rail (left) + device tiles (right).
+  const RAIL = [
+    { key: 'ALL',        label: 'All',     icon: LayoutGrid, tone: '#035C6C' },
+    { key: 'MOBILE',     label: 'Phones',  icon: Smartphone, tone: '#0788C9' },
+    { key: 'LAPTOP',     label: 'Laptops', icon: Laptop,     tone: '#609138' },
+    { key: 'SMARTWATCH', label: 'Watches', icon: Watch,      tone: '#F09406' },
+    { key: 'TABLET',     label: 'Tablets', icon: Tablet,     tone: '#357D89' },
+    { key: 'AUDIO',      label: 'Audio',   icon: Headphones, tone: '#1C3053' },
+  ];
+  const countOf = (k) => (k === 'ALL' ? items.length : items.filter((d) => deviceCode(d) === k).length);
+  const shown = grouped.flatMap(([, devices]) => devices);
+  const TEAL = '#035C6C';
+  const MINTD = '#E5F3F5';
+  const TileAction = ({ icon: I, label, color = TEAL, onPress }) => (
+    <Pressable onPress={onPress} hitSlop={8} accessibilityLabel={label} className="active:opacity-70"
+      style={{ height: 30, width: 30, borderRadius: 15, backgroundColor: MINTD, alignItems: 'center', justifyContent: 'center', marginLeft: 8 }}>
+      <I size={14} color={color} />
+    </Pressable>
+  );
 
-      <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 100 }}>
+  return (
+    <View style={{ flex: 1, flexDirection: 'row', backgroundColor: '#FFFFFF' }}>
+      {/* Left: category rail (flat white tiles, count badges). */}
+      <ScrollView
+        style={{ width: 92, flexGrow: 0, borderRightWidth: 1, borderRightColor: LINE, backgroundColor: '#FFFFFF' }}
+        contentContainerStyle={{ paddingVertical: 6, paddingHorizontal: 6, paddingBottom: 24 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {RAIL.map((r) => {
+          const I = r.icon;
+          const active = filter === r.key;
+          return (
+            <Pressable
+              key={r.key}
+              onPress={() => setFilter(r.key)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              className="active:opacity-80"
+              style={{ marginVertical: 4, borderRadius: 8, backgroundColor: '#FFFFFF', borderWidth: active ? 2 : 1, borderColor: active ? TEAL : '#E5E7EB', alignItems: 'center', paddingVertical: 9, paddingHorizontal: 3 }}
+            >
+              <View>
+                <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: r.tone, alignItems: 'center', justifyContent: 'center' }}>
+                  <I size={17} color="#FFFFFF" strokeWidth={2.2} />
+                </View>
+                <View style={{ position: 'absolute', top: -4, right: -8, minWidth: 16, height: 16, paddingHorizontal: 3, borderRadius: 8, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: r.tone, alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ fontSize: 9, fontWeight: '800', color: r.tone }}>{countOf(r.key)}</Text>
+                </View>
+              </View>
+              <Text style={{ marginTop: 5, fontSize: rf(11), fontWeight: active ? '800' : '700', color: '#111111', textAlign: 'center' }} numberOfLines={1}>{r.label}</Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      {/* Right: device tiles. */}
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 10, paddingBottom: 100 }}>
         {items.length === 0 ? (
           <EmptyState
             icon={<Smartphone size={28} color={BRAND.green} />}
-            accentSoft="#EAF8EC"
+            accentSoft="#E5F3F5"
             title="No saved devices yet"
             description="Add a device to speed up your repair bookings."
           />
-        ) : grouped.length === 0 ? (
+        ) : shown.length === 0 ? (
           <EmptyState
             icon={<Smartphone size={28} color={BRAND.green} />}
-            accentSoft="#EAF8EC"
+            accentSoft="#E5F3F5"
             title="No devices in this category"
-            description="Switch filter or add a new device below."
+            description="Pick another category or add a new device below."
           />
         ) : (
-          grouped.map(([catCode, devices]) => {
-            const meta = CATEGORY_META[catCode] || { name: 'Other', icon: Smartphone };
+          shown.map((d) => {
+            const code = deviceCode(d);
+            const meta = CATEGORY_META[code] || { name: 'Other', icon: Smartphone };
             const Icon = meta.icon;
-            const tint = tintFor(catCode);
+            const img = deviceImage(d);
+            const specs = [deviceRam(d), deviceStorage(d)].filter(Boolean).join(' / ');
+            const brand = d.brandName || brandById[d.brandId]?.name;
+            const showImei = d.imei && imeiApplies(resolveSpecCategory(d.categoryCode, catById[d.categoryId]?.code, catById[d.categoryId]?.name));
             return (
-              <View key={catCode} style={{ marginBottom: 10 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-                  <View style={{ height: 24, width: 24, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginRight: 7, backgroundColor: tint }}>
-                    <Icon size={13} color={BRAND.green} />
-                  </View>
-                  <Text style={{ flex: 1, fontSize: rf(12.5), fontWeight: '800', color: BRAND.ink }}>{meta.name}</Text>
-                  <Text style={{ fontSize: rf(10.5), color: BRAND.muted }}>{devices.length} saved</Text>
-                </View>
-
-                {devices.map((d) => {
-                  const img = deviceImage(d);
-                  const specs = [deviceRam(d), deviceStorage(d)].filter(Boolean).join(' / ');
-                  return (
-                    <View key={d.id} style={{ backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1, borderColor: LINE, padding: 10, marginBottom: 8, ...cardShadow }}>
-                      {/* Row 1: image + name + default star */}
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <View style={{ height: 46, width: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 10, overflow: 'hidden', backgroundColor: tint }}>
-                          {img ? (
-                            <Image source={{ uri: img }} style={{ width: 42, height: 42 }} resizeMode="contain" />
-                          ) : (
-                            <Icon size={20} color={BRAND.green} />
-                          )}
-                        </View>
-                        <View style={{ flex: 1, minWidth: 0, paddingRight: 6 }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: rf(13), fontWeight: '800', color: BRAND.ink }}>{deviceName(d)}</Text>
-                            {d.isDefault ? (
-                              <View style={{ marginLeft: 6, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2, backgroundColor: '#EAF8EC' }}>
-                                <Text style={{ fontSize: rf(9), fontWeight: '800', color: GREEN_TEXT, letterSpacing: 0.4 }}>DEFAULT</Text>
-                              </View>
-                            ) : null}
-                          </View>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginTop: 3 }}>
-                            {d.color ? <Text style={{ fontSize: rf(10.5), color: BRAND.muted, marginRight: 8 }}>{d.color}</Text> : null}
-                            {specs ? (
-                              <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 8 }}>
-                                <HardDrive size={10} color={BRAND.muted} />
-                                <Text style={{ fontSize: rf(10.5), color: BRAND.muted, marginLeft: 3 }}>{specs}</Text>
-                              </View>
-                            ) : null}
-                            {d.imei && imeiApplies(resolveSpecCategory(d.categoryCode, catById[d.categoryId]?.code, catById[d.categoryId]?.name)) ? (
-                              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                <Hash size={10} color={BRAND.muted} />
-                                <Text numberOfLines={1} style={{ fontSize: rf(10.5), color: BRAND.muted, marginLeft: 3 }}>{d.imei}</Text>
-                              </View>
-                            ) : null}
-                          </View>
-                        </View>
-                        <Pressable onPress={() => !d.isDefault && onDefault(d.id)} hitSlop={8} className="active:opacity-70">
-                          <Star size={18} color={d.isDefault ? BRAND.yellow : '#C9C9C9'} fill={d.isDefault ? BRAND.yellow : 'transparent'} />
-                        </Pressable>
-                      </View>
-
-                      {d.note ? (
-                        <Text numberOfLines={2} style={{ fontSize: rf(10.5), color: BRAND.muted, marginTop: 6 }}>Note: {d.note}</Text>
-                      ) : null}
-
-                      {/* Actions */}
-                      <View style={{ flexDirection: 'row', marginTop: 8, paddingTop: 6, borderTopWidth: 1, borderTopColor: BRAND.line }}>
-                        <CardAction icon={Pencil} label="Edit" color={BRAND.green} onPress={() => onEdit(d)} />
-                        {!d.isDefault ? (
-                          <CardAction icon={Star} label="Set Default" color={BRAND.yellow} onPress={() => onDefault(d.id)} divider />
-                        ) : null}
-                        <CardAction icon={Trash2} label="Delete" color={BRAND.red} textColor={BRAND.red} onPress={() => onDelete(d.id)} divider />
-                      </View>
+              <View key={d.id} style={{ marginBottom: 12, borderRadius: 16, backgroundColor: '#FFFFFF', overflow: 'hidden', borderWidth: 1, borderColor: '#E5E7EB' }}>
+                <View style={{ flexDirection: 'row' }}>
+                  {/* Image panel with a ribbon (Default / category). */}
+                  <View style={{ width: 104, minHeight: 104, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', borderRightWidth: 1, borderRightColor: '#E5E7EB' }}>
+                    {img ? <Image source={{ uri: img }} style={{ width: 76, height: 76 }} resizeMode="contain" /> : <Icon size={34} color={TEAL} />}
+                    <View style={{ position: 'absolute', top: 0, left: 0, maxWidth: '86%', backgroundColor: d.isDefault ? '#F09406' : TEAL, paddingHorizontal: 8, paddingVertical: 4, borderBottomRightRadius: 12 }}>
+                      <Text style={{ color: '#FFFFFF', fontSize: 9.5, fontWeight: '800' }} numberOfLines={1}>{d.isDefault ? 'Default' : meta.name}</Text>
                     </View>
-                  );
-                })}
+                  </View>
+                  {/* Details */}
+                  <View style={{ flex: 1, minWidth: 0, paddingHorizontal: 10, paddingVertical: 8 }}>
+                    {brand ? <Text style={{ fontSize: 11, fontWeight: '800', color: TEAL }} numberOfLines={1}>{brand}</Text> : null}
+                    <Text style={{ marginTop: 2, fontSize: 13, fontWeight: '800', lineHeight: 17, color: '#111111' }} numberOfLines={2}>{deviceName(d)}</Text>
+                    {specs ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
+                        <HardDrive size={11} color="#6B7280" />
+                        <Text style={{ fontSize: 11.5, color: '#6B7280', marginLeft: 4 }} numberOfLines={1}>{specs}</Text>
+                      </View>
+                    ) : null}
+                    {d.color ? <Text style={{ fontSize: 11.5, color: '#6B7280', marginTop: 2 }} numberOfLines={1}>{d.color}</Text> : null}
+                    {showImei ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                        <Hash size={11} color="#6B7280" />
+                        <Text style={{ fontSize: 11.5, color: '#6B7280', marginLeft: 4 }} numberOfLines={1}>{d.imei}</Text>
+                      </View>
+                    ) : null}
+                    {d.note ? <Text style={{ fontSize: 11, color: '#6B7280', marginTop: 3 }} numberOfLines={2}>Note: {d.note}</Text> : null}
+                  </View>
+                </View>
+                {/* Bottom bar (orders style): label · actions. */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#E5E7EB', paddingHorizontal: 12, paddingVertical: 8 }}>
+                  <Text style={{ flex: 1, fontSize: 11, fontWeight: '800', color: d.isDefault ? '#B45309' : TEAL }} numberOfLines={1}>
+                    {d.isDefault ? 'Default Device' : meta.name}
+                  </Text>
+                  {!d.isDefault ? <TileAction icon={Star} label="Set Default" color="#F09406" onPress={() => onDefault(d.id)} /> : null}
+                  <TileAction icon={Pencil} label="Edit" onPress={() => onEdit(d)} />
+                  <TileAction icon={Trash2} label="Delete" color={BRAND.red} onPress={() => onDelete(d.id)} />
+                </View>
               </View>
             );
           })
@@ -328,7 +337,7 @@ export default function ManageDeviceScreen({ navigation }) {
           className="active:opacity-80"
           style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, padding: 12, borderRadius: 14, backgroundColor: '#FFFFFF', borderWidth: 1.5, borderStyle: 'dashed', borderColor: BRAND.greenLine }}
         >
-          <View style={{ height: 38, width: 38, borderRadius: 19, backgroundColor: '#EAF8EC', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+          <View style={{ height: 38, width: 38, borderRadius: 19, backgroundColor: '#E5F3F5', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
             <Plus size={18} color={BRAND.green} />
           </View>
           <View style={{ flex: 1 }}>

@@ -3,44 +3,67 @@
  * NativeWind className strings (e.g. `bg-primary text-white`). The named
  * default exports are kept for screens that still use StyleSheet.
  *
- * Palette: Swiggy/Zepto/Cashify-inspired — green primary, orange accent,
- * white + light grey surfaces, soft shadows.
+ * Palette: GGShopIndia colour system —
+ *   Primary Teal #035C6C — primary buttons, header, key UI, navigation
+ *   Navy        #1C3053 — headings, navigation, text
+ *   Bright Blue #0788C9 — links, secondary buttons, icons
+ *   Green       #609138 — success, in stock, positive states
+ *   Orange      #FAA700 — offers, CTA highlights (navy text on it)
+ *   Red         #F32C26 — sale badges, discounts, alerts
+ *   White       #FFFFFF — page background, cards, content
+ *   Light Gray  #F3F4F6 — section backgrounds, borders, dividers
+ *   Black       #111111 — body text, icons, high contrast
+ * Light tints (selected states, soft badges) are these colours blended with
+ * white. light/dark aliases resolve to the same colour.
  */
-const tokens = {
-  // Primary — brand teal. light/dark are a real ramp, not copies: gradients and
-  // pressed states read from them, and identical stops render as a flat block.
-  primary: '#004C40',
-  primaryLight: '#00695C',
-  primaryDark: '#003830',
-  primarySoft: '#DCFCE7',
+export const palette = {
+  teal: '#035C6C',
+  navy: '#1C3053',
+  blue: '#0788C9',
+  green: '#609138',
+  orange: '#FAA700',
+  red: '#F32C26',
+  white: '#FFFFFF',
+  lightGray: '#F3F4F6',
+  black: '#111111',
+};
 
-  // Accent — vivid orange
-  accent: '#FF7A00',
-  accentLight: '#FF9A3D',
-  accentDark: '#E56A00',
-  accentSoft: '#FFEDD5',
+const tokens = {
+  // Primary — teal
+  primary: palette.teal,
+  primaryLight: palette.teal,
+  primaryDark: palette.teal,
+  primarySoft: '#E5F3F5',
+
+  // Accent — orange (offers, highlights)
+  accent: palette.orange,
+  accentLight: palette.orange,
+  accentDark: palette.orange,
+  accentSoft: '#FFF4D6',
 
   // Surfaces
-  background: '#FFFFFF',
-  card: '#FFFFFF',
-  surface: '#FFFFFF',
-  surfaceMuted: '#F1F3F5',
+  background: palette.white,
+  card: palette.white,
+  surface: palette.white,
+  surfaceMuted: palette.lightGray,
 
-  // Text
-  text: '#0F172A',
-  textMuted: '#64748B',
-  textSubtle: '#94A3B8',
+  // Text — navy text / headings, black for high-contrast body copy
+  text: palette.navy,
+  ink: palette.black,
+  textMuted: '#606E87',
+  textSubtle: '#8E97A9',
 
   // Lines
-  border: '#E5E7EB',
-  borderStrong: '#D1D5DB',
+  border: '#E8EAEE',
+  borderStrong: '#D2D6DD',
 
   // Status
-  success: '#004C40',
-  warning: '#F59E0B',
-  danger: '#EF4444',
-  error: '#EF4444',
-  info: '#0EA5E9',
+  success: palette.green,
+  warning: palette.orange,
+  danger: palette.red,
+  error: palette.red,
+  info: palette.blue,
+  link: palette.blue,
 };
 
 export const radii = {
@@ -54,14 +77,14 @@ export const radii = {
 
 export const shadows = {
   card: {
-    shadowColor: '#0F172A',
+    shadowColor: '#1C3053',
     shadowOpacity: 0.06,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 6 },
     elevation: 3,
   },
   bar: {
-    shadowColor: '#0F172A',
+    shadowColor: '#1C3053',
     shadowOpacity: 0.08,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: -6 },

@@ -17,14 +17,14 @@ import { listMyOrders, getServiceTicket } from '../../../api/orders';
 import { listShops, getShopBySlug } from '../../../api/shops';
 import { detectProductFromPhoto, warmProductDetect } from '../../../lib/productDetect';
 
-const GREEN_TEXT = '#078F23';
-const MINT = '#EAF8EC';
-const MUTED = '#6B6B6B';
-const LINE = '#E6E6E6';
+const GREEN_TEXT = '#035C6C';
+const MINT = '#E5F3F5';
+const MUTED = '#606E87';
+const LINE = '#E8EAEE';
 const BARCODE_TYPES = ['qr', 'datamatrix', 'ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'code39', 'code93', 'itf14'];
 
 const MODES = {
-  qr: { title: 'Scan QR code', hint: 'Point at a GGFIX shop QR, a repair ticket label or any QR code', icon: QrCode },
+  qr: { title: 'Scan QR code', hint: 'Point at a NearGFix shop QR, a repair ticket label or any QR code', icon: QrCode },
   device: { title: 'Scan your device', hint: "Point at the barcode on your phone's box (model number or IMEI)", icon: ScanBarcode },
   product: { title: 'Search product by camera', hint: 'Point at the device (the back with the cameras works best) and tap the shutter', icon: Camera },
 };

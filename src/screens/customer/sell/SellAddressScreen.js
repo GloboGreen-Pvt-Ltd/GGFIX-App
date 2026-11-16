@@ -42,7 +42,7 @@ export default function SellAddressScreen({ navigation, route }) {
           <EmptyState
             icon={<MapPin size={26} color={BRAND.green} />}
             accent={BRAND.green}
-            accentSoft="#EAF8EC"
+            accentSoft="#E5F3F5"
             title="No saved addresses"
             description="Add one to schedule pickup."
             actionLabel="Add address"

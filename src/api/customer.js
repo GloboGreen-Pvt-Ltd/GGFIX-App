@@ -13,6 +13,15 @@ export async function updateProfile(payload) {
 }
 
 // Addresses
+// Contacts the customer books repairs for (Customer Details) — the signed-in
+// account's own only. Save is an upsert by mobile on the server.
+export async function searchContacts(q) {
+  return unwrap(await userApi.get('/customer/contacts', { query: q ? { q } : undefined }));
+}
+export async function saveContact(payload) {
+  return await userApi.post('/customer/contacts', { body: payload });
+}
+
 export async function listAddresses() {
   return unwrap(await userApi.get('/customer/addresses'));
 }

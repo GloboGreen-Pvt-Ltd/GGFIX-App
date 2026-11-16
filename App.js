@@ -11,7 +11,10 @@ import { store } from './src/store';
 import RootNavigator from './src/navigation/RootNavigator';
 import colors from './src/theme/colors';
 import LaunchOverlay from './src/components/LaunchOverlay';
+import { ToastHost } from './src/components/AppToast';
 import { setBootProgress } from './src/boot/bootProgress';
+import { navigationRef } from './src/navigation/navigationRef';
+import { listenForNotificationTaps } from './src/utils/systemNotify';
 
 const navTheme = {
   ...DefaultTheme,
@@ -23,7 +26,7 @@ const navTheme = {
     card: colors.headerBg,
     text: colors.text,
     border: colors.border,
-    notification: colors.primary,
+    notification: colors.danger,
   },
 };
 
@@ -40,12 +43,14 @@ export default function App() {
         <SafeAreaProvider>
           <StatusBar style="dark" />
           {fontsReady ? (
-            <NavigationContainer theme={navTheme}>
+            <NavigationContainer ref={navigationRef} theme={navTheme} onReady={listenForNotificationTaps}>
               <RootNavigator />
             </NavigationContainer>
           ) : null}
           {/* Launch screen over the app until the first page is fully loaded. */}
           <LaunchOverlay />
+          {/* Auth toasts — above the navigator so they survive login / logout. */}
+          <ToastHost />
         </SafeAreaProvider>
       </GluestackUIProvider>
     </Provider>

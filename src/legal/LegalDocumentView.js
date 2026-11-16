@@ -32,19 +32,19 @@ import { LEGAL_DOC_TYPES } from './legalContent';
  */
 
 const C = {
-  ink: '#101828',
-  body: '#3B4250',
-  muted: '#667085',
-  subtle: '#98A2B3',
-  line: '#E4E9E6',
-  page: '#F3F6F4',
+  ink: '#111111',
+  body: '#111111',
+  muted: '#606e87',
+  subtle: '#8E97A9',
+  line: '#E8EAEE',
+  page: '#F3F4F6',
   white: '#FFFFFF',
-  green: '#16A34A', // progress, active indicator, bullets
-  greenText: '#15803D', // green text on white (AA)
-  greenDeep: '#166534',
-  greenTint: '#EEF8F1',
-  greenSoft: '#DCFCE7',
-  greenLine: '#CDEBD6',
+  green: '#609138', // progress, active indicator, bullets
+  greenText: '#609138', // green text on white (AA)
+  greenDeep: '#609138',
+  greenTint: '#F0F8F9',
+  greenSoft: '#E5F3F5',
+  greenLine: '#C7E6EA',
 };
 const WIDE = 768;
 const SIDE_NAV = 320; // tablet contents column (at most 38% of the width)
@@ -55,15 +55,15 @@ const SPY_MARGIN = 56; // a section is "current" once its top is this close to t
 const PAGE = {
   [LEGAL_DOC_TYPES.TERMS]: {
     title: 'Terms and Conditions',
-    description: 'The rules for using the Near G Fix app, website and services.',
+    description: 'The rules for using the NearGFix app, website and services.',
     Icon: FileText,
     related: { type: LEGAL_DOC_TYPES.PRIVACY, title: 'Privacy Policy', description: 'How we collect, use and protect your data.', Icon: ShieldCheck },
   },
   [LEGAL_DOC_TYPES.PRIVACY]: {
     title: 'Privacy Policy',
-    description: 'How Near G Fix collects, uses, shares and protects your information.',
+    description: 'How NearGFix collects, uses, shares and protects your information.',
     Icon: ShieldCheck,
-    related: { type: LEGAL_DOC_TYPES.TERMS, title: 'Terms and Conditions', description: 'The rules for using Near G Fix.', Icon: FileText },
+    related: { type: LEGAL_DOC_TYPES.TERMS, title: 'Terms and Conditions', description: 'The rules for using NearGFix.', Icon: FileText },
   },
 };
 
@@ -683,7 +683,7 @@ const styles = StyleSheet.create({
     height: 30,
     paddingHorizontal: 5,
     borderRadius: 15,
-    backgroundColor: '#F1F4F2',
+    backgroundColor: '#F3F4F6',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -699,9 +699,9 @@ const styles = StyleSheet.create({
 
   // Bottom sheet
   sheetRoot: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(16,24,40,0.45)' },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(28,48,83,0.45)' },
   sheet: { backgroundColor: C.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden' },
-  handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: '#D0D5DD', marginTop: 10 },
+  handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: '#D2D6DD', marginTop: 10 },
   sheetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -715,7 +715,7 @@ const styles = StyleSheet.create({
   },
   sheetTitle: { fontSize: 18, fontWeight: '800', color: C.ink },
   sheetSub: { marginTop: 2, fontSize: 13, color: C.muted },
-  sheetClose: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F1F4F2', alignItems: 'center', justifyContent: 'center' },
+  sheetClose: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
   sheetList: { padding: 8 },
 
   // Back to top

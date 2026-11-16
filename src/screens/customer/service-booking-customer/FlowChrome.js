@@ -1,7 +1,8 @@
 import React, { useLayoutEffect } from 'react';
 import { Pressable, Text, View, useWindowDimensions } from 'react-native';
 import { useRoute } from '@react-navigation/native';
-import { ChevronRight } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ArrowLeft, Check, ChevronRight } from 'lucide-react-native';
 import { rf } from '../../../utils/responsive';
 import PageHeader from '../../../components/PageHeader';
 import { HEADER_SUBTITLES } from '../../../navigation/headerSubtitles';
@@ -11,22 +12,22 @@ import { HEADER_SUBTITLES } from '../../../navigation/headerSubtitles';
 // Purely visual — callers keep their own handlers.
 
 export const FLOW = {
-  primary: '#00795F',
-  deep: '#005C49',
-  ink: '#07142F',
-  muted: '#657895',
-  mint: '#DDFBF2',
-  softMint: '#E9FBF6',
-  tint: '#F4FCF9',
-  border: '#E5EBEF',
-  bg: '#FAFCFC',
-  disabled: '#8FC5B8',
-  decor1: 'rgba(0,168,120,0.07)',
-  decor2: 'rgba(0,168,120,0.05)',
+  primary: '#035C6C',
+  deep: '#035C6C',
+  ink: '#1C3053',
+  muted: '#606e87',
+  mint: '#E5F3F5',
+  softMint: '#E5F3F5',
+  tint: '#F0F8F9',
+  border: '#E8EAEE',
+  bg: '#F0F8F9',
+  disabled: '#9ABEC4',
+  decor1: 'rgba(3,92,108,0.07)',
+  decor2: 'rgba(3,92,108,0.05)',
 };
 
 export const cardShadow = {
-  shadowColor: '#0F172A', shadowOpacity: 0.05, shadowRadius: 12,
+  shadowColor: '#1C3053', shadowOpacity: 0.05, shadowRadius: 12,
   shadowOffset: { width: 0, height: 4 }, elevation: 2,
 };
 
@@ -60,6 +61,87 @@ export function FlowHeader({ title, subtitle, navigation, onBack, right }) {
       onBack={onBack || (() => navigation.goBack())}
       right={right}
     />
+  );
+}
+
+// ── Partner-app booking chrome (service-booking-shop BookingSteps + the
+// Devices & Repair header) used by the customer repair booking screens.
+const BK_ACCENT = '#035C6C';
+const BK_INK = '#111111';
+const BK_MUTED = '#6B7280';
+const BK_LINE = '#E5E7EB';
+const BK_PAGE = '#F3F4F6';
+// Partner labels. The customer is the signed-in user, so "Customer" (0) is
+// always done: device / repair / photos pages are step 1, the review step 2.
+export const BOOKING_STEPS = ['Customer', 'Devices', 'Confirm'];
+
+// Compact 3-step progress row; `active` is the current step's index (done
+// steps show a tick) — same as the Partner app's StepProgress.
+export function StepProgress({ active = 0, steps = BOOKING_STEPS }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 8 }}>
+      {steps.map((label, i) => {
+        const on = i === active;
+        const done = i < active;
+        return (
+          <React.Fragment key={label}>
+            {i > 0 ? <View style={{ flex: 1, height: 2, borderRadius: 1, marginHorizontal: 6, backgroundColor: done || on ? BK_ACCENT : BK_LINE }} /> : null}
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View
+                style={{
+                  width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center',
+                  backgroundColor: on || done ? BK_ACCENT : '#FFFFFF', borderWidth: 1.5, borderColor: on || done ? BK_ACCENT : BK_LINE,
+                }}
+              >
+                {done ? <Check size={11} color="#FFFFFF" strokeWidth={3} /> : (
+                  <Text style={{ fontSize: 10.5, fontWeight: '800', color: on ? '#FFFFFF' : BK_MUTED }}>{i + 1}</Text>
+                )}
+              </View>
+              <Text style={{ marginLeft: 5, fontSize: 12, fontWeight: on ? '800' : '600', color: on || done ? BK_ACCENT : BK_MUTED }}>{label}</Text>
+            </View>
+          </React.Fragment>
+        );
+      })}
+    </View>
+  );
+}
+
+// White booking header: back circle · centred title + subtitle, then the step
+// row on a hairline-bordered strip. `step` null hides the step row.
+export function BookingHeader({ title, subtitle, navigation, onBack, step = null, steps }) {
+  const insets = useSafeAreaInsets();
+  const col = { width: '100%', maxWidth: 720, alignSelf: 'center' };
+  return (
+    <View style={{ backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: BK_LINE }}>
+      <View style={{ paddingTop: insets.top + 6, paddingBottom: 6, paddingHorizontal: 14 }}>
+        <View style={[{ flexDirection: 'row', alignItems: 'center' }, col]}>
+          <Pressable
+            onPress={onBack || (() => navigation.goBack())}
+            hitSlop={6}
+            className="items-center justify-center active:opacity-70"
+            style={{ height: 36, width: 36, borderRadius: 18, backgroundColor: BK_PAGE, borderWidth: 1, borderColor: BK_LINE }}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
+            <ArrowLeft size={18} color={BK_INK} strokeWidth={2} />
+          </Pressable>
+          <View style={{ flex: 1, minWidth: 0, paddingHorizontal: 8, alignItems: 'center' }}>
+            <Text style={{ color: BK_INK, fontSize: 17, fontWeight: '800', textAlign: 'center' }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+              {title}
+            </Text>
+            {subtitle ? (
+              <Text style={{ fontSize: 11, color: BK_MUTED, marginTop: 1, textAlign: 'center' }} numberOfLines={1}>{subtitle}</Text>
+            ) : null}
+          </View>
+          <View style={{ width: 36 }} />
+        </View>
+      </View>
+      {step != null ? (
+        <View style={col}>
+          <StepProgress active={step} steps={steps} />
+        </View>
+      ) : null}
+    </View>
   );
 }
 

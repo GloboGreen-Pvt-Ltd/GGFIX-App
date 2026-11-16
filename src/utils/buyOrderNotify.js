@@ -13,8 +13,9 @@ const capped = (p, ms) => Promise.race([p, new Promise((r) => setTimeout(() => r
  * and resolves to the names of the shops that received the message.
  *
  * cartItems: GET /cart rows ({ productId, quantity, product: { id, title, price, shopId, shopName } }).
+ * fulfilment: optional lines (pickup / delivery choice and preferred time).
  */
-export async function notifyShopsOfBuyOrder({ order, cartItems, buyer, ms = 8000 }) {
+export async function notifyShopsOfBuyOrder({ order, cartItems, buyer, fulfilment = [], ms = 8000 }) {
   const run = async () => {
     // Group cart lines by seller shop (fall back to the product for its shopId).
     const groups = new Map();
@@ -49,6 +50,7 @@ export async function notifyShopsOfBuyOrder({ order, cartItems, buyer, ms = 8000
         name ? `Buyer: ${name}` : null,
         phone ? `Phone: ${phone}` : null,
         addr ? `Address: ${addressLine(addr)}` : null,
+        ...fulfilment,
         '',
         'Please confirm availability and delivery.',
       ].filter((l) => l !== null).join('\n');

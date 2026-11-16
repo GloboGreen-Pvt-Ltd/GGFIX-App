@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Image, Platform, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import {
   Smartphone,
@@ -8,45 +9,43 @@ import {
   X,
   Plus,
   ShieldCheck,
-  Wrench,
-  Upload,
-  Check,
-  ChevronRight,
+  Images,
+  Sparkles,
+  ArrowRight,
 } from 'lucide-react-native';
 import {
   BottomActionBar,
-  Card,
-  CardTitle,
-  Badge,
   useBottomBarInset,
 } from '../../../components/rnr';
 import { notify } from '../../../components/confirm';
 import { rf } from '../../../utils/responsive';
-import { FlowCta, FlowDecor, FlowHeader, useHideStackHeader } from './FlowChrome';
-import { BRAND, BRAND_FLOW } from '../../../theme/brand';
+import { HEADER_SUBTITLES } from '../../../navigation/headerSubtitles';
+import { BookingHeader, useHideStackHeader } from './FlowChrome';
+import { IssueGlyph, SelectedIssueRow } from './RepairIssueGroups';
 
-const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
-const LINE = '#E6E6E6';
-const MINT = '#EAF8EC';
-const YELLOW_SOFT = '#FEF6DA';
-const MUTED = '#6B6B6B';
-const GREEN_LINE = 'rgba(9,173,42,0.45)';
-const shadow = { shadowColor: BRAND.ink, shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1 };
+// Partner "Devices & Repair" palette.
+const ACCENT = '#035C6C';
+const MINT = '#E5F3F5';
+const MINT_LINE = '#C7E6EA';
+const INK = '#111111';
+const MUTED = '#6B7280';
+const LINE = '#E5E7EB';
+const PAGE_BG = '#F3F4F6';
+const RED_TEXT = '#D63232';
+
+const card = { backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1, borderColor: LINE };
+const sectionTitle = { fontSize: rf(14), fontWeight: '700', color: INK, marginBottom: 8 };
+const col = { width: '100%', maxWidth: 720, alignSelf: 'center' };
 
 const SLOTS = [
-  { key: 'front', label: 'Front Side',  hint: 'Show the screen',     accent: 'primary',   icon: Smartphone },
-  { key: 'back',  label: 'Back Side',   hint: 'Show the rear panel', accent: 'secondary', icon: Camera },
-  { key: 'video', label: 'Full Coverage', hint: '15-sec walkaround', accent: 'success',   icon: Video, isVideo: true },
+  { key: 'front', label: 'Front Side',  hint: 'Show the screen',     icon: Smartphone },
+  { key: 'back',  label: 'Back Side',   hint: 'Show the rear panel', icon: Camera },
+  { key: 'video', label: 'Full Coverage', hint: '15-sec walkaround', icon: Video, isVideo: true },
 ];
-
-const accentMap = {
-  primary:   { tint: '#00008B', bg: 'bg-primary/10',   border: 'border-primary/40',   text: 'text-primary' },
-  secondary: { tint: '#2563EB', bg: 'bg-secondary/10', border: 'border-secondary/40', text: 'text-secondary' },
-  success:   { tint: '#004C40', bg: 'bg-success/10',   border: 'border-success/40',   text: 'text-success' },
-};
 
 export default function RepairReviewScreen({ navigation, route }) {
   const bottomSpace = useBottomBarInset(96);
+  const insets = useSafeAreaInsets();
   useHideStackHeader(navigation);
   const { device = {}, services = [] } = route.params || {};
   const [media, setMedia] = useState({ front: null, back: null, video: null });
@@ -106,167 +105,194 @@ export default function RepairReviewScreen({ navigation, route }) {
 
   // ---- presentation-only values ----
   const { width } = useWindowDimensions();
-  const specLine = [device.color, device.ramLabel, device.storageLabel].filter(Boolean).join('  ·  ');
-  const tileW = Math.floor((Math.min(width, 640) - 32 - 22 - 16) / 3); // screen − page pad − card pad − gaps
-  const tileH = Math.max(84, Math.min(104, Math.round(tileW * 0.82)));
-  // Slot tones: front + video green, back yellow (palette tints).
-  const TONE = {
-    primary:   { tint: MINT,        bg: '#F7FCF8', border: GREEN_LINE,       fg: GREEN_TEXT, icon: BRAND.green },
-    secondary: { tint: YELLOW_SOFT, bg: '#FFFCF3', border: BRAND.yellowLine, fg: BRAND.ink,  icon: BRAND.yellow },
-    success:   { tint: MINT,        bg: '#F7FCF8', border: GREEN_LINE,       fg: GREEN_TEXT, icon: BRAND.green },
-  };
-  const card = {
-    backgroundColor: '#FFFFFF', borderRadius: 16, borderWidth: 1, borderColor: LINE,
-    padding: 11, marginBottom: 10, ...shadow,
-  };
+  const isTablet = width >= 600;
+  const specLine = [[device.ramLabel, device.storageLabel].filter(Boolean).join(' / '), device.color].filter(Boolean).join(' · ');
+  const brandPrefix = device.brandName && !String(device.modelName || '').toLowerCase().startsWith(String(device.brandName).toLowerCase())
+    ? device.brandName : null;
+  const deviceTitle = [brandPrefix, device.modelName].filter(Boolean).join(' ') || 'Device';
+  // Camera / Gallery fill the next empty photo slot (front, then back); Video
+  // goes to the video slot. Tapping a slot tile still picks for that slot.
+  const nextPhoto = SLOTS.find((s) => !s.isVideo && !media[s.key]) || null;
+  const videoSlot = SLOTS.find((s) => s.isVideo);
+  const quickAdd = (source) => { if (nextPhoto) launch(nextPhoto, Platform.OS === 'web' ? 'library' : source); };
+  // 3 thumbnails per row on phones, 5 on tablets (a hair under, so rounding never wraps).
+  const tilePct = `${(100 / (isTablet ? 5 : 3)) - 0.1}%`;
+  const sheetVideo = !!chooserFor?.isVideo;
 
   return (
-    <View style={{ flex: 1, backgroundColor: BRAND.bg }}>
-      <FlowDecor palette={BRAND_FLOW} />
-      {/* bottom-left decorative curve (visual only) */}
-      <View pointerEvents="none" style={{ position: 'absolute', left: -width * 0.4, bottom: 60, width: width * 1.2, height: width * 0.7, borderRadius: width, backgroundColor: 'rgba(9,173,42,0.04)' }} />
-      <FlowHeader title="Review Report" navigation={navigation} />
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: bottomSpace }}>
+    <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+      <BookingHeader title="Review Report" subtitle={HEADER_SUBTITLES.RepairReview} navigation={navigation} step={1} />
+      <ScrollView contentContainerStyle={{ paddingBottom: bottomSpace }}>
+        <View style={[col, { paddingHorizontal: 16 }]}>
 
-        {/* Device summary */}
-        <View style={[card, { flexDirection: 'row', alignItems: 'center' }]}>
-          <View style={{ height: 56, width: 56, borderRadius: 14, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: BRAND.line, alignItems: 'center', justifyContent: 'center', marginRight: 11, overflow: 'hidden' }}>
-            {device.imageUrl ? (
-              <Image source={{ uri: device.imageUrl }} style={{ width: 50, height: 52 }} resizeMode="contain" />
+          {/* ── Device Information ── */}
+          <View style={{ paddingTop: 14 }}>
+            <Text style={sectionTitle}>Device Information</Text>
+            <View style={[card, { flexDirection: 'row', alignItems: 'center', padding: 10 }]}>
+              <View style={{ height: 64, width: 64, borderRadius: 12, backgroundColor: MINT, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                {device.imageUrl ? (
+                  <Image source={{ uri: device.imageUrl }} style={{ width: '88%', height: '88%' }} resizeMode="contain" />
+                ) : (
+                  <Smartphone size={26} color={ACCENT} strokeWidth={1.75} />
+                )}
+              </View>
+              <View style={{ flex: 1, minWidth: 0, marginLeft: 10 }}>
+                <Text style={{ fontSize: rf(14), fontWeight: '800', color: INK }} numberOfLines={2}>{deviceTitle}</Text>
+                {specLine ? <Text style={{ fontSize: rf(12), color: MUTED, marginTop: 1 }} numberOfLines={1}>{specLine}</Text> : null}
+                {device.modelNumber ? <Text style={{ fontSize: rf(11.5), color: MUTED, marginTop: 1 }} numberOfLines={1}>{device.modelNumber}</Text> : null}
+              </View>
+            </View>
+          </View>
+
+          {/* ── Selected services ── */}
+          <View style={{ paddingTop: 16 }}>
+            <Text style={sectionTitle}>Repair Services ({services.length})</Text>
+            {services.length === 0 ? (
+              <View style={[card, { padding: 12 }]}>
+                <Text style={{ fontSize: rf(12), color: MUTED }}>No services selected</Text>
+              </View>
             ) : (
-              <Smartphone size={24} color={GREEN_TEXT} />
+              services.map((sv) => (
+                <SelectedIssueRow
+                  key={sv.id}
+                  name={sv.name}
+                  sub={sv.custom ? `Other Issue${sv.categoryName ? ` · ${sv.categoryName}` : ''}` : sv.categoryName}
+                  glyph={sv.custom
+                    ? <Sparkles size={18} color={ACCENT} />
+                    : <IssueGlyph item={sv} groupCode={sv.categoryCode} groupName={sv.categoryName} size={18} color={ACCENT} />}
+                />
+              ))
             )}
           </View>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={{ fontSize: rf(9.5), color: GREEN_TEXT, letterSpacing: 1.2, fontWeight: '800' }}>YOUR DEVICE</Text>
-            <Text style={{ fontSize: rf(15.5), fontWeight: '800', color: BRAND.ink, marginTop: 1 }} numberOfLines={2}>{device.modelName || 'Device'}</Text>
-            {specLine ? <Text style={{ fontSize: rf(11.5), color: MUTED, marginTop: 2 }} numberOfLines={1}>{specLine}</Text> : null}
-          </View>
-          {/* decorative — this card had no tap action before */}
-          <View pointerEvents="none" style={{ height: 30, width: 30, borderRadius: 15, backgroundColor: MINT, alignItems: 'center', justifyContent: 'center', marginLeft: 8 }}>
-            <ChevronRight size={16} color={GREEN_TEXT} />
-          </View>
-        </View>
 
-        {/* Selected services */}
-        <View style={card}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 9 }}>
-            <View style={{ height: 34, width: 34, borderRadius: 17, backgroundColor: MINT, alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
-              <Wrench size={17} color={GREEN_TEXT} />
+          {/* ── Device photos — Front & Back required, video optional ── */}
+          <View style={{ paddingTop: 16 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+              <Text style={[sectionTitle, { flex: 1, marginBottom: 0 }]}>
+                Device Photos<Text style={{ color: RED_TEXT }}> *</Text>
+                <Text style={{ fontWeight: '400', color: MUTED }}> (video optional)</Text>
+              </Text>
+              <View style={{ borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3, backgroundColor: ready ? MINT : PAGE_BG, borderWidth: 1, borderColor: ready ? MINT_LINE : LINE }}>
+                <Text style={{ fontSize: rf(12), fontWeight: '800', color: ready ? ACCENT : INK }}>{filled}/3</Text>
+              </View>
             </View>
-            <Text style={{ flex: 1, fontSize: rf(14.5), fontWeight: '800', color: BRAND.ink }}>Repair Services</Text>
-            <View style={{ minWidth: 26, height: 26, borderRadius: 13, paddingHorizontal: 7, backgroundColor: MINT, alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={{ fontSize: rf(12), fontWeight: '800', color: GREEN_TEXT }}>{services.length}</Text>
-            </View>
-          </View>
-          {services.length === 0 ? (
-            <Text style={{ fontSize: rf(12), color: MUTED }}>No services selected</Text>
-          ) : (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: -6 }}>
-              {services.map((sv) => (
-                <View key={sv.id} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: MINT, borderWidth: 1, borderColor: GREEN_LINE, borderRadius: 999, paddingLeft: 4, paddingRight: 10, paddingVertical: 4, marginRight: 6, marginBottom: 6, maxWidth: '100%' }}>
-                  <View style={{ height: 18, width: 18, borderRadius: 9, backgroundColor: BRAND.green, alignItems: 'center', justifyContent: 'center', marginRight: 5 }}>
-                    <Check size={11} color="#fff" strokeWidth={3} />
-                  </View>
-                  <Text style={{ fontSize: rf(12), fontWeight: '700', color: GREEN_TEXT, flexShrink: 1 }} numberOfLines={1}>{sv.name}</Text>
-                </View>
+
+            {/* Camera · Gallery · Video — straight to the source. */}
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+              {[
+                { key: 'camera', label: 'Camera', Icon: Camera, disabled: !nextPhoto, onPress: () => quickAdd('camera') },
+                { key: 'gallery', label: 'Gallery', Icon: Images, disabled: !nextPhoto, onPress: () => quickAdd('library') },
+                { key: 'video', label: 'Video', Icon: Video, disabled: !!media.video, onPress: () => pick(videoSlot) },
+              ].map((b) => (
+                <Pressable
+                  key={b.key}
+                  onPress={b.disabled ? undefined : b.onPress}
+                  disabled={b.disabled}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Add ${b.label.toLowerCase()}`}
+                  accessibilityState={{ disabled: b.disabled }}
+                  className="active:opacity-80"
+                  style={{
+                    flex: 1, height: 44, borderRadius: 12, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                    borderColor: b.disabled ? LINE : MINT_LINE, backgroundColor: b.disabled ? PAGE_BG : MINT, opacity: b.disabled ? 0.6 : 1,
+                  }}
+                >
+                  <b.Icon size={18} color={b.disabled ? MUTED : ACCENT} />
+                  <Text style={{ marginLeft: 6, fontSize: rf(13), fontWeight: '700', color: b.disabled ? MUTED : ACCENT }} numberOfLines={1}>{b.label}</Text>
+                </Pressable>
               ))}
             </View>
-          )}
-        </View>
 
-        {/* Device photos */}
-        <View style={card}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <View style={{ height: 34, width: 34, borderRadius: 17, backgroundColor: YELLOW_SOFT, alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
-              <Camera size={17} color={BRAND.yellow} />
-            </View>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={{ fontSize: rf(14.5), fontWeight: '800', color: BRAND.ink }}>Device Photos</Text>
-              <Text style={{ fontSize: rf(11), color: MUTED, marginTop: 1 }} numberOfLines={1}>Front & Back required · video optional.</Text>
-            </View>
-            <View style={{ borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: ready ? MINT : YELLOW_SOFT, borderWidth: 1, borderColor: ready ? GREEN_LINE : BRAND.yellowLine }}>
-              <Text style={{ fontSize: rf(12), fontWeight: '800', color: ready ? GREEN_TEXT : BRAND.ink }}>{filled}/3</Text>
-            </View>
-          </View>
-
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 11 }}>
-            {SLOTS.map((slot) => {
-              const asset = media[slot.key];
-              const t = TONE[slot.accent];
-              const Icon = slot.icon;
-              const ring = Math.min(42, Math.round(tileW * 0.4));
-              return (
-                <View key={slot.key} style={{ width: tileW }}>
-                  <Pressable
-                    onPress={() => pick(slot)}
-                    className="active:opacity-85"
-                    accessibilityLabel={`Add ${slot.label}`}
-                    style={{
-                      height: tileH, borderRadius: 14, overflow: 'hidden',
-                      borderWidth: asset ? 1 : 1.5, borderStyle: asset ? 'solid' : 'dashed',
-                      borderColor: asset ? LINE : t.border, backgroundColor: t.bg,
-                    }}
-                  >
-                    {asset ? (
-                      <View style={{ flex: 1 }}>
-                        {slot.isVideo ? (
-                          <View style={{ flex: 1, backgroundColor: BRAND.ink, alignItems: 'center', justifyContent: 'center' }}>
-                            <Video size={22} color="#fff" />
-                            <Text style={{ fontSize: rf(9.5), fontWeight: '800', color: '#fff', marginTop: 3 }}>VIDEO</Text>
+            {/* One tile per slot — tap to add / replace, ✕ removes. */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -4 }}>
+              {SLOTS.map((slot) => {
+                const asset = media[slot.key];
+                const Icon = slot.icon;
+                return (
+                  <View key={slot.key} style={{ width: tilePct, padding: 4 }}>
+                    <Pressable
+                      onPress={() => pick(slot)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${asset ? 'Replace' : 'Add'} ${slot.label}`}
+                      className="active:opacity-85"
+                      style={{
+                        aspectRatio: 1, borderRadius: 12, overflow: 'hidden',
+                        borderWidth: asset ? 1 : 1.5, borderStyle: asset ? 'solid' : 'dashed',
+                        borderColor: asset ? LINE : MINT_LINE, backgroundColor: asset ? PAGE_BG : '#F9FAFB',
+                      }}
+                    >
+                      {asset ? (
+                        <View style={{ flex: 1 }}>
+                          {slot.isVideo ? (
+                            <View style={{ flex: 1, backgroundColor: INK, alignItems: 'center', justifyContent: 'center' }}>
+                              <Video size={24} color="#FFFFFF" />
+                              <Text style={{ fontSize: rf(9.5), fontWeight: '800', color: '#FFFFFF', marginTop: 3 }}>VIDEO</Text>
+                            </View>
+                          ) : (
+                            <Image source={{ uri: asset.uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                          )}
+                          <Pressable
+                            onPress={() => remove(slot.key)}
+                            hitSlop={10}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Remove ${slot.label}`}
+                            style={{ position: 'absolute', right: 5, top: 5, height: 22, width: 22, borderRadius: 11, backgroundColor: 'rgba(17,17,17,0.7)', alignItems: 'center', justifyContent: 'center' }}
+                          >
+                            <X size={13} color="#FFFFFF" />
+                          </Pressable>
+                        </View>
+                      ) : (
+                        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                          <View style={{ height: 34, width: 34, borderRadius: 17, backgroundColor: MINT, alignItems: 'center', justifyContent: 'center', marginBottom: 5 }}>
+                            <Icon size={17} color={ACCENT} />
                           </View>
-                        ) : (
-                          <Image source={{ uri: asset.uri }} style={{ flex: 1 }} resizeMode="cover" />
-                        )}
-                        <Pressable
-                          onPress={() => remove(slot.key)}
-                          accessibilityLabel={`Remove ${slot.label}`}
-                          style={{ position: 'absolute', right: 5, top: 5, height: 22, width: 22, borderRadius: 11, backgroundColor: 'rgba(30,30,30,0.65)', alignItems: 'center', justifyContent: 'center' }}
-                        >
-                          <X size={12} color="#fff" />
-                        </Pressable>
-                      </View>
-                    ) : (
-                      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                        <View style={{ height: ring, width: ring, borderRadius: ring / 2, backgroundColor: t.tint, alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
-                          <Icon size={19} color={t.icon} />
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Plus size={12} color={ACCENT} strokeWidth={2.6} />
+                            <Text style={{ fontSize: rf(12), fontWeight: '700', color: ACCENT, marginLeft: 3 }}>Add</Text>
+                          </View>
                         </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                          <Plus size={12} color={t.fg} strokeWidth={2.6} />
-                          <Text style={{ fontSize: rf(12), fontWeight: '700', color: t.fg, marginLeft: 3 }}>Add</Text>
-                        </View>
-                      </View>
-                    )}
-                  </Pressable>
-                  <Text style={{ fontSize: rf(11.5), fontWeight: '700', textAlign: 'center', marginTop: 5, color: asset ? GREEN_TEXT : BRAND.ink }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
-                    {slot.label}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
+                      )}
+                    </Pressable>
+                    <Text style={{ marginTop: 4, fontSize: rf(11.5), fontWeight: '600', color: asset ? ACCENT : MUTED, textAlign: 'center' }} numberOfLines={1}>
+                      {slot.label}{slot.isVideo ? '' : ' *'}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
 
-          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: BRAND.line, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 10, marginTop: 11 }}>
-            <ShieldCheck size={16} color={GREEN_TEXT} />
-            <Text style={{ flex: 1, fontSize: rf(11), color: MUTED, marginLeft: 8, lineHeight: rf(15) }}>
-              Photos are encrypted and only visible to the shop you book.
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: PAGE_BG, borderRadius: 12, paddingVertical: 9, paddingHorizontal: 10, marginTop: 8 }}>
+              <ShieldCheck size={16} color={ACCENT} />
+              <Text style={{ flex: 1, fontSize: rf(11), color: MUTED, marginLeft: 8, lineHeight: rf(15) }}>
+                Photos are encrypted and only visible to the shop you book.
+              </Text>
+            </View>
           </View>
         </View>
       </ScrollView>
 
       {/* Sticky bar — same count, `ready` rule and onContinue. */}
       <BottomActionBar>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <View style={[col, { flexDirection: 'row', alignItems: 'center' }]}>
           <View style={{ minWidth: 88, paddingRight: 12 }}>
             <Text style={{ fontSize: rf(11.5), color: MUTED }}>Photos</Text>
-            <Text style={{ fontSize: rf(19), fontWeight: '900', color: BRAND.ink, lineHeight: rf(23) }}>{`${filled}/3`}</Text>
-            <Text style={{ fontSize: rf(11), color: ready ? GREEN_TEXT : MUTED }} numberOfLines={1}>{ready ? 'ready' : 'add front & back'}</Text>
+            <Text style={{ fontSize: rf(18), fontWeight: '800', color: INK, lineHeight: rf(22) }}>{`${filled}/3`}</Text>
+            <Text style={{ fontSize: rf(11), color: ready ? ACCENT : MUTED }} numberOfLines={1}>{ready ? 'ready' : 'add front & back'}</Text>
           </View>
-          <View style={{ width: 1, alignSelf: 'stretch', backgroundColor: LINE, marginRight: 14 }} />
-          <View style={{ flex: 1 }}>
-            <FlowCta title="Choose a Shop" onPress={onContinue} disabled={!ready} palette={BRAND_FLOW} />
-          </View>
+          <Pressable
+            onPress={onContinue}
+            disabled={!ready}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !ready }}
+            className={ready ? 'active:opacity-85' : ''}
+            style={{
+              flex: 1, height: 52, borderRadius: 14, backgroundColor: ACCENT, opacity: ready ? 1 : 0.45,
+              flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Text style={{ color: '#FFFFFF', fontSize: rf(15), fontWeight: '800' }} numberOfLines={1}>Choose a Shop</Text>
+            <ArrowRight size={18} color="#FFFFFF" strokeWidth={2.25} style={{ marginLeft: 6 }} />
+          </Pressable>
         </View>
       </BottomActionBar>
 
@@ -275,84 +301,54 @@ export default function RepairReviewScreen({ navigation, route }) {
           onPress={() => setChooserFor(null)}
           style={{
             position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(30,30,30,0.45)',
+            backgroundColor: 'rgba(17,17,17,0.45)',
             justifyContent: 'flex-end',
           }}
         >
           <Pressable
             onPress={(e) => e.stopPropagation && e.stopPropagation()}
             style={{
-              backgroundColor: '#fff',
+              width: '100%', maxWidth: 480, alignSelf: 'center', backgroundColor: '#FFFFFF',
               borderTopLeftRadius: 20, borderTopRightRadius: 20,
-              paddingTop: 12, paddingBottom: 24, paddingHorizontal: 16,
+              paddingTop: 10, paddingBottom: Math.max(insets.bottom, 12) + 10, paddingHorizontal: 16,
             }}
           >
-            <View style={{ height: 4, width: 44, borderRadius: 2, backgroundColor: LINE, alignSelf: 'center', marginBottom: 14 }} />
-            <Text style={{ fontSize: rf(15), fontWeight: '800', color: BRAND.ink, marginBottom: 3 }}>
+            <View style={{ height: 4, width: 40, borderRadius: 2, backgroundColor: LINE, alignSelf: 'center', marginBottom: 12 }} />
+            <Text style={{ fontSize: rf(16), fontWeight: '800', color: INK, marginBottom: 2 }}>
               Add {chooserFor.label.toLowerCase()}
             </Text>
-            <Text style={{ fontSize: rf(11.5), color: MUTED, marginBottom: 12 }}>
-              Take a fresh photo or pick one from your gallery.
+            <Text style={{ fontSize: rf(11.5), color: MUTED, marginBottom: 6 }}>
+              {sheetVideo ? 'Record a short video or pick one from your gallery.' : 'Take a fresh photo or pick one from your gallery.'}
             </Text>
 
-            <Pressable
-              onPress={() => { const slot = chooserFor; setChooserFor(null); launch(slot, 'camera'); }}
-              android_ripple={{ color: MINT }}
-              style={{
-                flexDirection: 'row', alignItems: 'center',
-                backgroundColor: BRAND.bg, borderRadius: 14,
-                paddingHorizontal: 12, paddingVertical: 11,
-                marginBottom: 8,
-                borderWidth: 1, borderColor: LINE,
-              }}
-            >
-              <View style={{ height: 36, width: 36, borderRadius: 18, backgroundColor: MINT, alignItems: 'center', justifyContent: 'center', marginRight: 11 }}>
-                <Camera size={17} color={GREEN_TEXT} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: rf(13.5), fontWeight: '800', color: BRAND.ink }}>
-                  Take a photo
-                </Text>
-                <Text style={{ fontSize: rf(11), color: MUTED, marginTop: 1 }}>
-                  Open camera now
-                </Text>
-              </View>
-              <ChevronRight size={15} color={MUTED} />
-            </Pressable>
-
-            <Pressable
-              onPress={() => { const slot = chooserFor; setChooserFor(null); launch(slot, 'library'); }}
-              android_ripple={{ color: YELLOW_SOFT }}
-              style={{
-                flexDirection: 'row', alignItems: 'center',
-                backgroundColor: BRAND.bg, borderRadius: 14,
-                paddingHorizontal: 12, paddingVertical: 11,
-                marginBottom: 12,
-                borderWidth: 1, borderColor: LINE,
-              }}
-            >
-              <View style={{ height: 36, width: 36, borderRadius: 18, backgroundColor: YELLOW_SOFT, alignItems: 'center', justifyContent: 'center', marginRight: 11 }}>
-                <Upload size={17} color={BRAND.yellow} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: rf(13.5), fontWeight: '800', color: BRAND.ink }}>
-                  Upload from gallery
-                </Text>
-                <Text style={{ fontSize: rf(11), color: MUTED, marginTop: 1 }}>
-                  Pick an existing photo
-                </Text>
-              </View>
-              <ChevronRight size={15} color={MUTED} />
-            </Pressable>
+            {[
+              { key: 'camera', Icon: sheetVideo ? Video : Camera, label: sheetVideo ? 'Record a video' : 'Take a photo', sub: 'Open camera now' },
+              { key: 'library', Icon: Images, label: 'Upload from gallery', sub: sheetVideo ? 'Pick an existing video' : 'Pick an existing photo' },
+            ].map((o) => (
+              <Pressable
+                key={o.key}
+                onPress={() => { const slot = chooserFor; setChooserFor(null); launch(slot, o.key); }}
+                android_ripple={{ color: MINT }}
+                accessibilityRole="button"
+                style={{ minHeight: 56, flexDirection: 'row', alignItems: 'center' }}
+              >
+                <View style={{ height: 40, width: 40, borderRadius: 20, backgroundColor: MINT, alignItems: 'center', justifyContent: 'center' }}>
+                  <o.Icon size={20} color={ACCENT} />
+                </View>
+                <View style={{ flex: 1, marginLeft: 14 }}>
+                  <Text style={{ fontSize: rf(14.5), fontWeight: '600', color: INK }}>{o.label}</Text>
+                  <Text style={{ fontSize: rf(11), color: MUTED, marginTop: 1 }}>{o.sub}</Text>
+                </View>
+              </Pressable>
+            ))}
 
             <Pressable
               onPress={() => setChooserFor(null)}
-              android_ripple={{ color: BRAND.line }}
-              style={{ paddingVertical: 10, alignItems: 'center' }}
+              accessibilityRole="button"
+              className="active:opacity-80"
+              style={{ marginTop: 10, height: 46, borderRadius: 12, borderWidth: 1, borderColor: LINE, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' }}
             >
-              <Text style={{ fontSize: rf(13), fontWeight: '800', color: MUTED }}>
-                Cancel
-              </Text>
+              <Text style={{ fontSize: rf(14), fontWeight: '700', color: INK }}>Cancel</Text>
             </Pressable>
           </Pressable>
         </Pressable>

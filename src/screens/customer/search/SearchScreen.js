@@ -15,12 +15,12 @@ import { loadCatalog, searchCatalog, modelRouteParams, parseQuery } from '../../
 import { listProducts } from '../../../api/marketplace';
 import { listShops } from '../../../api/shops';
 
-const GREEN_TEXT = '#078F23';
-const MINT = '#EAF8EC';
-const LINE = '#E6E6E6';
-const YELLOW_SOFT = '#FEF6DA';
-const RED_SOFT = '#FEECEC';
-const MUTED = '#6B6B6B';
+const GREEN_TEXT = '#035C6C';
+const MINT = '#E5F3F5';
+const LINE = '#E8EAEE';
+const YELLOW_SOFT = '#FFF4D6';
+const RED_SOFT = '#FEEBEA';
+const MUTED = '#606E87';
 const cardShadow = { shadowColor: BRAND.ink, shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1 };
 const RECENT_KEY = 'search.recent';
 const POPULAR = ['iPhone 13', 'Screen replacement', 'Battery', 'Galaxy S23', 'Laptop repair', 'Sell iPhone 12', 'Earbuds'];
@@ -269,7 +269,7 @@ export default function SearchScreen({ navigation, route }) {
       <SafeAreaView edges={['top']} style={{ backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: LINE }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingTop: 6, paddingBottom: 9 }}>
           <Pressable onPress={() => navigation.goBack()} hitSlop={8} accessibilityRole="button" accessibilityLabel="Back" className="active:opacity-70"
-            style={{ height: 38, width: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F4FBF8', borderWidth: 1, borderColor: '#DCE7E2', marginRight: 8 }}>
+            style={{ height: 38, width: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F0F8F9', borderWidth: 1, borderColor: '#C7E6EA', marginRight: 8 }}>
             <ArrowLeft size={19} color={BRAND.ink} />
           </Pressable>
           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', height: 44, borderRadius: 22, paddingLeft: 12, paddingRight: 6, backgroundColor: BRAND.bg, borderWidth: 1, borderColor: listening ? BRAND.green : LINE }}>
@@ -302,7 +302,7 @@ export default function SearchScreen({ navigation, route }) {
 
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 28 }}>
         {listening ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12, borderRadius: 14, padding: 10, backgroundColor: MINT, borderWidth: 1, borderColor: 'rgba(9,173,42,0.35)' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12, borderRadius: 14, padding: 10, backgroundColor: MINT, borderWidth: 1, borderColor: 'rgba(3,92,108,0.35)' }}>
             <View style={{ height: 30, width: 30, borderRadius: 15, backgroundColor: BRAND.green, alignItems: 'center', justifyContent: 'center' }}>
               <Mic size={15} color="#FFFFFF" />
             </View>
@@ -313,7 +313,7 @@ export default function SearchScreen({ navigation, route }) {
           </View>
         ) : null}
         {voiceTip && !listening ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12, borderRadius: 14, padding: 10, backgroundColor: YELLOW_SOFT, borderWidth: 1, borderColor: 'rgba(243,191,35,0.45)' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12, borderRadius: 14, padding: 10, backgroundColor: YELLOW_SOFT, borderWidth: 1, borderColor: 'rgba(250,167,0,0.45)' }}>
             <Mic size={16} color={BRAND.ink} />
             <Text style={{ flex: 1, marginLeft: 8, fontSize: rf(11.5), color: BRAND.ink, lineHeight: rf(16) }}>
               Voice search: tap the 🎤 mic on your keyboard and speak — your words appear in the search box.
@@ -325,7 +325,7 @@ export default function SearchScreen({ navigation, route }) {
         ) : null}
 
         {catalogErr && query ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12, borderRadius: 14, padding: 10, backgroundColor: YELLOW_SOFT, borderWidth: 1, borderColor: 'rgba(243,191,35,0.45)' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12, borderRadius: 14, padding: 10, backgroundColor: YELLOW_SOFT, borderWidth: 1, borderColor: 'rgba(250,167,0,0.45)' }}>
             <Text style={{ flex: 1, fontSize: rf(11.5), color: BRAND.ink, lineHeight: rf(16) }}>Couldn't load the full device list — showing brands and services only.</Text>
             <Pressable onPress={retryCatalog} disabled={retrying} accessibilityRole="button" accessibilityLabel="Retry loading devices" className="active:opacity-75"
               style={{ marginLeft: 8, paddingHorizontal: 11, paddingVertical: 6, borderRadius: 999, backgroundColor: BRAND.green, opacity: retrying ? 0.6 : 1 }}>

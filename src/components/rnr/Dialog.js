@@ -22,7 +22,7 @@ export function DialogHeader({ title, onClose }) {
       {title ? <Text className="font-bold text-text flex-1" style={{ fontSize: rf(18) }}>{title}</Text> : <View className="flex-1" />}
       {onClose ? (
         <Pressable onPress={onClose} className="p-1">
-          <Ionicons name="close" size={22} color="#0F172A" />
+          <Ionicons name="close" size={22} color="#1C3053" />
         </Pressable>
       ) : null}
     </View>

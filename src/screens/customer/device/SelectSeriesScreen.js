@@ -1,14 +1,45 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, ScrollView, Text, View } from 'react-native';
-import { Layers, CheckCircle2, Pencil } from 'lucide-react-native';
-import { EmptyState, Loader, SearchBar, SelectionCrumb } from '../../../components/rnr';
+import { Platform, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { Pencil, Search, X } from 'lucide-react-native';
+import { EmptyState, Loader } from '../../../components/rnr';
 import { getSeriesForCategoryBrand } from '../../../api/masterData';
-import { rf } from '../../../utils/responsive';
+import { useHideStackHeader } from '../service-booking-customer/FlowChrome';
+import { DP, DP_COLUMN, DevicePickerHeader, DPSection, PickedCard, DPNextBar, gridTileW, goToPicker } from './DevicePickerChrome';
+
+// Series tile — same as the Partner model step's series filter (text only,
+// teal border + mint fill when selected).
+// NOTE: Pressables take plain style objects only — NativeWind's cssInterop
+// drops function-form `style={({ pressed }) => ...}` on native.
+function SeriesTile({ width, label, selected, onPress }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: !!selected }}
+      className="active:opacity-80"
+      style={{
+        width, minHeight: 46, paddingHorizontal: 6, paddingVertical: 6, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+        backgroundColor: selected ? DP.mint : '#FFFFFF', borderWidth: selected ? 1.5 : 1, borderColor: selected ? DP.teal : DP.line,
+      }}
+    >
+      <Text
+        numberOfLines={2}
+        adjustsFontSizeToFit
+        minimumFontScale={0.8}
+        style={{ fontSize: 13, lineHeight: 16, fontWeight: selected ? '800' : '600', color: selected ? DP.teal : DP.ink, textAlign: 'center' }}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
 
 export default function SelectSeriesScreen({ navigation, route }) {
+  useHideStackHeader(navigation);
   const flow = route?.params?.flow || 'PROFILE';
   const {
-    categoryId, categoryCode, categoryName, deviceTypeId, deviceTypeName, brandId, brandName,
+    categoryId, categoryCode, categoryName, categoryImage, deviceTypeId, deviceTypeName, brandId, brandName, brandImage,
     editSellOrderId, editHints,
   } = route?.params || {};
   const [series, setSeries] = useState([]);
@@ -16,10 +47,15 @@ export default function SelectSeriesScreen({ navigation, route }) {
   const [q, setQ] = useState('');
   const isEditing = !!editSellOrderId;
   const currentSeriesId = editHints?.seriesId || null;
+  const { width } = useWindowDimensions();
+
+  // 4 per row on phones, 6 on tablets (content capped at 720).
+  const cols = width >= 600 ? 6 : 4;
+  const tileW = gridTileW(Math.min(width, 720), cols);
 
   const base = {
-    flow, categoryId, categoryCode, categoryName, deviceTypeId, deviceTypeName,
-    brandId, brandName, editSellOrderId, editHints,
+    flow, categoryId, categoryCode, categoryName, categoryImage, deviceTypeId, deviceTypeName,
+    brandId, brandName, brandImage, editSellOrderId, editHints,
   };
 
   useEffect(() => {
@@ -54,85 +90,84 @@ export default function SelectSeriesScreen({ navigation, route }) {
     return list.filter((s) => (s.name || '').toLowerCase().includes(needle));
   }, [series, q, isEditing, currentSeriesId]);
 
+  const currentSeries = isEditing && currentSeriesId ? series.find((s) => s.id === currentSeriesId) : null;
+
   const onPick = (s) => navigation.navigate('SelectModel', {
     ...base, seriesId: s.id, seriesName: s.name,
   });
 
-  if (loading) return <Loader label="Loading series..." />;
+  // "Change" → back to that picker (later steps are popped).
+  const changeCategory = () => goToPicker(navigation, 'SelectCategory', { flow, editSellOrderId });
+  const changeBrand = () => goToPicker(navigation, 'SelectBrand', {
+    flow, categoryId, categoryCode, categoryName, categoryImage, deviceTypeId, deviceTypeName, editSellOrderId, editHints,
+  });
 
   return (
-    <View className="flex-1 bg-background">
-      <View className="bg-card border-b border-border px-4 pt-3 pb-3">
-        <SelectionCrumb items={[{ label: 'Brand', value: brandName }]} className="mb-3" />
-        {isEditing && editHints?.modelName ? (
-          <View className="bg-warning/10 border border-warning/30 rounded-xl px-3 py-2 mb-3 flex-row items-center">
-            <Pencil size={13} color="#F59E0B" />
-            <View className="flex-1 ml-2">
-              <Text className="font-extrabold text-warning tracking-wider" style={{ fontSize: rf(10) }}>EDITING ORDER</Text>
-              <Text className="text-text font-semibold" style={{ fontSize: rf(12) }} numberOfLines={1}>
-                Currently: {editHints.brandName ? `${editHints.brandName} · ` : ''}{editHints.modelName}
-              </Text>
-            </View>
-          </View>
-        ) : null}
-        <SearchBar value={q} onChangeText={setQ} placeholder="Search series" onClear={() => setQ('')} />
-      </View>
+    <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+      <DevicePickerHeader navigation={navigation} title={flow === 'OWNER_LIST' ? 'Sell' : undefined} />
+      {loading ? (
+        <Loader label="Loading series..." className="bg-white" />
+      ) : (
+        <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
+          <View style={[DP_COLUMN, { paddingHorizontal: 16 }]}>
+            {isEditing && editHints?.modelName ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 14, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#FFF4D6', borderWidth: 1, borderColor: 'rgba(250,167,0,0.3)' }}>
+                <Pencil size={13} color="#FAA700" />
+                <View style={{ flex: 1, marginLeft: 8 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '800', color: DP.ink, letterSpacing: 0.8 }}>EDITING ORDER</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: DP.ink }} numberOfLines={1}>
+                    Currently: {editHints.brandName ? `${editHints.brandName} · ` : ''}{editHints.modelName}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
 
-      <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 24 }}>
-        {filtered.length === 0 ? (
-          <EmptyState title="No series found" description="Try a different keyword." />
-        ) : (
-          // 3-column grid — matches SelectBrand / Home rhythm. No chevron.
-          <View className="flex-row flex-wrap">
-            {filtered.map((s) => {
-              const thumb = s.imageUrl || s.imageBase64;
-              const isCurrent = isEditing && s.id === currentSeriesId;
-              return (
-                <Pressable
-                  key={s.id}
-                  onPress={() => onPick(s)}
-                  className="active:opacity-80"
-                  style={{ width: '33.333%', padding: 6 }}
-                >
-                  <View
-                    className={`items-center rounded-2xl bg-card ${isCurrent ? 'border-success' : 'border-border'}`}
-                    style={{
-                      paddingVertical: 14,
-                      paddingHorizontal: 8,
-                      borderWidth: isCurrent ? 2 : 1,
-                      shadowColor: isCurrent ? '#004C40' : '#0F172A',
-                      shadowOpacity: isCurrent ? 0.10 : 0.04,
-                      shadowRadius: 8,
-                      shadowOffset: { width: 0, height: 2 },
-                      elevation: 1,
-                    }}
-                  >
-                    <View className="h-14 w-14 rounded-2xl bg-primary/10 items-center justify-center overflow-hidden">
-                      {thumb ? (
-                        <Image source={{ uri: thumb }} style={{ width: 56, height: 56 }} resizeMode="cover" />
-                      ) : (
-                        <Layers size={24} color="#00008B" />
-                      )}
-                    </View>
-                    <Text
-                      className="font-extrabold text-text text-center mt-2" style={{ fontSize: rf(12) }}
-                      numberOfLines={1}
-                    >
-                      {s.name}
-                    </Text>
-                    {isCurrent ? (
-                      <View className="flex-row items-center mt-1">
-                        <CheckCircle2 size={10} color="#004C40" />
-                        <Text className="font-bold text-success ml-1" style={{ fontSize: rf(9) }}>Current</Text>
-                      </View>
-                    ) : null}
-                  </View>
+            <DPSection title="Category" />
+            <PickedCard image={categoryImage} title={categoryName || 'Category'} onChange={changeCategory} />
+
+            <DPSection title="Brand" />
+            <PickedCard image={brandImage} title={brandName || 'Brand'} onChange={changeBrand} />
+
+            <DPSection title="Series" />
+            {/* Partner-style search field (48 high, soft grey, radius 12). */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', height: 48, borderRadius: 12, paddingHorizontal: 12, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#F3F4F6', marginBottom: 12 }}>
+              <Search size={18} color={DP.muted} />
+              <TextInput
+                value={q}
+                onChangeText={setQ}
+                placeholder="Search series"
+                placeholderTextColor="#9CA3AF"
+                cursorColor={DP.teal}
+                returnKeyType="search"
+                accessibilityLabel="Search series"
+                // Web only: drop the browser focus ring inside the rounded field.
+                style={[{ flex: 1, marginLeft: 8, paddingVertical: 0, fontSize: 14, color: DP.ink }, Platform.OS === 'web' ? { outlineStyle: 'none' } : null]}
+              />
+              {q ? (
+                <Pressable onPress={() => setQ('')} hitSlop={12} accessibilityRole="button" accessibilityLabel="Clear search">
+                  <X size={16} color={DP.muted} />
                 </Pressable>
-              );
-            })}
+              ) : null}
+            </View>
+
+            {filtered.length === 0 ? (
+              <EmptyState accent={DP.teal} accentSoft={DP.mint} title="No series found" description="Try a different keyword." />
+            ) : (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                {filtered.map((s) => (
+                  <SeriesTile
+                    key={s.id}
+                    width={tileW}
+                    label={s.name}
+                    selected={isEditing && s.id === currentSeriesId}
+                    onPress={() => onPick(s)}
+                  />
+                ))}
+              </View>
+            )}
           </View>
-        )}
-      </ScrollView>
+        </ScrollView>
+      )}
     </View>
   );
 }

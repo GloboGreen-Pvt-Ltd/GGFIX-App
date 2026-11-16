@@ -24,6 +24,13 @@ export async function getServiceTicket(id) {
   return await ticketApi.get(`/tickets/customer/${id}`, { skipAuthExpiry: true });
 }
 
+// Repair return delivery for the customer's own ticket: status, schedule, the
+// assigned employee (after they accept) and the delivery OTP while the device is
+// on its way (only ever shown here, never in a notification).
+export async function getRepairDeliveryForCustomer(ticketId) {
+  return await ticketApi.get(`/tickets/customer/${ticketId}/repair-delivery`, { skipAuthExpiry: true });
+}
+
 // Repair bookings
 export async function createRepairBooking(payload) {
   return await orderApi.post('/repair-bookings', { body: payload });
@@ -33,6 +40,10 @@ export async function listRepairBookings(status) {
 }
 export async function getRepairBooking(id) {
   return await orderApi.get(`/repair-bookings/${id}`);
+}
+// Device Photos on View Details: only the keys sent change; '' clears a slot.
+export async function updateRepairBookingMedia(id, media) {
+  return await orderApi.patch(`/repair-bookings/${id}/media`, { body: media });
 }
 export async function updateRepairBookingStatus(id, status) {
   return await orderApi.patch(`/repair-bookings/${id}/status`, { query: { status } });
@@ -91,6 +102,27 @@ export async function getSellOrderQuotations(id) {
 }
 export async function chooseSellQuotation(id, quotationId) {
   return await orderApi.post(`/sell-orders/${id}/choose-quotation`, { body: { quotationId } });
+}
+// Partner purchase workflow: pickup / inspection / revision / payout view, and
+// the customer confirming the shop's payout (PAYMENT_PENDING → PAID).
+export async function getSellPurchase(id) {
+  return await orderApi.get(`/sell-orders/${id}/purchase`);
+}
+export async function confirmSellPayout(id) {
+  return await orderApi.post(`/sell-orders/${id}/payout/confirm`);
+}
+// The shop's revised (final) price after inspection: the customer approves it
+// (→ PRICE_CONFIRMED) or rejects it with a note (→ REVISION_REJECTED).
+export async function approveSellRevision(id) {
+  return await orderApi.post(`/sell-orders/${id}/revision/approve`);
+}
+export async function rejectSellRevision(id, note) {
+  return await orderApi.post(`/sell-orders/${id}/revision/reject`, { body: { note: note || null } });
+}
+// Ask the shop to reconsider the final price (counter amount + note). Servers
+// that offer it list NEGOTIATE_REVISION in the purchase view's allowedActions.
+export async function negotiateSellRevision(id, { amount, note }) {
+  return await orderApi.post(`/sell-orders/${id}/revision/negotiate`, { body: { amount: amount || null, note: note || null } });
 }
 export async function updateSellOrder(id, payload) {
   return await orderApi.put(`/sell-orders/${id}`, { body: payload });

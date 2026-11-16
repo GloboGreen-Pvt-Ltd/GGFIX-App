@@ -26,10 +26,10 @@ const DEVICE_URL = 'https://media.ggfix.in/GGFIX-Partner-App/Device.png';
 // slow network never adds startup delay — the fallback color below covers it.
 [BACKGROUND_URL, DEVICE_URL].forEach((uri) => Image.prefetch(uri).catch(() => {}));
 
-const BG_FALLBACK = '#004C40';
-const BRIGHT_GREEN = '#00E68A';
-const HIGHLIGHT_GREEN = '#22F5A2';
-const MINT = '#8AF5C5';
+const BG_FALLBACK = '#035C6C';
+const BRIGHT_GREEN = '#C7E6EA'; // light teal (palette tint) on the teal splash
+const HIGHLIGHT_GREEN = '#9ABEC4';
+const MINT = '#C7E6EA';
 const TEXT_PRIMARY = '#FFFFFF';
 const TEXT_SECONDARY = 'rgba(255,255,255,0.80)';
 

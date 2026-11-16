@@ -8,6 +8,8 @@ import { notify } from '../../../components/confirm';
 import { clearCart, getProduct, removeCartItem } from '../../../api/marketplace';
 import { fulfilmentOf, placeBuyOrder } from '../../../api/buyOrders';
 import { getShop } from '../../../api/shops';
+import { listAddresses } from '../../../api/customer';
+import { useFocusEffect } from '@react-navigation/native';
 import { selectSession } from '../../../store/authSlice';
 import { useCustomerLocation } from '../../../hooks/useCustomerLocation';
 import { notifyShopsOfBuyOrder } from '../../../utils/buyOrderNotify';
@@ -54,8 +56,27 @@ export default function BuyPlaceOrderScreen({ navigation, route }) {
   const [sheet, setSheet] = useState(null); // 'date' | 'time'
   const [placing, setPlacing] = useState(false);
   const [fresh, setFresh] = useState({}); // productId -> current listing (price, stock, fulfilment)
-  const [mode, setMode] = useState(null); // 'HOME_DELIVERY' | 'VISIT_SHOP'
+  // Chosen on Select Fulfillment (route.params.mode); picked here only when opened directly (cart).
+  const presetMode = route.params?.mode || null;
+  const [mode, setMode] = useState(presetMode); // 'HOME_DELIVERY' | 'VISIT_SHOP'
   const [address, setAddress] = useState(session?.address || '');
+  const [saved, setSaved] = useState([]); // saved addresses (ManageAddress)
+  const [pickAddr, setPickAddr] = useState(false);
+  const addrText = (a) => [a.addressLine, a.area || a.locality, a.taluk, a.district || a.city, a.state, a.pincode].filter(Boolean).join(', ');
+  // Saved addresses: preselect the default; refresh after returning from ManageAddress.
+  useFocusEffect(React.useCallback(() => {
+    let live = true;
+    listAddresses().then((list) => {
+      if (!live || !Array.isArray(list)) return;
+      setSaved(list);
+      setAddress((cur) => {
+        if (cur && list.some((a) => addrText(a) === cur)) return cur;
+        const d = list.find((a) => a.isDefault) || list[0];
+        return d ? addrText(d) : cur;
+      });
+    }).catch(() => {});
+    return () => { live = false; };
+  }, []));
   const lock = useRef(false); // a double tap can't place two orders
   const keys = useRef({}); // idempotency key per product for this visit
   const placed = useRef({}); // productId -> order already created (partial-failure retry)
@@ -158,7 +179,8 @@ export default function BuyPlaceOrderScreen({ navigation, route }) {
       const pids = items.map((it) => it.product?.id || it.productId);
       Promise.all(pids.map((id) => getProduct(id).catch(() => null)))
         .then((ps) => setFresh(Object.fromEntries(pids.map((id, i) => [id, ps[i]]).filter(([, p]) => p))));
-      notify('Order failed', e?.message || 'Could not place the order. Please try again.', { preset: 'error' });
+      // The toast shows only its title, so the server's reason goes there.
+      notify(e?.message ? `Order failed: ${e.message}` : 'Order failed', e?.status ? `HTTP ${e.status}` : 'Please try again.', { preset: 'error' });
     } finally {
       setPlacing(false);
     }
@@ -198,7 +220,8 @@ export default function BuyPlaceOrderScreen({ navigation, route }) {
         })}
 
         {/* Delivery / pickup */}
-        <Text style={styles.section}>Delivery / Pickup</Text>
+        {!presetMode ? <Text style={styles.section}>Delivery / Pickup</Text> : null}
+        {!presetMode ? (<>
         <Pressable
           onPress={() => canHome && setMode('HOME_DELIVERY')}
           disabled={!canHome}
@@ -230,18 +253,27 @@ export default function BuyPlaceOrderScreen({ navigation, route }) {
             )) : <Text style={styles.sub}>{items[0]?.product?.shopName || 'The seller shop'}</Text>}
           </View>
         </Pressable>
+        </>) : null}
 
         {chosen === 'HOME_DELIVERY' ? (
           <>
             <Text style={styles.section}>Delivery Address</Text>
-            <TextInput
+            {saved.length ? (
+              <View style={[styles.card, { flexDirection: 'row', alignItems: 'center' }]}>
+                <Ionicons name="location-outline" size={18} color={TEAL} />
+                <Text style={{ flex: 1, marginHorizontal: 8, fontSize: rf(13), color: INK }}>{address || 'Select an address'}</Text>
+                <Pressable onPress={() => setPickAddr(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Change address">
+                  <Text style={{ fontSize: rf(13), fontWeight: '800', color: TEAL }}>Change</Text>
+                </Pressable>
+              </View>
+            ) : <TextInput
               value={address}
               onChangeText={setAddress}
               placeholder="House no, street, area, city, pincode"
               placeholderTextColor={MUTED}
               multiline
               style={[styles.card, { minHeight: 70, textAlignVertical: 'top', fontSize: rf(13), color: INK }]}
-            />
+            />}
           </>
         ) : null}
 
@@ -269,17 +301,20 @@ export default function BuyPlaceOrderScreen({ navigation, route }) {
 
         {/* Payment — only what the server verifies today */}
         <Text style={styles.section}>Payment Method</Text>
-        <View style={[styles.option, styles.optionOn]} accessibilityRole="radio" accessibilityState={{ selected: true }}>
-          <Ionicons name="radio-button-on" size={22} color={GREEN} />
-          <Text style={[styles.optTitle, { marginLeft: 10, flex: 1 }]}>{chosen === 'HOME_DELIVERY' ? 'Cash on Delivery (COD)' : 'Pay at Shop'}</Text>
-        </View>
-        <View style={[styles.option, { opacity: 0.55 }]} accessibilityRole="radio" accessibilityState={{ selected: false, disabled: true }}>
-          <Ionicons name="radio-button-off" size={22} color={MUTED} />
-          <View style={{ flex: 1, marginLeft: 10 }}>
-            <Text style={styles.optTitle}>UPI / Card</Text>
-            <Text style={styles.sub}>Coming soon</Text>
+        {/* Online payment has no server verification yet, so UPI and Card are shown but not selectable. */}
+        {[
+          { key: 'UPI', title: 'UPI (GPay, PhonePe)', ok: false },
+          { key: 'CARD', title: 'Card (Debit / Credit)', ok: false },
+          { key: 'CASH', title: chosen === 'VISIT_SHOP' ? 'Pay at Shop (Cash)' : 'Cash on Delivery (COD)', ok: true },
+        ].map((m) => (
+          <View key={m.key} style={[styles.option, m.ok ? styles.optionOn : { opacity: 0.55 }]} accessibilityRole="radio" accessibilityState={{ selected: m.ok, disabled: !m.ok }}>
+            <Ionicons name={m.ok ? 'radio-button-on' : 'radio-button-off'} size={22} color={m.ok ? GREEN : MUTED} />
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={styles.optTitle}>{m.title}</Text>
+              {!m.ok ? <Text style={styles.sub}>Coming soon</Text> : null}
+            </View>
           </View>
-        </View>
+        ))}
 
         {/* Price details */}
         <Text style={styles.section}>Price Details</Text>
@@ -293,7 +328,7 @@ export default function BuyPlaceOrderScreen({ navigation, route }) {
             <Text style={[styles.kvVal, { color: GREEN }]}>{inr(0)}</Text>
           </View>
           <View style={[styles.kv, { borderTopWidth: 1, borderTopColor: LINE, paddingTop: 10, marginTop: 8 }]}>
-            <Text style={[styles.title, { flex: 1 }]}>Total Amount</Text>
+            <Text style={[styles.title, { flex: 1 }]}>Total Payable</Text>
             <Text style={[styles.title, { color: TEAL, fontSize: rf(16) }]}>{inr(total)}</Text>
           </View>
         </View>
@@ -308,6 +343,28 @@ export default function BuyPlaceOrderScreen({ navigation, route }) {
       <StaticTabBar navigation={navigation} active="Buy" />
 
       {/* Date / time picker sheet */}
+      <Modal visible={pickAddr} transparent animationType="slide" onRequestClose={() => setPickAddr(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' }} onPress={() => setPickAddr(false)}>
+          <Pressable style={{ backgroundColor: '#FFFFFF', borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 16, paddingBottom: 16 + insets.bottom, maxHeight: '75%' }}>
+            <Text style={styles.section}>Choose delivery address</Text>
+            <ScrollView>
+              {saved.map((a) => {
+                const t = addrText(a);
+                return (
+                  <Pressable key={a.id} onPress={() => { setAddress(t); setPickAddr(false); }} accessibilityRole="button" style={[styles.card, { flexDirection: 'row', alignItems: 'center', borderColor: t === address ? TEAL : undefined }]}>
+                    <Ionicons name={t === address ? 'radio-button-on' : 'radio-button-off'} size={18} color={TEAL} />
+                    <Text style={{ flex: 1, marginLeft: 8, fontSize: rf(13), color: INK }}>{a.label ? `${a.label}${a.isDefault ? ' (Default)' : ''}
+` : ''}{t}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            <Pressable onPress={() => { setPickAddr(false); navigation.navigate('ManageAddress'); }} accessibilityRole="button" style={{ paddingVertical: 10, alignItems: 'center' }}>
+              <Text style={{ fontSize: rf(13), fontWeight: '800', color: TEAL }}>Add / manage addresses</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
       <Modal visible={!!sheet} transparent animationType="slide" onRequestClose={() => setSheet(null)}>
         <Pressable style={styles.backdrop} onPress={() => setSheet(null)}>
           <Pressable style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 12) + 12 }]} onPress={() => {}}>

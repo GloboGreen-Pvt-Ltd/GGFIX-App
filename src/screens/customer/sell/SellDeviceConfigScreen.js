@@ -24,12 +24,12 @@ export default function SellDeviceConfigScreen({ navigation, route }) {
         if (cancelled) return;
         const active = (list || []).filter((f) => f.isActive !== false);
         if (active.length === 0) {
-          navigation.replace('SellAccessoriesWarranty', params);
+          navigation.replace('SellImages', params);
           return;
         }
         setFields(active);
       } catch (_) {
-        navigation.replace('SellAccessoriesWarranty', params);
+        navigation.replace('SellImages', params);
         return;
       } finally {
         if (!cancelled) setLoading(false);
@@ -51,7 +51,7 @@ export default function SellDeviceConfigScreen({ navigation, route }) {
       optionId: selected[f.id]?.id || null,
       value: selected[f.id]?.value || null,
     }));
-    navigation.navigate('SellAccessoriesWarranty', { ...params, deviceConfig });
+    navigation.navigate('SellImages', { ...params, deviceConfig });
   };
 
   if (loading) {

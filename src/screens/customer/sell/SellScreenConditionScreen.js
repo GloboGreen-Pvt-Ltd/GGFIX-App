@@ -9,13 +9,14 @@ import { getConditionGroups, getConditionOptions } from '../../../api/masterData
 import { rf, rlh } from '../../../utils/responsive';
 import { BRAND, BRAND_FLOW } from '../../../theme/brand';
 import { FLOW, cardShadow, FlowCta, FlowDecor, FlowHeader, useHideStackHeader } from '../service-booking-customer/FlowChrome';
+import ConditionArt, { artKind, artVariant, deviceShape } from './ConditionArt';
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   groupTitle: { fontSize: rf(13), fontWeight: '700', color: colors.text, marginBottom: 6 },
   row: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -3 },
   optTile: { width: '31.33%', marginHorizontal: '1%', marginBottom: 6, paddingVertical: 7, paddingHorizontal: 4, borderWidth: 1, borderColor: colors.border, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', minHeight: 44 },
-  optTileActive: { borderColor: '#004C40', borderWidth: 2 },
+  optTileActive: { borderColor: '#035C6C', borderWidth: 2 },
   optLabel: { fontSize: rf(10), lineHeight: rlh(13), color: colors.text, textAlign: 'center', fontWeight: '600' },
   editBanner: { backgroundColor: BRAND.yellowSoft, borderColor: BRAND.yellowLine, borderWidth: 1, borderRadius: 12, padding: 10, marginBottom: 4, flexDirection: 'row', alignItems: 'center' },
   editBannerTitle: { fontSize: rf(10), fontWeight: '800', color: BRAND.ink, letterSpacing: 0.5 },
@@ -24,7 +25,7 @@ const styles = StyleSheet.create({
 });
 
 const FALLBACK_GROUPS = [
-  { id: 'SCREEN_VISIBLE', code: 'SCREEN_VISIBLE', name: 'Screen Condition on your Device', options: ['No Damage', 'Minor Spot or patches', 'Major Spot or patches', 'Major Spot or patches', 'Discoloration'] },
+  { id: 'SCREEN_VISIBLE', code: 'SCREEN_VISIBLE', name: 'Screen Condition on your Device', options: ['No Damage', 'Minor Spot or patches', 'Major Spot or patches', 'Multiple Visible line', 'Discoloration'] },
   { id: 'TOUCH_GLASS', code: 'TOUCH_GLASS', name: 'Touch Glass Condition on your device', options: ['No Damage', '1 or 2 Minor Scratches', 'Heavy Scratches', 'TouchGlass Broken'] },
   { id: 'BACK_PANEL', code: 'BACK_PANEL', name: 'Back Panel Condition on your Device', options: ['No Damage', '1 or 2 Minor Scratches', 'Heavy Scratches or deep scratches', 'Light Cover Marks on Body', 'Heavy Cover Marks on Body', 'Back Panel Broken'] },
   { id: 'SIDE_PANEL', code: 'SIDE_PANEL', name: 'side and Center Panel Condition on your device', options: ['No defects', 'Minor dent or scratches', 'Major dent or heavy scratches', 'Center panel broken or cracked or bend'] },
@@ -156,8 +157,9 @@ export default function SellScreenConditionScreen({ navigation, route }) {
           const opts = (optsByGroup[g.id]?.length ? optsByGroup[g.id] : (g.options || []).map((o, i) => ({ id: `${g.id}-${i}`, label: o })));
           const GIcon = groupIcon(g);
           const cols = colsFor(opts);
+          const kind = artKind(g);
           return (
-            <View key={g.id} style={{ backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#E6E6E6', padding: 11, marginTop: 8, ...cardShadow }}>
+            <View key={g.id} style={{ backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#E8EAEE', padding: 11, marginTop: 8, ...cardShadow }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 7 }}>
                 <View style={{ height: 30, width: 30, borderRadius: 10, backgroundColor: BRAND.greenSoft, alignItems: 'center', justifyContent: 'center', marginRight: 9 }}>
                   <GIcon size={15} color={BRAND.green} />
@@ -167,11 +169,32 @@ export default function SellScreenConditionScreen({ navigation, route }) {
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -3 }}>
                 {opts.map((o) => {
                   const active = selected[g.id]?.id === o.id;
+                  const pick = () => setSelected({ ...selected, [g.id]: { id: o.id, label: o.label, groupCode: g.code, groupName: g.name } });
+                  if (kind) {
+                    const tileBg = active ? BRAND.greenSoft : '#F7F8FB';
+                    return (
+                      <View key={o.id} style={{ width: '33.33%', padding: 3 }}>
+                        <TouchableOpacity activeOpacity={0.85} onPress={pick} style={{ alignItems: 'center' }}>
+                          <View style={{ alignSelf: 'stretch', aspectRatio: 1.05, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: tileBg, borderWidth: active ? 1.5 : 1, borderColor: active ? BRAND.green : '#ECEEF3' }}>
+                            <ConditionArt kind={kind} variant={artVariant(o.label, kind)} size={58} bg={tileBg} shape={deviceShape(params.device)} />
+                            {active ? (
+                              <View style={{ position: 'absolute', top: 5, right: 5, height: 16, width: 16, borderRadius: 8, backgroundColor: BRAND.green, alignItems: 'center', justifyContent: 'center' }}>
+                                <Check size={10} color="#fff" strokeWidth={3} />
+                              </View>
+                            ) : null}
+                          </View>
+                          <Text style={{ marginTop: 5, textAlign: 'center', fontSize: rf(11), lineHeight: rlh(14), fontWeight: active ? '700' : '600', color: active ? BRAND.ink : BRAND.body }}>
+                            {o.label}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  }
                   return (
                     <View key={o.id} style={{ width: `${100 / cols}%`, padding: 3 }}>
                       <TouchableOpacity
                         activeOpacity={0.85}
-                        onPress={() => setSelected({ ...selected, [g.id]: { id: o.id, label: o.label, groupCode: g.code, groupName: g.name } })}
+                        onPress={pick}
                         style={{
                           flexDirection: 'row', alignItems: 'center', minHeight: 40, borderRadius: 12,
                           paddingVertical: 7, paddingHorizontal: cols === 3 ? 7 : 10,

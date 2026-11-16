@@ -5,12 +5,12 @@ import { cn } from './cn';
 import { rf } from '../../utils/responsive';
 
 const palettes = {
-  blue: ['#EEF2FF', '#E0E7FF'],
-  emerald: ['#ECFDF5', '#D1FAE5'],
-  amber: ['#FFFBEB', '#FEF3C7'],
-  rose: ['#FFF1F2', '#FFE4E6'],
-  violet: ['#F5F3FF', '#EDE9FE'],
-  sky: ['#F0F9FF', '#E0F2FE'],
+  blue: ['#E6F3FA', '#E6F3FA'],
+  emerald: ['#F0F8F9', '#C7E6EA'],
+  amber: ['#FFF4D6', '#FFF4D6'],
+  rose: ['#FEEBEA', '#FEEBEA'],
+  violet: ['#E6F3FA', '#E6F3FA'],
+  sky: ['#E6F3FA', '#E6F3FA'],
 };
 
 export function ServiceCategoryCard({
@@ -29,7 +29,7 @@ export function ServiceCategoryCard({
     <Pressable
       onPress={onPress}
       className={cn('rounded-2xl overflow-hidden border border-border', className)}
-      style={{ shadowColor: '#0F172A', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1 }}
+      style={{ shadowColor: '#1C3053', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1 }}
     >
       <LinearGradient colors={colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
         <View className={padding}>

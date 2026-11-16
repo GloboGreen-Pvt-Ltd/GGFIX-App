@@ -6,7 +6,7 @@ import { tokens } from '../../theme/colors';
 import { rf } from '../../utils/responsive';
 
 const shadow = {
-  shadowColor: '#0F172A',
+  shadowColor: '#1C3053',
   shadowOpacity: 0.06,
   shadowRadius: 12,
   shadowOffset: { width: 0, height: 4 },

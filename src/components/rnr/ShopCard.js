@@ -5,11 +5,11 @@ import { cn } from './cn';
 import { rf } from '../../utils/responsive';
 import { BRAND } from '../../theme/brand';
 
-// Brand palette (09AD2A · 1E1E1E · F8F8F8 · F3F3F3 · F3BF23 · F84141).
-const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
-const LINE = '#E6E6E6';
-const MINT = '#EAF8EC';
-const MUTED = '#6B6B6B';
+// Brand palette (035C6C · 111111 · F3F4F6 · F3F4F6 · FAA700 · F32C26).
+const GREEN_TEXT = '#035C6C'; // #035C6C shaded for text on white
+const LINE = '#E8EAEE';
+const MINT = '#E5F3F5';
+const MUTED = '#606E87';
 
 const cardShadow = {
   shadowColor: BRAND.ink,

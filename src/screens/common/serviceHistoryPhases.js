@@ -74,10 +74,10 @@ const LABEL_BY_KEY = Object.fromEntries(
   SHOP_BOOKING_STATUS_OPTIONS.map((o) => [o.value, o.label]),
 );
 
-// Brand palette: #09AD2A for reached steps, neutral greys for upcoming ones.
-const SUCCESS = '#09AD2A';      // green dot / line for completed steps
-const DOT_BORDER = '#C9C9C9';   // gray ring around upcoming steps
-const LINE_PENDING = '#E6E6E6'; // connector between unreached steps
+// Brand palette: #035C6C for reached steps, neutral greys for upcoming ones.
+const SUCCESS = '#035C6C';      // green dot / line for completed steps
+const DOT_BORDER = '#D2D6DD';   // gray ring around upcoming steps
+const LINE_PENDING = '#E8EAEE'; // connector between unreached steps
 
 // Inline media block rendered under a step event row when the event carries
 // optional attachments. Currently only the technician's compliance-note emit
@@ -127,11 +127,11 @@ function EventMedia({ audioUrl, imageUrls }) {
           <TouchableOpacity
             onPress={togglePlay}
             className="flex-row items-center rounded-md px-2 py-1"
-            style={{ borderWidth: 1, borderColor: '#E6E6E6', backgroundColor: '#FFFFFF' }}
+            style={{ borderWidth: 1, borderColor: '#E8EAEE', backgroundColor: '#FFFFFF' }}
           >
             {playing
-              ? <Pause size={12} color="#1E1E1E" />
-              : <Play size={12} color="#1E1E1E" />}
+              ? <Pause size={12} color="#111111" />
+              : <Play size={12} color="#111111" />}
             <Text className="text-text ml-1" style={{ fontSize: rf(10) }}>Voice note</Text>
           </TouchableOpacity>
         </View>
@@ -252,18 +252,18 @@ export function ServiceHistoryTimeline({ events, status, phaseFilter }) {
                 <Text
                   className={` flex-1 pr-2 ${
                     completed ? 'font-extrabold text-text' : 'font-bold text-text-muted'
-                  }`} style={{ fontSize: rf(12.5), color: completed ? '#1E1E1E' : '#8E8E8E' }}
+                  }`} style={{ fontSize: rf(12.5), color: completed ? '#111111' : '#8E97A9' }}
                 >
                   {opt.label}
                 </Text>
                 {isCurrent ? (
-                  <View className="rounded-full px-1.5 py-0.5 ml-1" style={{ backgroundColor: '#EAF8EC' }}>
-                    <Text className="font-extrabold" style={{ fontSize: rf(8.5), color: '#078F23' }}>NOW</Text>
+                  <View className="rounded-full px-1.5 py-0.5 ml-1" style={{ backgroundColor: '#E5F3F5' }}>
+                    <Text className="font-extrabold" style={{ fontSize: rf(8.5), color: '#035C6C' }}>NOW</Text>
                   </View>
                 ) : null}
               </View>
               {ev?.createdAt ? (
-                <Text className="text-text-muted" style={{ fontSize: rf(10), marginTop: 2, color: '#6B6B6B' }}>{fmt(ev.createdAt)}</Text>
+                <Text className="text-text-muted" style={{ fontSize: rf(10), marginTop: 2, color: '#606E87' }}>{fmt(ev.createdAt)}</Text>
               ) : null}
               {ev?.note && ev.note !== opt.label ? (
                 <Text className="text-text mt-0.5" style={{ fontSize: rf(11) }}>{ev.note}</Text>

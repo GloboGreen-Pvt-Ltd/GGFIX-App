@@ -9,11 +9,11 @@ import { isShopOpen } from '../../../utils/shopHours';
 import { rf } from '../../../utils/responsive';
 import { BRAND } from '../../../theme/brand';
 
-const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
-const LINE = '#E6E6E6';
-const MINT = '#EAF8EC';
-const YELLOW_SOFT = '#FEF6DA';
-const MUTED = '#6B6B6B';
+const GREEN_TEXT = '#035C6C'; // #035C6C shaded for text on white
+const LINE = '#E8EAEE';
+const MINT = '#E5F3F5';
+const YELLOW_SOFT = '#FFF4D6';
+const MUTED = '#606E87';
 
 const RADIUS_OPTIONS = [5, 10, 15, 20];
 
@@ -93,7 +93,7 @@ export default function NearbyShopsScreen({ navigation }) {
             <Text style={{ flex: 1, marginLeft: 7, fontSize: rf(11), color: BRAND.ink }} numberOfLines={1}>
               {locError || 'Set default address for distance results'}
             </Text>
-            <Pressable onPress={refreshLoc} className="active:opacity-70" style={{ borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3, backgroundColor: 'rgba(243,191,35,0.28)' }}>
+            <Pressable onPress={refreshLoc} className="active:opacity-70" style={{ borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3, backgroundColor: 'rgba(250,167,0,0.28)' }}>
               <Text style={{ fontSize: rf(10), fontWeight: '700', color: BRAND.ink }}>Retry</Text>
             </Pressable>
           </View>

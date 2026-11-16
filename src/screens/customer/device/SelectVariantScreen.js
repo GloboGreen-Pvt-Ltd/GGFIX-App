@@ -1,96 +1,231 @@
-import React, { useEffect, useLayoutEffect, useState } from 'react';
-import { Image, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View,
+  useWindowDimensions,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Smartphone,
-  Cpu,
-  HardDrive,
-  Palette,
+  Laptop,
+  Watch,
+  Headphones,
+  Tablet,
   Check,
-  Tag,
   Skull,
   Pencil,
   ChevronRight,
+  Plus,
 } from 'lucide-react-native';
 
 const P = BRAND;
 
-const cardStyle = {
-  backgroundColor: P.card,
-  borderRadius: 14,
-  padding: 11,
-  marginBottom: 9,
-  borderWidth: 1,
-  borderColor: '#E6E6E6',
-  shadowColor: P.ink,
-  shadowOpacity: 0.04,
-  shadowRadius: 8,
-  shadowOffset: { width: 0, height: 2 },
-  elevation: 1,
-};
+// Partner app "Device Details" look (service-booking-shop/DeviceDetailsScreen).
+const ACCENT = '#035C6C';
+const MINT = '#E5F3F5';
+const INK = '#111111';
+const MUTED = '#6B7280';
+const PLACEHOLDER = '#9CA3AF';
+const BORDER = '#E5E7EB';
+const PAGE_BG = '#F3F4F6';
 
 const sellConditionsFor = (deviceLabel) => [
   { key: 'WORKING', label: `Working ${deviceLabel}`, sub: 'Turns on · No major issues', icon: Smartphone, color: P.green, soft: P.greenSoft },
   { key: 'DEAD', label: `${deviceLabel} Dead / Unknown`, sub: "Won't turn on · Not sure", icon: Skull, color: P.red, soft: P.redSoft },
 ];
 import { notify } from '../../../components/confirm';
-import {
-  BottomActionBar,
-  Button,
-  Input,
-  Loader,
-  useBottomBarInset,
-} from '../../../components/rnr';
+import { Loader } from '../../../components/rnr';
 import { getModelOptions } from '../../../api/masterData';
 import useDeviceSpecForm from '../../../hooks/useDeviceSpecForm';
-import { imeiApplies } from '../../../utils/imeiPolicy';
+import { imeiApplies, cleanImei, isValidImei, imeiError } from '../../../utils/imeiPolicy';
 import { formatSpecValue, normalizeCapacity } from '../../../utils/deviceSpecs';
 import { createSavedDevice, updateSavedDevice } from '../../../api/customer';
-import { rf } from '../../../utils/responsive';
+import { rf, rs } from '../../../utils/responsive';
 import { BRAND } from '../../../theme/brand';
+import { useHideStackHeader } from '../service-booking-customer/FlowChrome';
+import { DP_COLUMN, DPNextBar, DPSection, DevicePickerHeader, PickedCard, PickerImage } from './DevicePickerChrome';
 
 const COLOR_SWATCHES = {
-  black: '#0F172A', white: '#F8FAFC', silver: '#CBD5E1', gold: '#F5E6B0',
-  rose: '#FBCFE8', blue: '#3B82F6', red: '#EF4444', green: '#004C40',
-  purple: '#A855F7', pink: '#EC4899', graphite: '#4B5563', midnight: '#1E1B4B',
-  starlight: '#FAF7F0', sierra: '#B7BCC8', alpine: '#3F4754', sky: '#7DD3FC',
-  phantom: '#475569', cosmic: '#312E81',
+  black: '#1C3053', white: '#F3F4F6', silver: '#D2D6DD', gold: '#FDE3A3',
+  rose: '#FEEBEA', blue: '#0788C9', red: '#F32C26', green: '#035C6C',
+  purple: '#0788C9', pink: '#0788C9', graphite: '#606E87', midnight: '#1C3053',
+  starlight: '#FFF4D6', sierra: '#8E97A9', alpine: '#111111', sky: '#9CCFE9',
+  phantom: '#606e87', cosmic: '#1C3053',
 };
 function swatchFor(name) {
   const n = (name || '').toLowerCase();
   for (const key of Object.keys(COLOR_SWATCHES)) {
     if (n.includes(key)) return COLOR_SWATCHES[key];
   }
-  return '#94A3B8';
+  return '#8E97A9';
 }
 
-function SectionHead({ icon: Icon, tint, color, title, right }) {
+const titleCase = (v) => String(v || '').toLowerCase().replace(/(^|[\s\-/(])([a-z0-9])/g, (_, s, c) => s + c.toUpperCase());
+
+// Leading icon for the Category / Model rows when there's no art.
+function categoryIconFor(code) {
+  if (code.includes('LAPTOP')) return Laptop;
+  if (code.includes('WATCH')) return Watch;
+  if (code.includes('AUDIO') || code.includes('HEADPHONE') || code.includes('EARBUD')) return Headphones;
+  if (code.includes('TABLET')) return Tablet;
+  return Smartphone;
+}
+
+// Labelled section (Partner DPSection): bold label, red * when required,
+// "(Optional)" otherwise.
+function Field({ label, required, optional, hint, children }) {
   return (
-    <View className="flex-row items-center" style={{ marginBottom: 8 }}>
-      <View className="rounded-full items-center justify-center mr-2" style={{ height: 28, width: 28, backgroundColor: tint }}>
-        <Icon size={13} color={color} />
-      </View>
-      <Text className="font-extrabold flex-1" style={{ fontSize: rf(12.5), color: P.ink }}>{title}</Text>
-      {right}
+    <View>
+      <DPSection title={label} required={required} optional={optional} style={hint ? { marginBottom: 2 } : null} />
+      {hint ? <Text style={{ fontSize: rf(12), color: MUTED, marginBottom: 8 }}>{hint}</Text> : null}
+      {children}
     </View>
   );
 }
 
-function TypedField({ value, onChangeText, placeholder, label, autoCapitalize = 'words' }) {
+// Partner OptionTile: bordered card, colour swatch dot (or icon) + name;
+// picked = mint fill + teal 1.5 border.
+function OptionTile({ label, swatch, icon: Icon, on, onPress }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: !!on }}
+      accessibilityLabel={label}
+      className="active:opacity-80"
+      style={{
+        minHeight: 50, paddingHorizontal: 8, paddingVertical: 6, borderRadius: 14,
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+        borderWidth: on ? 1.5 : 1, borderColor: on ? ACCENT : BORDER, backgroundColor: on ? MINT : '#FFFFFF',
+      }}
+    >
+      {swatch ? (
+        <View style={{ height: 18, width: 18, borderRadius: 9, marginRight: 8, backgroundColor: swatch, borderWidth: 1, borderColor: 'rgba(17,17,17,0.15)' }} />
+      ) : Icon ? (
+        <Icon size={16} color={ACCENT} strokeWidth={2.5} style={{ marginRight: 5 }} />
+      ) : null}
+      <Text
+        style={{ flexShrink: 1, fontSize: rf(13), lineHeight: rf(16.5), fontWeight: on ? '800' : '600', color: on ? ACCENT : INK, textAlign: 'center' }}
+        numberOfLines={2}
+        adjustsFontSizeToFit
+        minimumFontScale={0.8}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+const tilePct = (cols) => `${(100 / cols) - 0.1}%`;
+
+// Option cards in a `cols`-column grid; `other` adds a last "+ Other" card
+// ({ value, onPress }) that shows the typed value once one is set.
+function OptionGrid({ options, selected, onSelect, cols = 3, other }) {
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -4 }}>
+      {options.map((o) => (
+        <View key={o.key} style={{ width: tilePct(cols), padding: 4 }}>
+          <OptionTile label={o.label} swatch={o.swatch} on={selected != null && selected === o.key} onPress={() => onSelect(o.key)} />
+        </View>
+      ))}
+      {other ? (
+        <View style={{ width: tilePct(cols), padding: 4 }}>
+          <OptionTile label={other.value || 'Other'} icon={Plus} on={!!other.value} onPress={other.onPress} />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+// Partner FoldGrid: once a value is picked the grid folds to a compact card
+// (swatch · value · Change); Change reopens the grid, a new pick folds it,
+// tapping the picked card again clears it. `otherInput` ({ label,
+// placeholder, autoCapitalize, onDone }) adds "+ Other", which opens the typed
+// input under the grid.
+function FoldGrid({ valueLabel, valueSwatch, otherValue, otherInput, ...grid }) {
+  const [editing, setEditing] = useState(false);
+  const [typing, setTyping] = useState(false);
+  const [draft, setDraft] = useState('');
+  useEffect(() => { setEditing(false); setTyping(false); }, [valueLabel]);
+  if (valueLabel && !editing) {
+    return (
+      <View style={{ flexDirection: 'row', alignItems: 'center', minHeight: 60, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 14, borderWidth: 1, borderColor: BORDER, backgroundColor: '#FFFFFF' }}>
+        {valueSwatch ? (
+          <View style={{ height: 24, width: 24, borderRadius: 12, marginRight: 12, backgroundColor: valueSwatch, borderWidth: 1, borderColor: 'rgba(17,17,17,0.15)' }} />
+        ) : null}
+        <Text style={{ flex: 1, minWidth: 0, fontSize: 16, fontWeight: '800', color: INK }} numberOfLines={2}>{valueLabel}</Text>
+        <Pressable
+          onPress={() => setEditing(true)}
+          hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel={`Change ${valueLabel}`}
+          className="active:opacity-70"
+          style={{ marginLeft: 10, minHeight: 40, paddingHorizontal: 16, borderRadius: 999, borderWidth: 1.5, borderColor: ACCENT, alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Text style={{ fontSize: 14, fontWeight: '800', color: ACCENT }}>Change</Text>
+        </Pressable>
+      </View>
+    );
+  }
+  const done = () => {
+    const t = draft.trim();
+    setTyping(false);
+    if (t && otherInput) otherInput.onDone(t);
+  };
+  return (
+    <View>
+      <OptionGrid
+        {...grid}
+        other={otherInput ? { value: otherValue || '', onPress: () => { setDraft(otherValue || ''); setTyping(true); } } : undefined}
+      />
+      {typing && otherInput ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <TypedField
+              label={otherInput.label}
+              value={draft}
+              onChangeText={setDraft}
+              placeholder={otherInput.placeholder}
+              autoCapitalize={otherInput.autoCapitalize}
+              autoFocus
+              onSubmitEditing={done}
+            />
+          </View>
+          <Pressable
+            onPress={done}
+            accessibilityRole="button"
+            accessibilityLabel={`Use ${otherInput.label}`}
+            className="active:opacity-80"
+            style={{ marginLeft: 8, height: 46, minWidth: 64, paddingHorizontal: 14, borderRadius: 12, backgroundColor: ACCENT, alignItems: 'center', justifyContent: 'center' }}
+          >
+            <Text style={{ fontSize: rf(14), fontWeight: '800', color: '#FFFFFF' }}>Done</Text>
+          </Pressable>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+// Typed value (Partner "enter manually" box).
+function TypedField({ value, onChangeText, placeholder, label, autoCapitalize = 'words', keyboardType, autoFocus, onSubmitEditing }) {
   const [focused, setFocused] = useState(false);
   return (
     <TextInput
       value={value}
       onChangeText={onChangeText}
+      autoFocus={autoFocus}
+      onSubmitEditing={onSubmitEditing}
       placeholder={placeholder}
-      placeholderTextColor={P.muted}
+      placeholderTextColor={PLACEHOLDER}
       autoCapitalize={autoCapitalize}
       autoCorrect={false}
+      keyboardType={keyboardType}
       returnKeyType="done"
       accessibilityLabel={label}
+      cursorColor={ACCENT}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
       style={[
-        { height: 42, paddingHorizontal: 12, borderRadius: 12, fontSize: rf(13), color: P.ink, backgroundColor: P.bg, borderWidth: 1, borderColor: focused ? P.green : '#E6E6E6' },
+        { height: 46, paddingHorizontal: 12, borderRadius: 12, fontSize: rf(14), color: INK, backgroundColor: '#FFFFFF', borderWidth: focused ? 1.5 : 1, borderColor: focused ? ACCENT : BORDER },
         // Web only: drop the browser focus ring inside the rounded field.
         Platform.OS === 'web' ? { outlineStyle: 'none' } : null,
       ]}
@@ -98,35 +233,74 @@ function TypedField({ value, onChangeText, placeholder, label, autoCapitalize = 
   );
 }
 
-function ConditionTile({ o, active, onPress }) {
+// Device condition card (Partner Device Condition): radio top-right, filled
+// disc, title + note each reserving two lines so both cards match in height.
+function ConditionCard({ o, active, onPress }) {
+  const { width } = useWindowDimensions();
+  const tab = width >= 600;
+  const s = {
+    pad: tab ? rs(16) : rs(12), disc: tab ? rs(40) : rs(34), icon: tab ? rs(20) : rs(17),
+    tick: tab ? rs(24) : rs(20), title: tab ? rf(13) : rf(12), sub: tab ? rf(11) : rf(10),
+  };
+  const titleLH = Math.round(s.title * 1.3);
+  const subLH = Math.round(s.sub * 1.35);
   const Icon = o.icon;
   return (
     <Pressable
       onPress={onPress}
-      className="active:opacity-85"
       accessibilityRole="radio"
       accessibilityState={{ checked: active }}
-      style={{ flexDirection: 'row', alignItems: 'center', borderRadius: 12, paddingVertical: 8, paddingHorizontal: 8, borderWidth: 1.5, borderColor: active ? o.color : P.line, backgroundColor: active ? o.soft : P.bg }}
+      accessibilityLabel={`${o.label}, ${o.sub}`}
+      className="active:opacity-85"
+      style={{
+        flex: 1, alignItems: 'center', paddingTop: s.pad + rs(4), paddingBottom: s.pad, paddingHorizontal: rs(6),
+        borderRadius: rs(14), borderWidth: active ? 1.5 : 1, borderColor: active ? ACCENT : BORDER, backgroundColor: active ? MINT : '#FFFFFF',
+      }}
     >
-      <View style={{ height: 30, width: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', marginRight: 7, backgroundColor: active ? P.card : o.soft }}>
-        <Icon size={15} color={o.color} />
+      <View style={{ position: 'absolute', top: rs(7), right: rs(7), height: s.tick, width: s.tick, borderRadius: s.tick / 2, borderWidth: active ? 0 : 1.5, borderColor: '#D1D5DB', backgroundColor: active ? ACCENT : '#FFFFFF', alignItems: 'center', justifyContent: 'center' }}>
+        {active ? <Check size={Math.round(s.tick * 0.6)} color="#FFFFFF" strokeWidth={3} /> : null}
       </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={{ fontSize: rf(11.5), fontWeight: '800', color: P.ink, lineHeight: rf(14) }} numberOfLines={2}>{o.label}</Text>
-        <Text style={{ fontSize: rf(9.5), color: P.muted, marginTop: 1 }} numberOfLines={2}>{o.sub}</Text>
+      <View style={{ height: s.disc, width: s.disc, borderRadius: s.disc / 2, backgroundColor: o.color, alignItems: 'center', justifyContent: 'center' }}>
+        <Icon size={s.icon} color="#FFFFFF" />
       </View>
-      {active ? (
-        <View style={{ height: 16, width: 16, borderRadius: 8, marginLeft: 4, backgroundColor: o.color, alignItems: 'center', justifyContent: 'center' }}>
-          <Check size={10} color="#fff" />
-        </View>
-      ) : null}
+      <Text
+        style={{ marginTop: rs(8), minHeight: titleLH * 2, fontSize: s.title, lineHeight: titleLH, fontWeight: '800', color: INK, textAlign: 'center' }}
+        numberOfLines={2}
+        adjustsFontSizeToFit
+        minimumFontScale={0.85}
+      >
+        {o.label}
+      </Text>
+      <Text style={{ minHeight: subLH * 2, fontSize: s.sub, lineHeight: subLH, color: MUTED, textAlign: 'center' }} numberOfLines={2}>
+        {o.sub}
+      </Text>
     </Pressable>
   );
 }
 
+function SummaryLine({ label, value }) {
+  return (
+    <Text style={{ marginTop: 4, fontSize: rf(12), color: MUTED }} numberOfLines={1}>
+      {label}: <Text style={{ fontWeight: '700', color: INK }}>{value}</Text>
+    </Text>
+  );
+}
+
 export default function SelectVariantScreen({ navigation, route }) {
-  const bottomSpace = useBottomBarInset(96);
+  // This screen draws the Partner booking header itself.
+  useHideStackHeader(navigation);
+  const insets = useSafeAreaInsets();
+  // Option cards: 3 columns on phones, 5 / 6 on tablets (Partner optCols).
+  const { width: winW } = useWindowDimensions();
+  const optCols = winW >= 900 ? 6 : winW >= 600 ? 5 : 3;
   const flow = route?.params?.flow || 'PROFILE';
+  // Repair booking: Color / RAM / Storage are optional, as in the Partner app's
+  // booking (the backend accepts nulls). Sell / profile keep their rules.
+  const optionalVariant = flow === 'REPAIR';
+  // "+ Other" typed RAM / storage travels as a label with no option id, so it
+  // is offered only where those are optional (repair) — sell pricing and saved
+  // devices rely on the option ids. A typed colour is a plain string anywhere.
+  const variantOther = optionalVariant;
   const isEdit = !!route?.params?.deviceId;
   const modelId = route?.params?.modelId;
   const modelName = route?.params?.modelName || 'Device';
@@ -172,7 +346,6 @@ export default function SelectVariantScreen({ navigation, route }) {
   const [storage, setStorage] = useState(route?.params?.storageOptionId ? { id: route.params.storageOptionId, label: '' } : null);
   const [color, setColor] = useState(route?.params?.color ? { id: route.params.color, name: route.params.color } : null);
   const [imei, setImei] = useState(route?.params?.imei || '');
-  const [imeiFocused, setImeiFocused] = useState(false);
   // When editing a sell order, restore the original working condition; for a
   // brand-new sell we default to WORKING.
   const [condition, setCondition] = useState(
@@ -308,33 +481,49 @@ export default function SelectVariantScreen({ navigation, route }) {
   };
   const onSkip = () => navigation.navigate('RepairSelectService', { device: buildCustomDevice() });
 
-  useLayoutEffect(() => {
-    if (!isCustomModel || flow !== 'REPAIR') return;
-    navigation.setOptions({
-      // Wider side slots (both sides, so the title stays centred) — the default
-      // 36 px slot only fits an icon and wrapped "Skip" one letter per line.
-      headerSideWidth: 60,
-      headerRight: () => (
-        <Pressable
-          onPress={onSkip}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Skip"
-          className="active:opacity-70"
-          style={{ height: 34, paddingHorizontal: 12, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F4FBF8', borderWidth: 1, borderColor: '#DCE7E2' }}
-        >
-          <Text numberOfLines={1} style={{ fontSize: rf(12.5), fontWeight: '800', color: '#078F23' }}>Skip</Text>
-        </Pressable>
-      ),
+  // Category / Brand / Model "Change": back to that picker when it's in the
+  // stack (it keeps its list), else open it with the params it reads. A saved
+  // device being edited (deviceId) isn't re-picked — the pickers don't carry
+  // deviceId, so the result would save as a new device.
+  const canRepick = !isEdit;
+  const goPicker = (name, extra = {}) => {
+    const routes = navigation.getState?.()?.routes || [];
+    if (routes.some((r) => r.name === name)) {
+      if (typeof navigation.popTo === 'function') navigation.popTo(name);
+      else navigation.navigate(name);
+      return;
+    }
+    navigation.navigate(name, {
+      flow,
+      categoryId,
+      categoryCode: route?.params?.categoryCode,
+      categoryName: route?.params?.categoryName,
+      categoryImage: route?.params?.categoryImage,
+      deviceTypeId: route?.params?.deviceTypeId,
+      deviceTypeName: route?.params?.deviceTypeName,
+      editSellOrderId: editSellOrderId || undefined,
+      editHints: editHints || undefined,
+      ...extra,
     });
-  }, [navigation, flow, isCustomModel, colorText, ramText, storageText, condition]);
+  };
+  const changeCategory = () => goPicker('SelectCategory');
+  const changeBrand = () => goPicker('SelectBrand');
+  const changeModel = () => goPicker('SelectModel', {
+    brandId,
+    brandName,
+    brandImage: route?.params?.brandImage,
+    customBrand: route?.params?.customBrand || undefined,
+    seriesId: route?.params?.seriesId,
+    seriesName: route?.params?.seriesName,
+  });
 
   const onContinue = async () => {
     if (isCustomModel) {
-      // Colour + storage are required; RAM stays optional (as in the Partner app).
-      if (!repairDead && (!colorText.trim() || (!noRamStorage && !storageText.trim()))) return;
+      // Colour + storage are required outside the repair booking; RAM stays
+      // optional (as in the Partner app). Repair: all optional.
+      if (!repairDead && !optionalVariant && (!colorText.trim() || (!noRamStorage && !storageText.trim()))) return;
       if (flow === 'SELL') {
-        if (!noImei && !imei.trim()) return;
+        if (!noImei && !isValidImei(imei)) return;
         navigation.navigate('SellScreening', {
           device: { ...buildCustomDevice(), imei: noImei ? undefined : imei },
           workingCondition: condition,
@@ -346,7 +535,7 @@ export default function SelectVariantScreen({ navigation, route }) {
       navigation.navigate('RepairSelectService', { device: buildCustomDevice() });
       return;
     }
-    if (!repairDead) {
+    if (!repairDead && !optionalVariant) {
       if (!color) return;
       if (useDeviceSpecs) { if (specsMissing) return; }
       else if (!noRamStorage && (!storage || (!specsStorageOnly && !ram))) return;
@@ -417,389 +606,340 @@ export default function SelectVariantScreen({ navigation, route }) {
     }
   };
 
-  if (loading || (specFlow && !isCustomModel && spec.loading)) return <Loader label="Loading variants..." />;
+  // Partner "Device Details" header (no step row). Repair shows its default
+  // "Device for <name>"; the other flows keep their own subtitle. A typed
+  // ("other") repair model keeps its Skip on the header's right.
+  const headerSubtitle = flow === 'SELL' ? 'Device you’re selling'
+    : flow === 'PROFILE' ? (isEdit ? 'Edit your saved device' : 'Add a device to your profile')
+    : flow === 'OWNER_LIST' ? 'Device you’re listing'
+    : undefined;
+  const header = (
+    <View>
+      <DevicePickerHeader navigation={navigation} subtitle={headerSubtitle} />
+      {isCustomModel && flow === 'REPAIR' ? (
+        <View pointerEvents="box-none" style={{ position: 'absolute', top: insets.top + 6, left: 14, right: 14, height: 36, alignItems: 'center' }}>
+          <View pointerEvents="box-none" style={{ width: '100%', maxWidth: 720, height: 36, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>
+            <Pressable
+              onPress={onSkip}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Skip"
+              className="active:opacity-70"
+              style={{ height: 34, paddingHorizontal: 12, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: ACCENT }}
+            >
+              <Text numberOfLines={1} style={{ fontSize: rf(12.5), fontWeight: '800', color: ACCENT }}>Skip</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+    </View>
+  );
+
+  if (loading || (specFlow && !isCustomModel && spec.loading)) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+        {header}
+        <Loader label="Loading variants..." />
+      </View>
+    );
+  }
 
   const ready = isCustomModel
-    ? ((repairDead || (!!colorText.trim() && (noRamStorage || !!storageText.trim()))) && (flow !== 'SELL' || noImei || !!imei.trim()))
-    : repairDead
+    ? ((repairDead || optionalVariant || (!!colorText.trim() && (noRamStorage || !!storageText.trim()))) && (flow !== 'SELL' || noImei || isValidImei(imei)))
+    : (repairDead || optionalVariant)
     ? true
     : (
         color &&
         (useDeviceSpecs ? !specsMissing : (noRamStorage || (storage && (specsStorageOnly || ram)))) &&
-        (flow !== 'SELL' || noImei || imei.trim())
+        (flow !== 'SELL' || noImei || isValidImei(imei))
       );
-  const ctaLabel = flow === 'PROFILE'
-    ? (isEdit ? 'Update Device' : 'Save Device')
-    : flow === 'REPAIR' ? 'Choose Repair Service'
-    : flow === 'OWNER_LIST' ? 'Choose Description'
-    : 'Continue';
-
-  const tileStyle = (active) => ({
-    paddingVertical: 9,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: active ? P.green : P.line,
-    backgroundColor: active ? P.green : P.bg,
-  });
-  const tileText = (active) => ({ fontSize: rf(13), color: active ? '#fff' : P.ink });
+  // Saving to the profile keeps its wording; the other flows use Partner's "Next".
+  const ctaLabel = flow === 'PROFILE' ? (isEdit ? 'Update Device' : 'Save Device') : 'Next';
   const customSummary = [colorText, ramText, storageText].map((v) => v.trim()).filter(Boolean).join(' · ')
     || (repairDead ? "Won't power on · inspected at the shop" : 'Type the colour and storage');
 
+  // ── Row values ─────────────────────────────────────────────────────────
+  const seriesName = route?.params?.seriesName;
+  const categoryLabel = route?.params?.categoryName
+    || (categoryCode ? titleCase(categoryCode.replace(/_/g, ' ')) : conditionDeviceLabel);
+  const CategoryIcon = categoryIconFor(categoryCode);
+  const colorHex = (name) => colorsList.find((c) => (c.name || c.id) === name)?.hexCode || swatchFor(name);
+  // The listed variant matching the picked RAM + storage (same test the old tiles used).
+  const variantActive = (sp) => !!storage && !storage.custom && (sp.storageOnly
+    ? storage.id === sp.storageOptionId
+    : (ram?.id === sp.ramOptionId && storage.id === sp.storageOptionId));
+  const variantValue = specs.find(variantActive)?.label || [ram?.label, storage?.label].filter(Boolean).join(' + ');
+  const specLabel = (f) => {
+    const v = spec.values[f.key];
+    if (!v) return '';
+    return f.options.find((o) => o.value === v)?.label || formatSpecValue(f.key, v) || String(v);
+  };
+
+  // ── Inline option grids (Partner FoldGrid): the same options and the same
+  // state updates the sheets / chips had — tapping the picked card clears it.
+  const colorKey = (c) => c.name || c.id;
+  const colorPicked = color ? colorsList.find((c) => colorKey(c) === color.name || colorKey(c) === color.id) : null;
+  const colorListed = !!colorPicked;
+  const colorOptions = colorsList.map((c) => ({ key: colorKey(c), label: colorKey(c), swatch: c.hexCode || swatchFor(colorKey(c)) }));
+  const pickColor = (k) => {
+    const c = colorsList.find((x) => colorKey(x) === k);
+    const active = color?.name === k || color?.id === k;
+    setColor(active ? null : { id: c?.id || k, name: k });
+  };
+  const pickedVariant = specs.find(variantActive);
+  const pickVariant = (k) => {
+    const sp = specs.find((x) => x.id === k);
+    if (!sp) return;
+    if (variantActive(sp)) { setRam(null); setStorage(null); return; }
+    setRam(sp.storageOnly ? null : { id: sp.ramOptionId, label: sp.ramLabel });
+    setStorage({ id: sp.storageOptionId, label: sp.storageLabel });
+  };
+  // A typed RAM / storage ("+ Other", repair only): label without an option id.
+  const typedOption = (label) => ({ id: undefined, label, custom: true });
+
+  // ── "Select Device" summary ────────────────────────────────────────────
+  const crumbs = [brandName, seriesName, modelName].filter(Boolean);
+  const showSpecs = !noRamStorage && !repairDead;
+  const summaryColor = isCustomModel ? colorText.trim() : (color?.name || '');
+  const sumRam = isCustomModel ? ramText.trim() : (chosenRam?.label || '');
+  const sumStorage = isCustomModel ? storageText.trim() : (chosenStorage?.label || '');
+  const summarySpecs = useDeviceSpecs
+    ? (repairDead ? '' : deviceSpecFields.map(specLabel).filter(Boolean).join(' / '))
+    : (showSpecs ? [sumRam, sumStorage].filter(Boolean).join(' / ') : '');
+  const summarySpecsLabel = useDeviceSpecs ? 'Specs' : (sumRam ? 'RAM / Storage' : 'Storage');
+  const modelNumber = route?.params?.modelNumber;
+
   return (
-    <View className="flex-1" style={{ backgroundColor: P.bg }}>
-      <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: bottomSpace }}>
+    <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+      {header}
 
-        {isEditingSellOrder ? (
-          <View className="rounded-xl px-3 py-2 mb-3 flex-row items-center" style={{ backgroundColor: P.yellowSoft, borderWidth: 1, borderColor: 'rgba(243,191,35,0.45)' }}>
-            <Pencil size={13} color={P.ink} />
-            <View className="flex-1 ml-2">
-              <Text className="font-extrabold tracking-wider" style={{ fontSize: rf(10), color: P.ink }}>EDITING ORDER</Text>
-              <Text className="font-semibold" style={{ fontSize: rf(12), color: P.ink }} numberOfLines={1}>
-                We've kept your existing color, storage and IMEI — change any of them below.
-              </Text>
-            </View>
-          </View>
-        ) : null}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={DP_COLUMN}>
 
-        {/* Device summary */}
-        <View className="rounded-2xl p-3 mb-3 flex-row items-center"
-              style={[cardStyle, { shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 2 }]}>
-          <View className="items-center justify-center mr-3 overflow-hidden" style={{ height: 48, width: 48, borderRadius: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: P.line }}>
-            {modelImageUrl ? (
-              <Image source={{ uri: modelImageUrl }} style={{ width: 44, height: 44 }} resizeMode="contain" />
-            ) : (
-              <Smartphone size={22} color={P.green} />
-            )}
-          </View>
-          <View className="flex-1">
-            <View className="flex-row items-center">
-              <Text className="uppercase tracking-widest" style={{ fontSize: rf(9.5), color: P.greenDeep, fontWeight: '800' }}>Your Device</Text>
-              {isCustomModel ? (
-                <View style={{ marginLeft: 6, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 1, backgroundColor: P.yellowSoft }}>
-                  <Text style={{ fontSize: rf(9), fontWeight: '800', color: P.ink }}>OTHER MODEL</Text>
+            {isEditingSellOrder ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 14, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 14, backgroundColor: P.yellowSoft, borderWidth: 1, borderColor: 'rgba(250,167,0,0.45)' }}>
+                <Pencil size={14} color={P.ink} />
+                <View style={{ flex: 1, minWidth: 0, marginLeft: 8 }}>
+                  <Text style={{ fontSize: rf(10), fontWeight: '800', letterSpacing: 0.8, color: P.ink }}>EDITING ORDER</Text>
+                  <Text style={{ fontSize: rf(12), fontWeight: '600', color: P.ink }} numberOfLines={2}>
+                    We've kept your existing color, storage and IMEI — change any of them below.
+                  </Text>
                 </View>
-              ) : null}
-            </View>
-            <Text className="font-extrabold mt-0.5" style={{ fontSize: rf(14), color: P.ink }} numberOfLines={2}>{modelName}</Text>
+              </View>
+            ) : null}
+
+            {/* ── Category / Brand / Model — Change goes back to that picker. */}
+            <Field label="Category">
+              <PickedCard
+                image={route?.params?.categoryImage}
+                icon={CategoryIcon}
+                title={categoryLabel}
+                onChange={canRepick ? changeCategory : undefined}
+              />
+            </Field>
             {brandName ? (
-              <Text className="mt-0.5" style={{ fontSize: rf(11), color: P.muted }}>{brandName}</Text>
+              <Field label="Brand">
+                <PickedCard
+                  image={route?.params?.brandImage}
+                  initial={brandName}
+                  title={brandName}
+                  subtitle={route?.params?.customBrand ? 'Not in list' : null}
+                  onChange={canRepick ? changeBrand : undefined}
+                />
+              </Field>
             ) : null}
-          </View>
-        </View>
+            <Field label="Model">
+              <PickedCard
+                image={modelImageUrl}
+                imageSize={44}
+                icon={CategoryIcon}
+                title={modelName}
+                subtitle={seriesName || (isCustomModel ? 'Other model · not in list' : null)}
+                onChange={canRepick ? changeModel : undefined}
+              />
+            </Field>
 
-        {/* Device condition (repair flow) — pick "Working" to choose the exact
-            color/RAM/storage, or "Dead" when the device won't power on. A dead
-            device skips the RAM/Storage pickers and can go straight to choosing
-            a repair service. */}
-        {flow === 'REPAIR' ? (
-          <View className="rounded-2xl p-3 mb-3" style={cardStyle}>
-            <Text className="font-extrabold tracking-widest mb-2" style={{ fontSize: rf(10), color: P.muted }}>{conditionDeviceLabel.toUpperCase()} CONDITION</Text>
-            <View className="flex-row -mx-1">
-              {SELL_CONDITIONS.map((o) => (
-                <View key={o.key} className="px-1 flex-1">
-                  <ConditionTile o={o} active={condition === o.key} onPress={() => chooseCondition(o.key)} />
-                </View>
-              ))}
-            </View>
-            {repairDead ? (
-              <View className="flex-row items-center mt-2.5 rounded-xl px-3 py-2" style={{ backgroundColor: P.redSoft, borderWidth: 1, borderColor: 'rgba(248,65,65,0.25)' }}>
-                <Skull size={13} color={P.red} />
-                <Text className="ml-2 flex-1" style={{ fontSize: rf(11), color: P.ink }}>
-                  Since your {conditionDeviceLabel.toLowerCase()} won't power on, we'll skip RAM &amp; Storage and inspect it at the shop.
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-
-        {/* Selection summary chips */}
-        {!isCustomModel && (chosenRam || chosenStorage || color) ? (
-          <View className="flex-row flex-wrap mb-3">
-            {chosenRam?.label ? (
-              <View className="rounded-full px-3 py-1 mr-2 mb-2 flex-row items-center" style={{ backgroundColor: P.greenSoft }}>
-                <Cpu size={11} color={P.green} />
-                <Text className="font-bold ml-1" style={{ fontSize: rf(11), color: P.ink }}>{chosenRam.label}</Text>
-              </View>
-            ) : null}
-            {chosenStorage?.label ? (
-              <View className="rounded-full px-3 py-1 mr-2 mb-2 flex-row items-center" style={{ backgroundColor: P.inkSoft }}>
-                <HardDrive size={11} color={P.ink} />
-                <Text className="font-bold ml-1" style={{ fontSize: rf(11), color: P.ink }}>{chosenStorage.label}</Text>
-              </View>
-            ) : null}
-            {color?.name ? (
-              <View className="rounded-full px-3 py-1 mr-2 mb-2 flex-row items-center" style={{ backgroundColor: P.yellowSoft }}>
-                <View className="h-3 w-3 rounded-full mr-1" style={{ backgroundColor: swatchFor(color.name), borderWidth: 1, borderColor: P.hairline }} />
-                <Text className="font-bold" style={{ fontSize: rf(11), color: P.ink }}>{color.name}</Text>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-
-        {/* Typed colour / RAM / storage — a model that isn't in the catalogue */}
-        {isCustomModel ? (
-          <View className="rounded-2xl p-3 mb-3" style={cardStyle}>
-            <SectionHead icon={Palette} tint={P.yellowSoft} color={P.yellow} title="Model Color" right={<Text style={{ fontSize: rf(11), color: P.muted }}>{repairDead ? 'Optional' : 'Type the colour'}</Text>} />
-            <TypedField label="Model colour" value={colorText} onChangeText={setColorText} placeholder="e.g. Sea Green" />
-            {!noRamStorage && !repairDead ? (
-              <>
-                <View style={{ height: 12 }} />
-                <SectionHead icon={Cpu} tint={P.greenSoft} color={P.green} title="RAM" right={<Text style={{ fontSize: rf(11), color: P.muted }}>Optional</Text>} />
-                <TypedField label="RAM" value={ramText} onChangeText={setRamText} placeholder="e.g. 8 GB" autoCapitalize="characters" />
-                <View style={{ height: 12 }} />
-                <SectionHead icon={HardDrive} tint={P.inkSoft} color={P.ink} title="Storage" right={<Text style={{ fontSize: rf(11), color: P.muted }}>Type the capacity</Text>} />
-                <TypedField label="Storage" value={storageText} onChangeText={setStorageText} placeholder="e.g. 128 GB" autoCapitalize="characters" />
-              </>
-            ) : null}
-            <Text style={{ marginTop: 10, fontSize: rf(10.5), color: P.muted }}>{`Saved on this ${flow === 'SELL' ? 'sell order' : 'booking'} only — not added to the catalogue.`}</Text>
-          </View>
-        ) : (
-        /* Color picker */
-        <View className="rounded-2xl p-3 mb-3" style={cardStyle}>
-          <SectionHead
-            icon={Palette}
-            tint={P.yellowSoft}
-            color={P.yellow}
-            title="Color"
-            right={color ? (
-              <View className="flex-row items-center">
-                <View className="h-4 w-4 rounded-full mr-1" style={{ backgroundColor: swatchFor(color.name), borderWidth: 1, borderColor: P.hairline }} />
-                <Text className="font-bold" style={{ fontSize: rf(11), color: P.ink }} numberOfLines={1}>{color.name}</Text>
-              </View>
-            ) : null}
-          />
-          <View className="flex-row flex-wrap -mx-1">
-            {colorsList.map((c) => {
-              const name = c.name || c.id;
-              const active = color?.name === name || color?.id === name;
-              const sw = c.hexCode || swatchFor(name);
-              return (
-                <View key={c.id || name} className="p-1" style={{ width: '33.333%' }}>
-                  <Pressable
-                    onPress={() => setColor(active ? null : { id: c.id || name, name })}
-                    className="rounded-xl p-2.5 items-center"
-                    style={{ paddingVertical: 7, borderRadius: 12, borderWidth: 1, borderColor: active ? P.green : P.line, backgroundColor: active ? P.greenSoft : P.bg }}
-                  >
-                    <View className="flex-row items-center justify-center">
-                      <View className="h-5 w-5 rounded-full" style={{ backgroundColor: sw, borderWidth: 1, borderColor: P.hairline }} />
-                      {active ? (
-                        <View className="ml-1 h-4 w-4 rounded-full items-center justify-center" style={{ backgroundColor: P.green }}>
-                          <Check size={10} color="#fff" />
-                        </View>
-                      ) : null}
+            {/* Device condition — Sell only (repair bookings don't ask; the
+                device is treated as working and the shop inspects it). */}
+            {flow === 'SELL' ? (
+              <Field label={`${conditionDeviceLabel} Condition`} required>
+                <View style={{ flexDirection: 'row', marginHorizontal: -rs(4) }}>
+                  {SELL_CONDITIONS.map((o) => (
+                    <View key={o.key} style={{ flex: 1, paddingHorizontal: rs(4) }}>
+                      <ConditionCard o={o} active={condition === o.key} onPress={() => chooseCondition(o.key)} />
                     </View>
-                    <Text
-                      className="font-bold mt-1.5 text-center" style={{ fontSize: rf(11), color: P.ink }}
-                      numberOfLines={1}
-                    >
-                      {name}
+                  ))}
+                </View>
+                {repairDead ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 12, backgroundColor: P.redSoft, borderWidth: 1, borderColor: 'rgba(243,44,38,0.25)' }}>
+                    <Skull size={14} color={P.red} />
+                    <Text style={{ flex: 1, marginLeft: 8, fontSize: rf(12), color: INK }}>
+                      Since your {conditionDeviceLabel.toLowerCase()} won't power on, we'll skip RAM &amp; Storage and inspect it at the shop.
                     </Text>
-                  </Pressable>
-                </View>
-              );
-            })}
-          </View>
-        </View>
-        )}
-
-        {/* Model variants — RAM + Storage combos, or storage-only sizes the model ships */}
-        {!isCustomModel && !noRamStorage && !useDeviceSpecs && specs.length > 0 && !repairDead ? (
-        <View className="rounded-2xl p-3 mb-3" style={cardStyle}>
-          <SectionHead
-            icon={HardDrive}
-            tint={P.greenSoft}
-            color={P.green}
-            title={specsStorageOnly ? 'Storage' : 'RAM & Storage'}
-            right={<Text style={{ fontSize: rf(11), color: P.muted }}>Variant</Text>}
-          />
-          <View className="flex-row flex-wrap -mx-1">
-            {specs.map((sp) => {
-              const active = sp.storageOnly
-                ? storage?.id === sp.storageOptionId
-                : (ram?.id === sp.ramOptionId && storage?.id === sp.storageOptionId);
-              return (
-                <View key={sp.id} className="p-1" style={{ width: '50%' }}>
-                  <Pressable
-                    onPress={() => {
-                      if (active) { setRam(null); setStorage(null); return; }
-                      setRam(sp.storageOnly ? null : { id: sp.ramOptionId, label: sp.ramLabel });
-                      setStorage({ id: sp.storageOptionId, label: sp.storageLabel });
-                    }}
-                    className="rounded-xl py-3 items-center"
-                    style={tileStyle(active)}
-                  >
-                    <Text className="font-extrabold" style={tileText(active)} numberOfLines={1}>
-                      {sp.label}
-                    </Text>
-                  </Pressable>
-                </View>
-              );
-            })}
-          </View>
-        </View>
-        ) : null}
-
-        {/* RAM (fallback: model has no variants configured) */}
-        {!isCustomModel && !noRamStorage && !useDeviceSpecs && specs.length === 0 && !repairDead ? (
-        <View className="rounded-2xl p-3 mb-3" style={cardStyle}>
-          <SectionHead
-            icon={Cpu}
-            tint={P.greenSoft}
-            color={P.green}
-            title="RAM"
-            right={<Text style={{ fontSize: rf(11), color: P.muted }}>Memory</Text>}
-          />
-          <View className="flex-row flex-wrap -mx-1">
-            {rams.map((r) => {
-              const active = ram?.id === r.id;
-              return (
-                <View key={r.id} className="p-1" style={{ width: '33.333%' }}>
-                  <Pressable
-                    onPress={() => setRam(active ? null : r)}
-                    className="rounded-xl py-3 items-center"
-                    style={tileStyle(active)}
-                  >
-                    <Text className="font-extrabold" style={tileText(active)}>{r.label}</Text>
-                  </Pressable>
-                </View>
-              );
-            })}
-          </View>
-        </View>
-        ) : null}
-
-        {/* Storage (fallback) */}
-        {!isCustomModel && !noRamStorage && !useDeviceSpecs && specs.length === 0 && !repairDead ? (
-        <View className="rounded-2xl p-3 mb-3" style={cardStyle}>
-          <SectionHead
-            icon={HardDrive}
-            tint={P.inkSoft}
-            color={P.ink}
-            title="Storage"
-            right={<Text style={{ fontSize: rf(11), color: P.muted }}>Capacity</Text>}
-          />
-          <View className="flex-row flex-wrap -mx-1">
-            {storages.map((s) => {
-              const active = storage?.id === s.id;
-              return (
-                <View key={s.id} className="p-1" style={{ width: '33.333%' }}>
-                  <Pressable
-                    onPress={() => setStorage(active ? null : s)}
-                    className="rounded-xl py-3 items-center"
-                    style={tileStyle(active)}
-                  >
-                    <Text className="font-extrabold" style={tileText(active)}>{s.label}</Text>
-                  </Pressable>
-                </View>
-              );
-            })}
-          </View>
-        </View>
-        ) : null}
-
-        {/* Laptop RAM / Storage / Storage Type — DB config fields (as in the Partner app) */}
-        {useDeviceSpecs && !repairDead ? deviceSpecFields.map((f) => (
-          <View key={f.key} className="rounded-2xl p-3 mb-3" style={cardStyle}>
-            <SectionHead
-              icon={f.key === 'ram' ? Cpu : HardDrive}
-              tint={f.key === 'ram' ? P.greenSoft : P.inkSoft}
-              color={f.key === 'ram' ? P.green : P.ink}
-              title={f.label}
-              right={<Text style={{ fontSize: rf(11), color: P.muted }}>{f.required ? f.hint : 'Optional'}</Text>}
-            />
-            <View className="flex-row flex-wrap -mx-1">
-              {f.options.map((o) => {
-                const active = spec.values[f.key] === o.value;
-                return (
-                  <View key={o.value} className="p-1" style={{ width: '33.333%' }}>
-                    <Pressable
-                      onPress={() => spec.setValue(f.key, active ? null : o.value)}
-                      className="rounded-xl py-3 items-center"
-                      style={tileStyle(active)}
-                    >
-                      <Text className="font-extrabold" style={tileText(active)} numberOfLines={1}>{o.label}</Text>
-                    </Pressable>
                   </View>
-                );
-              })}
-            </View>
-          </View>
-        )) : null}
+                ) : null}
+              </Field>
+            ) : null}
 
-        {/* IMEI for sell flow — only for mobile/smartphone categories. */}
-        {flow === 'SELL' && !noImei ? (
-          <View className="rounded-2xl p-3 mb-3" style={cardStyle}>
-            <SectionHead
-              icon={Tag}
-              tint={P.greenSoft}
-              color={P.green}
-              title="IMEI Number"
-              right={<Text style={{ fontSize: rf(10), color: P.muted }}>Required for sell</Text>}
-            />
-            <Text className="mb-1" style={{ fontSize: rf(11.5), fontWeight: '600', color: P.body }}>Dial *#06# on your device to find IMEI</Text>
-            <Input
-              placeholder="15-digit IMEI"
-              value={imei}
-              onChangeText={setImei}
-              keyboardType="number-pad"
-              placeholderTextColor={P.muted}
-              onFocus={() => setImeiFocused(true)}
-              onBlur={() => setImeiFocused(false)}
-              className="py-2"
-              style={{ fontSize: rf(13), color: P.ink, backgroundColor: P.bg, borderColor: imeiFocused ? P.green : P.line, shadowColor: P.green }}
-            />
-          </View>
-        ) : null}
+            {isCustomModel ? (
+              /* Typed colour / RAM / storage — a model that isn't in the catalogue */
+              <>
+                <Field label="Color" required={!repairDead && !optionalVariant} optional={repairDead || optionalVariant}>
+                  <TypedField label="Model colour" value={colorText} onChangeText={setColorText} placeholder="Enter colour, e.g. Sea Green" />
+                </Field>
+                {!noRamStorage && !repairDead ? (
+                  <>
+                    <Field label="RAM" optional>
+                      <TypedField label="RAM" value={ramText} onChangeText={setRamText} placeholder="Enter RAM, e.g. 8 GB" autoCapitalize="characters" />
+                    </Field>
+                    <Field label="Storage" required={!optionalVariant} optional={optionalVariant}>
+                      <TypedField label="Storage" value={storageText} onChangeText={setStorageText} placeholder="Enter storage, e.g. 128 GB" autoCapitalize="characters" />
+                    </Field>
+                  </>
+                ) : null}
+                <Text style={{ marginTop: 8, fontSize: rf(11.5), color: MUTED }}>
+                  {`Saved on this ${flow === 'SELL' ? 'sell order' : 'booking'} only — not added to the catalogue.`}
+                </Text>
+              </>
+            ) : (
+              /* Catalogue model: inline option cards (Partner), folding to the
+                 picked value with Change. */
+              <>
+                <Field label="Color" required={!repairDead && !optionalVariant} optional={repairDead || optionalVariant}>
+                  <FoldGrid
+                    valueLabel={color?.name || ''}
+                    valueSwatch={color ? colorHex(color.name) : null}
+                    cols={optCols}
+                    options={colorOptions}
+                    selected={colorPicked ? colorKey(colorPicked) : null}
+                    onSelect={pickColor}
+                    otherValue={color && !colorListed ? color.name : ''}
+                    otherInput={{ label: 'Other colour', placeholder: 'Enter colour, e.g. Sea Green', onDone: (t) => setColor({ id: t, name: t }) }}
+                  />
+                </Field>
 
-        {/* Phone condition (sell flow) */}
-        {flow === 'SELL' ? (
-          <View className="rounded-2xl p-3 mb-3" style={cardStyle}>
-            <Text className="font-extrabold tracking-widest mb-2" style={{ fontSize: rf(10), color: P.muted }}>{conditionDeviceLabel.toUpperCase()} CONDITION</Text>
-            <View className="flex-row -mx-1">
-              {SELL_CONDITIONS.map((o) => (
-                <View key={o.key} className="px-1 flex-1">
-                  <ConditionTile o={o} active={condition === o.key} onPress={() => chooseCondition(o.key)} />
+                {/* Model variants — RAM + Storage combos, or storage-only sizes the model ships */}
+                {!noRamStorage && !useDeviceSpecs && specs.length > 0 && !repairDead ? (
+                  <Field label={specsStorageOnly ? 'Storage' : 'RAM & Storage'} required={!optionalVariant} optional={optionalVariant}>
+                    <FoldGrid
+                      valueLabel={variantValue}
+                      cols={optCols}
+                      options={specs.map((sp) => ({ key: sp.id, label: sp.label }))}
+                      selected={pickedVariant ? pickedVariant.id : null}
+                      onSelect={pickVariant}
+                      otherValue={storage?.custom ? storage.label : ''}
+                      otherInput={variantOther ? {
+                        label: specsStorageOnly ? 'Other storage' : 'Other RAM & storage',
+                        placeholder: specsStorageOnly ? 'e.g. 256 GB' : 'e.g. 8 GB + 256 GB',
+                        autoCapitalize: 'characters',
+                        onDone: (t) => { setRam(null); setStorage(typedOption(t)); },
+                      } : undefined}
+                    />
+                  </Field>
+                ) : null}
+
+                {/* RAM / Storage (fallback: model has no variants configured) */}
+                {!noRamStorage && !useDeviceSpecs && specs.length === 0 && !repairDead ? (
+                  <>
+                    <Field label="RAM" required={!optionalVariant} optional={optionalVariant}>
+                      <FoldGrid
+                        valueLabel={ram?.label || ''}
+                        cols={optCols}
+                        options={rams.map((r) => ({ key: r.id, label: r.label }))}
+                        selected={ram && !ram.custom ? ram.id : null}
+                        onSelect={(k) => { const r = rams.find((x) => x.id === k); setRam(ram?.id === k ? null : (r || null)); }}
+                        otherValue={ram?.custom ? ram.label : ''}
+                        otherInput={variantOther ? { label: 'Other RAM', placeholder: 'e.g. 12 GB', autoCapitalize: 'characters', onDone: (t) => setRam(typedOption(t)) } : undefined}
+                      />
+                    </Field>
+                    <Field label="Storage" required={!optionalVariant} optional={optionalVariant}>
+                      <FoldGrid
+                        valueLabel={storage?.label || ''}
+                        cols={optCols}
+                        options={storages.map((s) => ({ key: s.id, label: s.label }))}
+                        selected={storage && !storage.custom ? storage.id : null}
+                        onSelect={(k) => { const s = storages.find((x) => x.id === k); setStorage(storage?.id === k ? null : (s || null)); }}
+                        otherValue={storage?.custom ? storage.label : ''}
+                        otherInput={variantOther ? { label: 'Other storage', placeholder: 'e.g. 256 GB', autoCapitalize: 'characters', onDone: (t) => setStorage(typedOption(t)) } : undefined}
+                      />
+                    </Field>
+                  </>
+                ) : null}
+
+                {/* Laptop RAM / Storage / Storage Type — DB config fields (as in the Partner app) */}
+                {useDeviceSpecs && !repairDead ? deviceSpecFields.map((f) => {
+                  const cur = spec.values[f.key];
+                  return (
+                    <Field key={f.key} label={f.label} required={!!f.required && !optionalVariant} optional={!f.required || optionalVariant}>
+                      <FoldGrid
+                        valueLabel={specLabel(f)}
+                        cols={optCols}
+                        options={f.options.map((o) => ({ key: o.value, label: o.label }))}
+                        selected={cur ?? null}
+                        onSelect={(k) => spec.setValue(f.key, cur === k ? null : k)}
+                      />
+                    </Field>
+                  );
+                }) : null}
+              </>
+            )}
+
+            {/* IMEI for sell flow — only for mobile/smartphone categories. */}
+            {flow === 'SELL' && !noImei ? (
+              <Field label="IMEI Number" required hint="Dial *#06# on your device to find IMEI">
+                <TypedField label="IMEI number" value={imei} onChangeText={(t) => setImei(cleanImei(t))} placeholder="15-digit IMEI" keyboardType="number-pad" autoCapitalize="none" />
+                {imeiError(imei) ? (
+                  <Text style={{ fontSize: rf(11.5), color: '#F32C26', marginTop: 5 }}>{imeiError(imei)}</Text>
+                ) : null}
+              </Field>
+            ) : null}
+
+            {/* ── Select Device summary ─────────────────────────────────── */}
+            {crumbs.length ? (
+              <View style={{ marginTop: 20, borderRadius: 14, backgroundColor: PAGE_BG, padding: 12 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+                  <Text style={{ flex: 1, fontSize: rf(14), fontWeight: '700', color: INK }}>Select Device</Text>
+                  {isCustomModel ? (
+                    <View style={{ borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, backgroundColor: P.yellowSoft }}>
+                      <Text style={{ fontSize: rf(9.5), fontWeight: '800', color: P.ink }}>OTHER MODEL</Text>
+                    </View>
+                  ) : null}
                 </View>
-              ))}
-            </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <View style={{ width: 64, height: 76, borderRadius: 10, backgroundColor: '#FFFFFF', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
+                    <PickerImage uri={modelImageUrl} width={56} height={68} fallback={<CategoryIcon size={28} color={ACCENT} />} />
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0, marginLeft: 12 }}>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
+                      {crumbs.map((c, i) => (
+                        <View key={`${c}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', maxWidth: '100%', marginVertical: 2 }}>
+                          <Text style={{ flexShrink: 1, fontSize: rf(13), fontWeight: i === crumbs.length - 1 ? '800' : '500', color: INK }}>{c}</Text>
+                          {i < crumbs.length - 1 ? <ChevronRight size={14} color={MUTED} style={{ marginHorizontal: 4 }} /> : null}
+                        </View>
+                      ))}
+                    </View>
+                    {summaryColor ? <SummaryLine label="Color" value={summaryColor} /> : null}
+                    {summarySpecs ? <SummaryLine label={summarySpecsLabel} value={summarySpecs} /> : null}
+                    {modelNumber ? <SummaryLine label="Model Number" value={modelNumber} /> : null}
+                    {isCustomModel && !summaryColor && !summarySpecs ? (
+                      <Text style={{ marginTop: 4, fontSize: rf(12), color: MUTED }} numberOfLines={2}>{customSummary}</Text>
+                    ) : null}
+                  </View>
+                </View>
+              </View>
+            ) : null}
           </View>
-        ) : null}
+        </ScrollView>
 
-      </ScrollView>
-
-      <BottomActionBar>
-        {isCustomModel ? (
-        <Pressable
-          onPress={onContinue}
-          disabled={!ready}
-          className="active:opacity-90"
-          accessibilityRole="button"
-          accessibilityLabel="Continue"
-          accessibilityState={{ disabled: !ready }}
-          style={{ flexDirection: 'row', alignItems: 'center', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: ready ? P.green : P.bg, borderWidth: ready ? 0 : 1, borderColor: '#E6E6E6' }}
-        >
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={{ fontSize: rf(9.5), fontWeight: '800', letterSpacing: 0.8, color: ready ? 'rgba(255,255,255,0.85)' : P.muted }}>YOUR CONFIGURATION</Text>
-            <Text numberOfLines={1} style={{ marginTop: 1, fontSize: rf(13), fontWeight: '800', color: ready ? '#FFFFFF' : P.ink }}>{customSummary}</Text>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 10, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 10, backgroundColor: ready ? 'rgba(255,255,255,0.2)' : '#FFFFFF' }}>
-            <Text style={{ fontSize: rf(13), fontWeight: '800', color: ready ? '#FFFFFF' : P.muted }}>Continue</Text>
-            <ChevronRight size={16} color={ready ? '#FFFFFF' : P.muted} />
-          </View>
-        </Pressable>
-        ) : (
-        <Button
-          onPress={onContinue}
-          loading={saving}
-          disabled={!ready}
-          className="w-full"
-          style={{ backgroundColor: P.green, shadowColor: P.green }}
-          rightIcon={<ChevronRight size={18} color="#fff" />}
-        >
-          {ctaLabel}
-        </Button>
-        )}
-      </BottomActionBar>
+        {/* ── Pinned Next (the header arrow goes back): same onContinue and
+            ready rule; Profile keeps its Save / Update wording. ─────────── */}
+        <DPNextBar label={ctaLabel} onPress={onContinue} disabled={!ready} loading={saving} />
+      </KeyboardAvoidingView>
     </View>
   );
 }

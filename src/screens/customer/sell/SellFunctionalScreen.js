@@ -9,13 +9,13 @@ import { getFunctionalIssues } from '../../../api/masterData';
 import { rf, rlh } from '../../../utils/responsive';
 import { BRAND, BRAND_FLOW } from '../../../theme/brand';
 import { cardShadow, FlowCta, FlowDecor, FlowHeader, useHideStackHeader } from '../service-booking-customer/FlowChrome';
-import { getFunctionalIssueIcon } from './functionalIssueIcons';
+import FunctionalArt from './FunctionalArt';
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   row: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -3 },
   tile: { width: '31.33%', marginHorizontal: '1%', marginBottom: 6, paddingVertical: 8, paddingHorizontal: 4, borderWidth: 1, borderColor: colors.border, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', minHeight: 62 },
-  tileActive: { borderColor: '#004C40', borderWidth: 2 },
+  tileActive: { borderColor: '#035C6C', borderWidth: 2 },
   label: { fontSize: rf(10), lineHeight: rlh(13), color: colors.text, marginTop: 3, textAlign: 'center', fontWeight: '600' },
   editBanner: { backgroundColor: BRAND.yellowSoft, borderColor: BRAND.yellowLine, borderWidth: 1, borderRadius: 12, padding: 10, marginBottom: 4, flexDirection: 'row', alignItems: 'center' },
   editBannerTitle: { fontSize: rf(10), fontWeight: '800', color: BRAND.ink, letterSpacing: 0.5 },
@@ -94,12 +94,11 @@ export default function SellFunctionalScreen({ navigation, route }) {
             </View>
           </View>
         ) : null}
-        <View style={{ backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#E6E6E6', paddingTop: 11, paddingHorizontal: 8, paddingBottom: 8, marginTop: 6, ...cardShadow }}>
+        <View style={{ backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#E8EAEE', paddingTop: 11, paddingHorizontal: 8, paddingBottom: 8, marginTop: 6, ...cardShadow }}>
           <Text style={{ fontSize: rf(14.5), fontWeight: '800', color: BRAND.ink, paddingHorizontal: 4, marginBottom: 6 }}>Functionality issues</Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
             {issues.map((it) => {
               const active = selected.includes(it.id);
-              const Icon = getFunctionalIssueIcon(it.name);
               return (
                 <View key={it.id} style={{ width: `${100 / cols}%`, padding: 3 }}>
                   <TouchableOpacity
@@ -107,18 +106,17 @@ export default function SellFunctionalScreen({ navigation, route }) {
                     onPress={() => toggle(it.id)}
                     accessibilityRole="checkbox"
                     accessibilityState={{ checked: active }}
-                    style={{
-                      minHeight: 88, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 4,
-                      alignItems: 'center', justifyContent: 'center',
-                      backgroundColor: active ? BRAND.greenSoft : BRAND.bg,
-                      borderWidth: active ? 2 : 1, borderColor: active ? BRAND.green : BRAND.line,
-                      ...(active ? { shadowColor: BRAND.green, shadowOpacity: 0.12, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 2 } : {}),
-                    }}
+                    style={{ alignItems: 'center' }}
                   >
-                    <View style={{ height: 32, width: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginBottom: 5, backgroundColor: active ? BRAND.green : BRAND.yellowSoft, borderWidth: active ? 3 : 0, borderColor: 'rgba(9,173,42,0.18)' }}>
-                      {active ? <Check size={15} color="#fff" strokeWidth={3} /> : <Icon size={15} color={BRAND.yellow} strokeWidth={2.3} />}
+                    <View style={{ alignSelf: 'stretch', aspectRatio: 1.05, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: active ? BRAND.greenSoft : '#F7F8FB', borderWidth: active ? 1.5 : 1, borderColor: active ? BRAND.green : '#ECEEF3' }}>
+                      <FunctionalArt name={it.name} size={50} />
+                      {active ? (
+                        <View style={{ position: 'absolute', top: 5, right: 5, height: 16, width: 16, borderRadius: 8, backgroundColor: BRAND.green, alignItems: 'center', justifyContent: 'center' }}>
+                          <Check size={10} color="#fff" strokeWidth={3} />
+                        </View>
+                      ) : null}
                     </View>
-                    <Text style={{ fontSize: rf(10.5), lineHeight: rlh(13.5), fontWeight: '600', color: BRAND.ink, textAlign: 'center' }}>{it.name}</Text>
+                    <Text style={{ marginTop: 5, textAlign: 'center', fontSize: rf(11), lineHeight: rlh(14), fontWeight: active ? '700' : '600', color: active ? BRAND.ink : BRAND.body }}>{it.name}</Text>
                   </TouchableOpacity>
                 </View>
               );

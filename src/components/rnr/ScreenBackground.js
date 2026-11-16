@@ -9,8 +9,8 @@ import { cn } from './cn';
  */
 export function ScreenBackground({ children, className, variant = 'default' }) {
   const colors = variant === 'cool'
-    ? ['#F8FAFC', '#EFF6FF', '#F5F3FF']
-    : ['#FCE7F3', '#F5F3FF', '#DBEAFE'];
+    ? ['#F3F4F6', '#E6F3FA', '#E6F3FA']
+    : ['#FEEBEA', '#E6F3FA', '#E6F3FA'];
   return (
     <View className={cn('flex-1', className)}>
       <LinearGradient

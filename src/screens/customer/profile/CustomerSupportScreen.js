@@ -10,10 +10,10 @@ import { rf } from '../../../utils/responsive';
 import { BRAND } from '../../../theme/brand';
 import PageHeader, { HeaderIconButton } from '../../../components/PageHeader';
 
-const LINE = '#E6E6E6';
-const MINT = '#EAF8EC';
-const YELLOW_SOFT = '#FEF6DA';
-const RED_SOFT = '#FEECEC';
+const LINE = '#E8EAEE';
+const MINT = '#E5F3F5';
+const YELLOW_SOFT = '#FFF4D6';
+const RED_SOFT = '#FEEBEA';
 const cardShadow = { shadowColor: BRAND.ink, shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 1 };
 
 const DEFAULT_EMAIL = 'Support@globogreen.com';

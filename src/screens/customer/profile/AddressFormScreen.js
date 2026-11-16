@@ -22,12 +22,12 @@ import { rf } from '../../../utils/responsive';
 import PageHeader from '../../../components/PageHeader';
 import { BRAND } from '../../../theme/brand';
 
-// Palette: 09AD2A · 1E1E1E · F8F8F8 · F3F3F3 · F3BF23 · F84141.
-const GREEN_TEXT = '#078F23'; // #09AD2A shaded for text on white
-const MINT = '#EAF8EC';
-const LINE = '#E6E6E6';
-const GREEN_LINE = 'rgba(9,173,42,0.45)';
-const MUTED = '#6B6B6B';
+// Palette: 035C6C · 111111 · F3F4F6 · F3F4F6 · FAA700 · F32C26.
+const GREEN_TEXT = '#035C6C'; // #035C6C shaded for text on white
+const MINT = '#E5F3F5';
+const LINE = '#E8EAEE';
+const GREEN_LINE = 'rgba(3,92,108,0.45)';
+const MUTED = '#606E87';
 
 const LABEL_OPTIONS = [
   { value: 'Home',   icon: Home },
@@ -137,7 +137,12 @@ export default function AddressFormScreen({ navigation, route }) {
   const scrollRef = useRef(null);
 
   const setField = (k, v) => {
-    setData((d) => ({ ...d, [k]: v }));
+    // Coords captured by GPS describe the place they were captured at. If the
+    // PIN is then changed by hand, they no longer describe this address —
+    // drop them so they are never used as the exact pickup location.
+    setData((d) => (k === 'pincode' && v !== d.pincode && (d.latitude != null || d.longitude != null)
+      ? { ...d, [k]: v, latitude: null, longitude: null }
+      : { ...d, [k]: v }));
     if (errors[k]) setErrors((e) => ({ ...e, [k]: undefined }));
     if (saveError) setSaveError(null);
   };
@@ -355,7 +360,7 @@ export default function AddressFormScreen({ navigation, route }) {
         <SectionCard
           icon={MapPin}
           iconColor={BRAND.red}
-          iconBg="#FEECEC"
+          iconBg="#FEEBEA"
           title="Address"
           subtitle="House, street, area & PIN code"
         >
@@ -451,7 +456,7 @@ export default function AddressFormScreen({ navigation, route }) {
         <SectionCard
           icon={Tag}
           iconColor={BRAND.yellow}
-          iconBg="#FEF6DA"
+          iconBg="#FFF4D6"
           title="Save as"
           subtitle="Pick a label so you can find it later"
         >
@@ -480,7 +485,7 @@ export default function AddressFormScreen({ navigation, route }) {
         </SectionCard>
 
         {saveError ? (
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', borderRadius: 14, padding: 10, backgroundColor: '#FEECEC', borderWidth: 1, borderColor: 'rgba(248,65,65,0.35)' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', borderRadius: 14, padding: 10, backgroundColor: '#FEEBEA', borderWidth: 1, borderColor: 'rgba(243,44,38,0.35)' }}>
             <AlertTriangle size={16} color={BRAND.red} style={{ marginTop: 1 }} />
             <View style={{ flex: 1, marginLeft: 8 }}>
               <Text style={{ fontSize: rf(12.5), fontWeight: '800', color: BRAND.ink }}>Couldn't save this address</Text>

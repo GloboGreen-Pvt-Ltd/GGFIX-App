@@ -1,5 +1,13 @@
 import React, { useCallback, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { getShop } from '../../../api/shops';
+import { eligiblePickupShops } from '../../../utils/pickupDistance';
+import { checkAddressLocation } from '../../../utils/pinGeocode';
+
+// Alert.alert does nothing on web — use window.alert there.
+const warn = (t, m) => (Platform.OS === 'web' ? window.alert(`${t}\n\n${m}`) : Alert.alert(t, m));
+
+const PICKUP_MAX_KM = 20; // never allow pickup bookings beyond this
 import { useFocusEffect } from '@react-navigation/native';
 import { MapPin, Check } from 'lucide-react-native';
 import {
@@ -18,17 +26,17 @@ import { rf } from '../../../utils/responsive';
 import { FLOW as BASE_FLOW, FlowCta, FlowDecor, FlowHeader, useHideStackHeader } from './FlowChrome';
 import { BRAND, BRAND_FLOW } from '../../../theme/brand';
 
-// Brand palette in the FLOW shape (09AD2A · 1E1E1E · F8F8F8 · F3F3F3 · F3BF23 · F84141).
+// Brand palette in the FLOW shape (035C6C · 111111 · F3F4F6 · F3F4F6 · FAA700 · F32C26).
 const FLOW = {
   ...BASE_FLOW,
   primary: BRAND.green,
-  deep: '#078F23', // green text / icons (#09AD2A shaded)
+  deep: '#035C6C', // green text / icons (#035C6C shaded)
   ink: BRAND.ink,
-  muted: '#6B6B6B',
-  mint: '#EAF8EC',
-  softMint: '#F4FBF5',
-  tint: '#F4FBF5',
-  border: '#E6E6E6',
+  muted: '#606E87',
+  mint: '#E5F3F5',
+  softMint: '#F0F8F9',
+  tint: '#F0F8F9',
+  border: '#E8EAEE',
   bg: BRAND.bg,
 };
 const cardShadow = { shadowColor: BRAND.ink, shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1 };
@@ -40,15 +48,70 @@ export default function RepairSelectAddressScreen({ navigation, route }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState(null);
+  const [checking, setChecking] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const list = await listAddresses();
       setItems(list);
-      if (list[0]) setSelectedId(list.find((a) => a.isDefault)?.id || list[0].id);
+      if (list[0]) setSelectedId((cur) => cur || list.find((a) => a.id === params.addressId)?.id || list.find((a) => a.isDefault)?.id || list[0].id);
     } finally { setLoading(false); }
   }, []);
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // Change Address (from the shop list) → hand the pick back for a recheck.
+  // Booking flow → verify the exact address coords are within 20 km of the shop.
+  const onContinue = async () => {
+    if (params.pickMode) {
+      const a = items.find((x) => x.id === selectedId) || {};
+      // Hand back the exact selected address: id, full text, PIN and coords.
+      navigation.navigate({
+        name: 'RepairPickupShops',
+        merge: true,
+        params: {
+          pickedAddressId: selectedId,
+          pickedAt: Date.now(),
+          pickedAddress: {
+            ...a,
+            fullAddress: [a.addressLine, a.area || a.locality, a.taluk, a.district || a.city, a.state, a.pincode].filter(Boolean).join(', '),
+            pincode: String(a.pincode || '').trim(),
+            latitude: a.latitude ?? null,
+            longitude: a.longitude ?? null,
+          },
+        },
+      });
+      return;
+    }
+    if (params.shopId) {
+      const a = items.find((x) => x.id === selectedId);
+      setChecking(true);
+      // Exact, verified coords only — and they must match the address's own PIN area.
+      const loc = await checkAddressLocation(a);
+      if (!loc.coords || !loc.trusted) {
+        setChecking(false);
+        warn('Verify Pickup Address', loc.coords
+          ? "This address's map location does not match its PIN code. Edit the address and set its exact location."
+          : 'This address has no map location. Edit it to set the exact location, or choose another address.');
+        return;
+      }
+      const la = loc.coords.lat, ln = loc.coords.lng;
+      try {
+        const shop = await getShop(params.shopId, { lat: la, lng: ln });
+        // Same shared rule as the shop list: recompute from verified coords;
+        // never trust a server distance (old builds return 0.0 for unknowns).
+        const elig = eligiblePickupShops([shop], { lat: la, lng: ln }, PICKUP_MAX_KM);
+        const d = elig.length ? elig[0].distanceKm : NaN;
+        if (!Number.isFinite(d) || d > PICKUP_MAX_KM) {
+          warn('Pickup unavailable', `Pickup is available only within ${PICKUP_MAX_KM} km of the shop. Please choose another address.`);
+          return;
+        }
+      } catch (e) {
+        warn('Could not verify address', e?.message || 'Please try again.');
+        return;
+      } finally { setChecking(false); }
+    }
+    navigation.navigate('RepairPickupSlot', { ...params, addressId: selectedId });
+  };
 
   if (loading) return <Loader label="Loading addresses..." />;
 
@@ -70,7 +133,7 @@ export default function RepairSelectAddressScreen({ navigation, route }) {
           return (
             <React.Fragment key={label}>
               <View style={{ alignItems: 'center', width: 60 }}>
-                <View style={{ height: 28, width: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: on ? BRAND.green : '#EDEDED', borderWidth: active ? 3 : 0, borderColor: 'rgba(9,173,42,0.25)' }}>
+                <View style={{ height: 28, width: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: on ? BRAND.green : '#E8EAEE', borderWidth: active ? 3 : 0, borderColor: 'rgba(3,92,108,0.25)' }}>
                   {done ? <Check size={14} color="#fff" strokeWidth={3} /> : (
                     <Text style={{ fontSize: rf(12), fontWeight: '800', color: on ? '#fff' : FLOW.muted }}>{i + 1}</Text>
                   )}
@@ -112,9 +175,9 @@ export default function RepairSelectAddressScreen({ navigation, route }) {
 
       <BottomActionBar>
         <FlowCta
-          title="Continue to slot selection"
-          onPress={() => navigation.navigate('RepairPickupSlot', { ...params, addressId: selectedId })}
-          disabled={!selectedId}
+          title={params.pickMode ? 'Use this address' : (checking ? 'Checking pickup area…' : 'Continue to slot selection')}
+          onPress={onContinue}
+          disabled={!selectedId || checking}
           palette={BRAND_FLOW}
         />
       </BottomActionBar>
