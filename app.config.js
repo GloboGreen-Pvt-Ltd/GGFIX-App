@@ -24,7 +24,7 @@ export default {
     splash: { image: './assets/logo.png', resizeMode: 'contain', backgroundColor: '#004C40' },
     ios: {
       supportsTablet: true,
-      bundleIdentifier: 'com.ggfix.customerapp',
+      bundleIdentifier: 'com.neargfix.customer',
       infoPlist: {
         NSLocationWhenInUseUsageDescription:
           'We use your location to show pickup-enabled repair shops nearby and to set your default delivery address.',
@@ -34,15 +34,17 @@ export default {
       },
     },
     android: {
-      package: 'com.ggfix.customerapp',
+      package: 'com.neargfix.customer',
+      // Google Maps (Android) key from env / EAS secret — never committed.
+      config: { googleMaps: { apiKey: process.env.GOOGLE_MAPS_ANDROID_API_KEY } },
       adaptiveIcon: { foregroundImage: './assets/logo.png', backgroundColor: '#202124' },
       permissions: ['ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION'],
     },
     plugins: [
-      ['expo-local-authentication', { faceIDPermission: 'Use Face ID to unlock GGFIX.' }],
+      ['expo-local-authentication', { faceIDPermission: 'Use Face ID to unlock NearGFix.' }],
       ['expo-audio', { microphonePermission: 'We use your microphone to record voice notes for your repair complaint and chat.' }],
-      ['expo-camera', { cameraPermission: 'GGFIX uses your camera to identify a device from a photo and to scan QR codes and barcodes.', recordAudioAndroid: false }],
-      ['expo-image-picker', { photosPermission: 'GGFIX uses your photos only to identify a device from a picture you choose.', cameraPermission: 'GGFIX uses your camera to identify a device from a photo and to scan QR codes and barcodes.', microphonePermission: false }],
+      ['expo-camera', { cameraPermission: 'NearGFix uses your camera to identify a device from a photo and to scan QR codes and barcodes.', recordAudioAndroid: false }],
+      ['expo-image-picker', { photosPermission: 'NearGFix uses your photos only to identify a device from a picture you choose.', cameraPermission: 'NearGFix uses your camera to identify a device from a photo and to scan QR codes and barcodes.', microphonePermission: false }],
       // Cleartext HTTP for the plain-http backend. The bare android.usesCleartextTraffic
       // key is ignored by Expo prebuild — it must be set via expo-build-properties.
       [
