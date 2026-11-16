@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Linking, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { notify } from '../../../components/confirm';
+import { scheduleSellPickup } from '../../../api/orders';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Truck, Store, Calendar, Clock, MapPin, PencilLine, Navigation, Info, CheckCircle2, ChevronRight, Bike, Building2, X } from 'lucide-react-native';
 import { Loader, EmptyState } from '../../../components/rnr';
@@ -28,6 +29,8 @@ function toMin(t) {
   if (m[3]) h = (h % 12) + (/PM/i.test(m[3]) ? 12 : 0);
   return h * 60 + Number(m[2]);
 }
+// minutes → "HH:mm" (server LocalTime).
+const hhmm = (min) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
 const hm = (min) => { const h = Math.floor(min / 60); return `${h % 12 || 12}:${String(min % 60).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
 
 // Two-hour windows inside the shop's pickup hours (10 AM – 6 PM when it has none).
@@ -126,6 +129,23 @@ export default function SellSchedulePickupScreen({ navigation, route }) {
 
   const onConfirm = async () => {
     const entry = { mode: current, date: isoDay(days[day]), label: dayLabel(days[day]), slot: slots[slotIdx] };
+    // Save the time on the order so the shop's Partner app shows the same
+    // pickup time. An older server without the endpoint (404) falls back to
+    // the phone-only save below; any other failure stops here.
+    const [a, b] = String(entry.slot || '').split(/\s*[–-]\s*/);
+    const startMin = toMin(a);
+    const endMin = toMin(b);
+    if (startMin != null) {
+      try {
+        await scheduleSellPickup(sellOrderId, { pickupDate: entry.date, slotStart: hhmm(startMin), slotEnd: endMin != null ? hhmm(endMin) : null });
+        reload?.();
+      } catch (e) {
+        if (e?.status !== 404) {
+          notify('Could not save', e?.message || 'Please try again.', { preset: 'error', haptic: 'error' });
+          return;
+        }
+      }
+    }
     try {
       const all = JSON.parse((await AsyncStorage.getItem(PICKUP_KEY)) || '{}') || {};
       all[sellOrderId] = entry;
