@@ -13,6 +13,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { selectSession } from '../../../store/authSlice';
 import { useCustomerLocation } from '../../../hooks/useCustomerLocation';
 import { notifyShopsOfBuyOrder } from '../../../utils/buyOrderNotify';
+import { checkAddressLocation } from '../../../utils/pinGeocode';
+import { haversineKm, verifiedCoords, PICKUP_MAX_KM } from '../../../utils/pickupDistance';
 import { resolveDeviceImageSource } from '../../../utils/images';
 import { rf } from '../../../utils/responsive';
 import { StaticTabBar } from '../../../navigation/CustomTabBar';
@@ -33,13 +35,37 @@ const MUTED = '#606E87';
 const LINE = '#E8EAEE';
 const TINT = '#E9F6F3';
 
-const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+// Delivery range check. Unlike the repair pickup check it ignores the shop's repair
+// pickupEnabled flag and never blocks when either side lacks verified coords
+// (the server only requires SHIPPING on the listing + a delivery address).
+async function deliveryRangeOk(addr, shopId) {
+  if (!addr || !shopId) return true;
+  const loc = await checkAddressLocation(addr).catch(() => null);
+  const o = loc?.trusted ? verifiedCoords(loc.coords) : null;
+  if (!o) return true;
+  const c = verifiedCoords(await getShop(shopId, {}).catch(() => null));
+  if (!c) return true;
+  const d = haversineKm(o, c);
+  return !Number.isFinite(d) || d <= PICKUP_MAX_KM + 1e-9;
+}
+
+const inr =(n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const dateLabel = (d) => `${String(d.getDate()).padStart(2, '0')} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+// Dates are IST calendar days (UTC fields read as IST), like RepairPickupSlot.
+const dateLabel = (d) => `${String(d.getUTCDate()).padStart(2, '0')} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 const hm = (min) => { const h = Math.floor(min / 60); return `${h % 12 || 12}:${String(min % 60).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
 // Two-hour windows, 10 AM – 6 PM (same rule as Sell's Schedule Pickup when a shop lists no hours).
-const SLOTS = [600, 720, 840, 960].map((s) => `${hm(s)} – ${hm(s + 120)}`);
+const SLOT_MIN = [600, 720, 840, 960];
+const SLOTS = SLOT_MIN.map((s) => `${hm(s)} – ${hm(s + 120)}`);
+const istNow = () => new Date(Date.now() + 330 * 60000);
+// Today's slot stays bookable until it ENDS (IST).
+const slotExpired = (dayIdx, i) => {
+  if (dayIdx > 0) return false;
+  const t = istNow();
+  return SLOT_MIN[i] + 120 <= t.getUTCHours() * 60 + t.getUTCMinutes();
+};
+const pidOf = (it) => it.product?.id || it.productId;
 
 export default function BuyPlaceOrderScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
@@ -47,12 +73,14 @@ export default function BuyPlaceOrderScreen({ navigation, route }) {
   const { lat, lng } = useCustomerLocation();
   const items = useMemo(() => (route.params?.items || []).filter((it) => it?.product?.id || it?.productId), [route.params?.items]);
   const fromCart = !!route.params?.fromCart;
-  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() + i); return d; }), []);
+  const days = useMemo(() => { const t = istNow(); return Array.from({ length: 7 }, (_, i) => new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate() + i))); }, []);
+  const firstOpen = SLOT_MIN.findIndex((_, i) => !slotExpired(0, i));
 
   const [shops, setShops] = useState({});
   const [loading, setLoading] = useState(true);
-  const [day, setDay] = useState(0);
-  const [slot, setSlot] = useState(0);
+  const [day, setDay] = useState(firstOpen < 0 ? 1 : 0);
+  const [slot, setSlot] = useState(firstOpen < 0 ? 0 : firstOpen);
+  const [addrId, setAddrId] = useState(null); // saved address chosen for delivery
   const [sheet, setSheet] = useState(null); // 'date' | 'time'
   const [placing, setPlacing] = useState(false);
   const [fresh, setFresh] = useState({}); // productId -> current listing (price, stock, fulfilment)
@@ -62,6 +90,7 @@ export default function BuyPlaceOrderScreen({ navigation, route }) {
   const [address, setAddress] = useState(session?.address || '');
   const [saved, setSaved] = useState([]); // saved addresses (ManageAddress)
   const [pickAddr, setPickAddr] = useState(false);
+  const preUsed = useRef(false);
   const addrText = (a) => [a.addressLine, a.area || a.locality, a.taluk, a.district || a.city, a.state, a.pincode].filter(Boolean).join(', ');
   // Saved addresses: preselect the default; refresh after returning from ManageAddress.
   useFocusEffect(React.useCallback(() => {
@@ -70,8 +99,11 @@ export default function BuyPlaceOrderScreen({ navigation, route }) {
       if (!live || !Array.isArray(list)) return;
       setSaved(list);
       setAddress((cur) => {
-        if (cur && list.some((a) => addrText(a) === cur)) return cur;
-        const d = list.find((a) => a.isDefault) || list[0];
+        const hit = cur && list.find((a) => addrText(a) === cur);
+        const pre = !preUsed.current && route.params?.addressId && list.find((a) => a.id === route.params.addressId); // chosen in Buy Now sheet
+        preUsed.current = true;
+        const d = pre || hit || list.find((a) => a.isDefault) || list[0];
+        setAddrId(d ? d.id : null);
         return d ? addrText(d) : cur;
       });
     }).catch(() => {});
@@ -117,12 +149,13 @@ export default function BuyPlaceOrderScreen({ navigation, route }) {
     return p.quantity == null ? null : Math.max(0, Number(p.quantity) - Number(p.soldQuantity || 0));
   };
   const canHome = items.length > 0 && items.every((it) => fulfilmentOf(cur(it)).home);
-  const canShop = items.length > 0 && items.every((it) => fulfilmentOf(cur(it)).shop);
+  // The server accepts VISIT_SHOP for any active listing, so Visit Shop is the fallback when home delivery isn't offered.
+  const canShop = items.length > 0 && (items.every((it) => fulfilmentOf(cur(it)).shop) || !canHome);
   const chosen = mode || (canHome ? 'HOME_DELIVERY' : canShop ? 'VISIT_SHOP' : null);
   const outOfStock = items.some((it) => stockOf(it) != null && stockOf(it) < (it.quantity || 1));
   const total = items.reduce((s, it) => s + priceOf(it) * (it.quantity || 1), 0);
   const shopList = Object.entries(shops).map(([id, s]) => ({ id, ...s }));
-  const pickupWhen = `${DAYS[days[day].getDay()]}, ${dateLabel(days[day])}, ${SLOTS[slot]}`;
+  const pickupWhen = `${DAYS[days[day].getUTCDay()]}, ${dateLabel(days[day])}, ${SLOTS[slot]}`;
 
   const place = async () => {
     if (lock.current || !items.length || !chosen) return;
@@ -130,10 +163,34 @@ export default function BuyPlaceOrderScreen({ navigation, route }) {
       notify('Address needed', 'Enter the delivery address.', { preset: 'error' });
       return;
     }
+    if (chosen === 'VISIT_SHOP' && slotExpired(day, slot)) {
+      notify('Slot expired', 'Choose a later visit time.', { preset: 'error' });
+      return;
+    }
     lock.current = true;
     setPlacing(true);
     try {
       const home = chosen === 'HOME_DELIVERY';
+      // Live re-check before submitting: availability, price, delivery eligibility.
+      const todo = items.filter((it) => !placed.current[pidOf(it)]);
+      const live = await Promise.all(todo.map((it) => getProduct(pidOf(it)).catch(() => null)));
+      setFresh((f) => ({ ...f, ...Object.fromEntries(todo.map((it, i) => [pidOf(it), live[i]]).filter(([, p]) => p)) }));
+      const stop = (title, msg) => { const e = new Error(msg); e.title = title; throw e; };
+      todo.forEach((it, i) => {
+        const p = live[i];
+        const name = p?.title || it.product?.title || 'This product';
+        const left = p?.quantity == null ? null : Number(p.quantity) - Number(p.soldQuantity || 0);
+        if (!p || (p.status && p.status !== 'ACTIVE') || !p.shopId || (left != null && left < (it.quantity || 1))) stop('Not available', `${name} is no longer available.`);
+        if (!(Number(p.price) > 0)) stop('Price on request', `${name} has no fixed price. Contact the shop.`);
+        if (Number(p.price) !== priceOf(it)) stop('Price updated', `${name} is now ${inr(p.price)}. Review and place again.`);
+        if (home && !fulfilmentOf(p).home) stop('Home delivery unavailable', `${name} can only be bought at the shop.`);
+      });
+      if (home && addrId) {
+        for (const sid of [...new Set(todo.map((it, i) => live[i].shopId))]) {
+          const ok = await deliveryRangeOk(saved.find((x) => x.id === addrId), sid);
+          if (!ok) stop('Delivery unavailable', `Delivery is available only within ${PICKUP_MAX_KM} km of the shop. Choose another address or Visit Shop & Buy.`);
+        }
+      }
       const orders = [];
       for (const it of items) {
         const pid = it.product?.id || it.productId;
@@ -171,8 +228,9 @@ export default function BuyPlaceOrderScreen({ navigation, route }) {
         imageUrl: resolveDeviceImageSource({ url: it.product?.imageUrl }) || null,
         storageLabel: it.product?.storageLabel,
         color: it.product?.color,
+        shopName: it.product?.shopName,
       }));
-      navigation.replace('BuyOrderSuccess', { order: created || {}, items: snapshot, total, notifiedShops, fixed: true });
+      navigation.replace('BuyOrderSuccess', { order: created || {}, items: snapshot, total, notifiedShops, fixed: true, celebrate: true });
     } catch (e) {
       lock.current = false;
       // Re-read price/stock so the screen shows what the server just enforced.
@@ -180,7 +238,8 @@ export default function BuyPlaceOrderScreen({ navigation, route }) {
       Promise.all(pids.map((id) => getProduct(id).catch(() => null)))
         .then((ps) => setFresh(Object.fromEntries(pids.map((id, i) => [id, ps[i]]).filter(([, p]) => p))));
       // The toast shows only its title, so the server's reason goes there.
-      notify(e?.message ? `Order failed: ${e.message}` : 'Order failed', e?.status ? `HTTP ${e.status}` : 'Please try again.', { preset: 'error' });
+      if (e?.title) notify(`${e.title}: ${e.message}`, e.message, { preset: 'error' });
+      else notify(e?.message ? `Order failed: ${e.message}` : 'Order failed', e?.status ? `HTTP ${e.status}` : 'Please try again.', { preset: 'error' });
     } finally {
       setPlacing(false);
     }
@@ -351,7 +410,7 @@ export default function BuyPlaceOrderScreen({ navigation, route }) {
               {saved.map((a) => {
                 const t = addrText(a);
                 return (
-                  <Pressable key={a.id} onPress={() => { setAddress(t); setPickAddr(false); }} accessibilityRole="button" style={[styles.card, { flexDirection: 'row', alignItems: 'center', borderColor: t === address ? TEAL : undefined }]}>
+                  <Pressable key={a.id} onPress={() => { setAddress(t); setAddrId(a.id); setPickAddr(false); }} accessibilityRole="button" style={[styles.card, { flexDirection: 'row', alignItems: 'center', borderColor: t === address ? TEAL : undefined }]}>
                     <Ionicons name={t === address ? 'radio-button-on' : 'radio-button-off'} size={18} color={TEAL} />
                     <Text style={{ flex: 1, marginLeft: 8, fontSize: rf(13), color: INK }}>{a.label ? `${a.label}${a.isDefault ? ' (Default)' : ''}
 ` : ''}{t}</Text>
@@ -369,10 +428,10 @@ export default function BuyPlaceOrderScreen({ navigation, route }) {
         <Pressable style={styles.backdrop} onPress={() => setSheet(null)}>
           <Pressable style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 12) + 12 }]} onPress={() => {}}>
             <Text style={[styles.title, { marginBottom: 8 }]}>{sheet === 'date' ? 'Select Date' : 'Select Time'}</Text>
-            {(sheet === 'date' ? days.map((d, i) => (i === 0 ? `Today, ${dateLabel(d)}` : `${DAYS[d.getDay()]}, ${dateLabel(d)}`)) : SLOTS).map((label, i) => {
+            {(sheet === 'date' ? days.map((d, i) => (i === 0 ? `Today, ${dateLabel(d)}` : `${DAYS[d.getUTCDay()]}, ${dateLabel(d)}`)) : SLOTS).map((label, i) => {
               const on = (sheet === 'date' ? day : slot) === i;
               return (
-                <Pressable key={label} onPress={() => { (sheet === 'date' ? setDay : setSlot)(i); setSheet(null); }} style={[styles.row, styles.sheetRow, on ? { backgroundColor: TINT } : null]} accessibilityRole="radio" accessibilityState={{ selected: on }}>
+                <Pressable key={label} disabled={sheet === 'time' && slotExpired(day, i)} onPress={() => { if (sheet === 'date') { setDay(i); const o = SLOT_MIN.findIndex((_, k) => !slotExpired(i, k)); if (slotExpired(i, slot) && o >= 0) setSlot(o); } else setSlot(i); setSheet(null); }} style={[styles.row, styles.sheetRow, on ? { backgroundColor: TINT } : null, sheet === 'time' && slotExpired(day, i) ? { opacity: 0.4 } : null]} accessibilityRole="radio" accessibilityState={{ selected: on }}>
                   <Text style={[styles.optTitle, { flex: 1, fontWeight: on ? '800' : '600' }]}>{label}</Text>
                   {on ? <Ionicons name="checkmark-circle" size={20} color={GREEN} /> : null}
                 </Pressable>

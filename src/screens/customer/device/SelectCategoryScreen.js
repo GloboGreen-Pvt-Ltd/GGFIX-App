@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Platform, Pressable, ScrollView, TextInput, View, useWindowDimensions } from 'react-native';
+import { Platform, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import {
   Smartphone, Laptop, Watch, Tablet, Headphones, Volume2, Search, X,
 } from 'lucide-react-native';
@@ -106,6 +106,9 @@ export default function SelectCategoryScreen({ navigation, route }) {
   const [q, setQ] = useState('');
   const { width } = useWindowDimensions();
 
+  // "Continue Selling": this customer's saved Sell drafts (this phone only).
+  const showDraft = flow === 'SELL' && !route?.params?.editSellOrderId;
+
   // 4 per row on phones, 6 on tablets (content capped at 720).
   const cols = width >= 600 ? 6 : 4;
   const tileW = gridTileW(Math.min(width, 720), cols);
@@ -148,6 +151,7 @@ export default function SelectCategoryScreen({ navigation, route }) {
       ) : (
         <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
           <View style={[DP_COLUMN, { paddingHorizontal: 16 }]}>
+            
             <DPSection title="Category" />
             {cats.length > SEARCH_MIN ? <SearchField value={q} onChangeText={setQ} placeholder="Search category" /> : null}
             {filtered.length === 0 ? (

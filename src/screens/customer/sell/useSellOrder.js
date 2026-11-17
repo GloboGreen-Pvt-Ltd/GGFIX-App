@@ -237,7 +237,7 @@ export function mapsUrl(shop) {
 export const cardShadow ={ shadowColor: '#1C3053', shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 2 };
 
 // Sell order statuses: a sale agreed / done, and closed.
-export const SOLD_STATUSES = new Set(['SELL_CONFIRMED', 'COMPLETED', 'PICKED_UP', 'SOLD']);
+export const SOLD_STATUSES = new Set(['COMPLETED', 'SOLD']); // quote accepted / picked up are NOT sold yet
 export const isSold = (o) => SOLD_STATUSES.has(up(o?.status));
 export const isCancelled = (o) => /CANCEL/.test(up(o?.status));
 const WORKING = { WORKING: 'Working', DEAD: 'Not working' };

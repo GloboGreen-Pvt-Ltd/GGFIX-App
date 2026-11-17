@@ -265,8 +265,16 @@ export default function SelectModelScreen({ navigation, route }) {
         ]);
         if (cancelled) return;
         let ms = modelList || [];
+        // /brands/{id}/models is NOT category-scoped: a brand's tablets came back
+        // under Mobile because models with no categoryId passed the filter. Keep a
+        // model only when its categoryId matches, or (no categoryId) its series
+        // belongs to this category+brand. Fully unclassified models stay only in
+        // a legacy catalogue where no model of the brand is classified at all.
         if (UUID_RE.test(String(categoryId || ''))) {
-          ms = ms.filter((m) => !m.categoryId || m.categoryId === categoryId);
+          const catSeries = new Set((seriesList || []).map((s) => s?.id).filter(Boolean));
+          const classified = ms.some((m) => m.categoryId || m.seriesId);
+          ms = ms.filter((m) => (m.categoryId ? m.categoryId === categoryId
+            : m.seriesId ? catSeries.has(m.seriesId) : !classified));
         }
         // Sell flow only offers models the admin marked "Sell Active".
         if (flow === 'SELL') ms = ms.filter((m) => m.sellActive !== false);

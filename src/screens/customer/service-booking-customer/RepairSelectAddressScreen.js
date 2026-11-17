@@ -65,10 +65,11 @@ export default function RepairSelectAddressScreen({ navigation, route }) {
     if (params.pickMode) {
       const a = items.find((x) => x.id === selectedId) || {};
       // Hand back the exact selected address: id, full text, PIN and coords.
-      navigation.navigate({
-        name: 'RepairPickupShops',
-        merge: true,
-        params: {
+      // Carry the whole booking (device, services, media…) back with the pick:
+      // the old object form of navigate() no longer merges params and wiped them.
+      const { pickMode, addressId, ...booking } = params; // eslint-disable-line no-unused-vars
+      navigation.navigate('RepairPickupShops', {
+          ...booking,
           pickedAddressId: selectedId,
           pickedAt: Date.now(),
           pickedAddress: {
@@ -78,8 +79,7 @@ export default function RepairSelectAddressScreen({ navigation, route }) {
             latitude: a.latitude ?? null,
             longitude: a.longitude ?? null,
           },
-        },
-      });
+      }, { merge: true });
       return;
     }
     if (params.shopId) {

@@ -21,6 +21,7 @@ import { BRAND, BRAND_FLOW } from '../../../theme/brand';
 import { withTypedDevice } from '../../../utils/typedDevice';
 import { useImeiApplies } from '../../../utils/imeiPolicy';
 import SellSubmittedPopup, { SuccessTick, RequestIdChip, SubmittedActions } from './SellSubmittedPopup';
+import { useSellDraft, restoredState, clearSellDraft } from './sellDraft';
 
 const LINE = '#E8EAEE';
 const MUTED = '#606E87';
@@ -115,11 +116,17 @@ export default function SellCompleteScreen({ navigation, route }) {
     return () => sub.remove();
   }, [submitted, goHome]);
   useHideStackHeader(navigation);
+  // Customer shown on the review (name + masked phone, e.g. 98XXXXXX42).
+  const [me, setMe] = useState(null);
+  useEffect(() => { getSession().then((s) => setMe(s || {})).catch(() => {}); }, []);
+  const phoneDigits = String(me?.mobile || me?.phone || '').replace(/\D/g, '').slice(-10);
+  const maskedPhone = phoneDigits.length >= 4 ? `${phoneDigits.slice(0, 2)}${'X'.repeat(phoneDigits.length - 4)}${phoneDigits.slice(-2)}` : '';
   // Pickup address — picked here (formerly the Select Address screen): the
   // passed / default / first saved address, re-listed on focus so one added
   // via AddressForm shows up.
   const [addresses, setAddresses] = useState(null); // null while loading
-  const [addressId, setAddressId] = useState(p.addressId || p.address?.id || null);
+  const [addressId, setAddressId] = useState(p.addressId || p.address?.id || restoredState(route)?.addressId || null);
+  useSellDraft(route, { addressId });
   useFocusEffect(useCallback(() => {
     let alive = true;
     listAddresses()
@@ -247,6 +254,7 @@ export default function SellCompleteScreen({ navigation, route }) {
 
       // Success stays on this page: the popup bursts in over it and stays until
       // Track Request / Back to Home (no separate success screen).
+      clearSellDraft(navigation, route.params); // published: drop the local draft (only after a successful create)
       setSubmitted(created || {});
       setPopupOpen(true);
     } catch (e) {
@@ -267,6 +275,13 @@ export default function SellCompleteScreen({ navigation, route }) {
               Your device sale request has been submitted successfully.
             </Text>
           </View>
+        ) : null}
+
+        {me && (me.fullName || maskedPhone) ? (
+          <SellCard Icon={ClipboardCheck} title="Customer">
+            <Text style={{ fontSize: rf(13), fontWeight: '700', color: BRAND.ink }}>{me.fullName || 'Customer'}{maskedPhone ? `  ·  ${maskedPhone}` : ''}</Text>
+            <Text style={{ fontSize: rf(11.5), color: MUTED, marginTop: 4 }}>Nearby shops will send quotations; pick a shop and pickup slot once offers arrive.</Text>
+          </SellCard>
         ) : null}
 
         {/* Select Address */}

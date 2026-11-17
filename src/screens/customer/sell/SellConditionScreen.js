@@ -5,6 +5,7 @@ import { BottomActionBar, Input, Label, Badge, useBottomBarInset } from '../../.
 import { rf } from '../../../utils/responsive';
 import { useImeiApplies, cleanImei, isValidImei, imeiError, IMEI_LENGTH } from '../../../utils/imeiPolicy';
 import { FLOW, cardShadow, FlowCta, FlowDecor, FlowHeader, useHideStackHeader } from '../service-booking-customer/FlowChrome';
+import { useSellDraft, restoredState } from './sellDraft';
 
 const OPTIONS = [
   { key: 'WORKING', label: 'Working Phone', sub: 'Turns on · Calls · No major issues', icon: Smartphone, color: '#035C6C', bg: 'bg-success/10', activeBg: 'bg-success/15', border: 'border-success' },
@@ -15,8 +16,10 @@ export default function SellConditionScreen({ navigation, route }) {
   const bottomSpace = useBottomBarInset(96);
   useHideStackHeader(navigation);
   const device = route?.params?.device || {};
-  const [condition, setCondition] = useState('WORKING');
-  const [imei, setImei] = useState(device.imei || '');
+  const [restored] = useState(() => restoredState(route) || {});
+  const [condition, setCondition] = useState(restored.condition || 'WORKING');
+  const [imei, setImei] = useState(restored.imei ?? (device.imei || ''));
+  useSellDraft(route, { condition, imei });
   const showImei = useImeiApplies(device);
 
   const onContinue = () => {

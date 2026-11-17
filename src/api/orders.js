@@ -91,8 +91,11 @@ export async function approveRepairBooking(id) {
 export async function createSellOrder(payload) {
   return await orderApi.post('/sell-orders', { body: payload });
 }
+// Unsubmitted (draft) sell records are never orders: drop them from every list.
+export const isDraftSellStatus = (o) => /DRAFT/.test(String(o?.status || o?.payload?.status || '').toUpperCase());
 export async function listSellOrders() {
-  return unwrap(await orderApi.get('/sell-orders'));
+  const list = unwrap(await orderApi.get('/sell-orders'));
+  return Array.isArray(list) ? list.filter((o) => !isDraftSellStatus(o)) : list;
 }
 export async function getSellOrder(id) {
   return await orderApi.get(`/sell-orders/${id}`);

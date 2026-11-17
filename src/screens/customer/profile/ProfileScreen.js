@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, Switch, Text, View, useWindowDimensions } from 'react-native';
 import { confirm } from '../../../components/confirm';
 import { showToast } from '../../../components/AppToast';
@@ -7,13 +7,12 @@ import { getTabBarTotalHeight, isTabletWidth } from '../../../navigation/custome
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
-import { useFocusEffect, useIsFocused } from '@react-navigation/native';
+import { useIsFocused } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { BadgeCheck, Bell, Camera, ChevronRight, Heart, LogOut, Mail, Pencil, Phone, ShieldCheck } from 'lucide-react-native';
+import { BadgeCheck, Camera, ChevronRight, Heart, LogOut, Mail, Pencil, Phone } from 'lucide-react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { clearSession as clearAuth, selectSession } from '../../../store/authSlice';
 import { clearSession } from '../../../auth/session';
-import { getUnreadCount } from '../../../api/notifications';
 import { isAppLockEnabled, setAppLockEnabled, isDeviceSecure, authenticate } from '../../../auth/appLock';
 import { rf, rs } from '../../../utils/responsive';
 
@@ -162,15 +161,8 @@ export default function ProfileScreen({ navigation, onLogout: parentLogout }) {
   const session = useSelector(selectSession);
   const insets = useSafeAreaInsets();
   const { width: winW } = useWindowDimensions();
-  const [unread, setUnread] = useState(0);
   const isFocused = useIsFocused();
 
-  // Unread badge on the bell — refreshed each time the tab gains focus.
-  useFocusEffect(useCallback(() => {
-    let alive = true;
-    getUnreadCount().then((n) => { if (alive) setUnread(Number(n) || 0); }).catch(() => {});
-    return () => { alive = false; };
-  }, []));
 
   const onLogout = async () => {
     // Prefer the logout passed from RootNavigator — it both clears AsyncStorage
@@ -230,19 +222,7 @@ export default function ProfileScreen({ navigation, onLogout: parentLogout }) {
                 <Text numberOfLines={1} style={{ fontSize: rf(17), fontWeight: '800', color: '#FFFFFF' }}>My Account</Text>
                 <Text numberOfLines={1} style={{ fontSize: rf(11), color: 'rgba(255,255,255,0.75)', marginTop: rs(2) }}>Manage your profile, orders and preferences</Text>
               </View>
-              <Pressable
-                onPress={() => navigation.navigate('Notifications')}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="Notifications"
-                className="active:opacity-70"
-                style={HEADER_BTN}
-              >
-                <Bell size={rf(16)} color="#FFFFFF" strokeWidth={ICON_STROKE} />
-                {unread > 0 ? (
-                  <View style={{ position: 'absolute', top: rs(6), right: rs(7), height: 9, width: 9, borderRadius: 5, backgroundColor: DANGER, borderWidth: 1.5, borderColor: G }} />
-                ) : null}
-              </Pressable>
+              <View style={[HEADER_BTN, { opacity: 0 }]} />
             </View>
 
             {/* Profile — avatar · name + VERIFIED · mobile / email · Edit. */}
@@ -314,7 +294,7 @@ export default function ProfileScreen({ navigation, onLogout: parentLogout }) {
         contentContainerStyle={{ paddingHorizontal: rs(16), paddingTop: rs(4), paddingBottom: rs(24) + getTabBarTotalHeight(isTabletWidth(winW), insets.bottom) }}
       >
         <View style={centered}>
-          <SectionLabel subtitle="Orders, cart, devices and addresses" count={ACCOUNT.length}>Account</SectionLabel>
+          <SectionLabel subtitle="Orders, cart, devices and addresses">Account</SectionLabel>
           <View style={LIST_STYLE}>
             {ACCOUNT.map((it, idx) => (
               <Row key={it.label} item={it} onPress={() => navigation.navigate(it.to)} last={idx === ACCOUNT.length - 1} />
@@ -351,14 +331,6 @@ export default function ProfileScreen({ navigation, onLogout: parentLogout }) {
             </View>
             <Text style={{ flex: 1, fontSize: rf(13.5), fontWeight: '700', color: DANGER }}>Log Out</Text>
           </Pressable>
-
-          {/* Trust footer — reassurance only, no state or navigation. */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', borderRadius: rs(14), marginTop: rs(10), padding: rs(11), backgroundColor: G_LIGHT }}>
-            <ShieldCheck size={rf(16)} color={G} strokeWidth={ICON_STROKE} />
-            <Text style={{ flex: 1, fontSize: rf(11), color: DARK, marginLeft: rs(8), lineHeight: rf(15) }}>
-              Your data is safe with us — we follow industry-standard security practices.
-            </Text>
-          </View>
 
           {/* Footer */}
           {APP_VERSION ? (

@@ -7,7 +7,8 @@ import {
 } from 'lucide-react-native';
 import { listSellOrders, getSellOrderQuotations } from '../../../api/orders';
 import { OfferBanner, EmptyState, Loader } from '../../../components/rnr';
-import { getDeviceCategories, getBanners, getCategoryMenuImages, categoryMenuKey } from '../../../api/masterData';
+import { getDeviceCategories, getBanners, getCategoryMenuImages, categoryMenuKey, getModelsByBrand } from '../../../api/masterData';
+import { sellOrderImage } from '../../../utils/sellImage';
 import { cardPastels } from '../../../theme/categoryTints';
 import CategoryGridCard, { homeRailCardWidthFor } from '../../../components/CategoryGridCard';
 import PageHeader, { HEADER_FONT, HeaderIconButton } from '../../../components/PageHeader';
@@ -77,14 +78,12 @@ const PROMISES = [
 const NAVY = '#1C3053';
 const SELL_STATS = [
   { key: 'listings', title: 'My Listings', icon: Package, tone: '#0E8A86', bg: '#EEF8F8' },
-  { key: 'enquiries', title: 'Buyer Enquiries', icon: MessageSquare, tone: '#7E3AAE', bg: '#F6F0FC' },
   { key: 'quotes', title: 'Quotation Requests', icon: BadgeIndianRupee, tone: '#E0900F', bg: '#FFF6EC' },
-  { key: 'sold', title: 'Sold Items', icon: PackageCheck, tone: '#2E9E3E', bg: '#EFFAF0', countTone: '#2E9E3E' },
 ];
 // Sell order statuses (order-service SellOrder): waiting for a shop's quote,
 // and a sale agreed / done.
 const AWAITING = new Set(['AWAITING_QUOTATION', 'PENDING', 'DRAFT']);
-const SOLD = new Set(['SELL_CONFIRMED', 'COMPLETED', 'PICKED_UP', 'SOLD']);
+const SOLD = new Set(['COMPLETED', 'SOLD']); // quote accepted / picked up are NOT sold yet
 
 function StatCard({ stat, count, width, onPress }) {
   const Icon = stat.icon;
@@ -161,6 +160,8 @@ export default function SellHomeScreen({ navigation }) {
   const { width } = useWindowDimensions();
   const currentDevice = useCurrentDevice();
   const [recent, setRecent] = useState([]); // latest 3 sell orders [{ so, p }]
+  const [badImg, setBadImg] = useState({}); // sell order id → image failed to load
+  const [recentState, setRecentState] = useState('loading'); // loading | error | ok
 
   useEffect(() => {
     (async () => {
@@ -192,15 +193,25 @@ export default function SellHomeScreen({ navigation }) {
   useFocusEffect(useCallback(() => {
     let alive = true;
     (async () => {
-      const list = await listSellOrders().catch(() => []);
+      let failed = false;
+      const list = await listSellOrders().catch(() => { failed = true; return []; });
+      if (alive) setRecentState(failed ? 'error' : 'ok');
       const st = (o) => String(o?.status || '').toUpperCase();
       // Buyer enquiries = shop offers on listings still open (not sold / cancelled).
       const open = (list || []).filter((o) => !SOLD.has(st(o)) && !/CANCEL/.test(st(o)));
       const quoteLists = await Promise.all(open.map((o) => getSellOrderQuotations(o.id).catch(() => [])));
       if (!alive) return;
       const qBy = new Map(open.map((o, i) => [o.id, Array.isArray(quoteLists[i]) ? quoteLists[i] : []]));
-      setRecent([...(list || [])].sort((a, b) => new Date(b?.createdAt || 0) - new Date(a?.createdAt || 0)).slice(0, 3)
-        .map((so) => ({ so, p: sellProgress(so, qBy.get(so.id) || []) })));
+      // Recent Sell Orders = SOLD only (backend final status), most recently sold first.
+      const soldAt = (o) => new Date(o?.soldAt || o?.completedAt || o?.payoutConfirmedAt || o?.updatedAt || o?.createdAt || 0).getTime() || 0;
+      const top = (list || []).filter((o) => SOLD.has(st(o))).sort((a, b) => soldAt(b) - soldAt(a)).slice(0, 10);
+      // The list carries only ids + photos; the device image (as on Sell Device
+      // Details) comes from the catalogue model, fetched once per brand.
+      const brandIds = [...new Set(top.map((o) => o.brandId).filter(Boolean))];
+      const modelLists = await Promise.all(brandIds.map((b) => getModelsByBrand(b).catch(() => [])));
+      if (!alive) return;
+      const models = modelLists.flatMap((m) => (Array.isArray(m) ? m : []));
+      setRecent(top.map((so) => ({ so, p: sellProgress(so, qBy.get(so.id) || []), img: sellOrderImage(so, models.find((m) => m.id === so.modelId)) })));
       setStats({
         listings: (list || []).length,
         enquiries: quoteLists.reduce((n, q) => n + (Array.isArray(q) ? q.length : 0), 0),
@@ -413,44 +424,68 @@ export default function SellHomeScreen({ navigation }) {
               ))}
             </View>
 
-            {/* Recent Sell Orders — only when the customer has sell orders. */}
-            {recent.length ? (
+            {/* Recent Sell Orders — sold devices only. */}
+            {(
               <>
                 <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: padH, marginTop: 18, marginBottom: 8 }}>
                   <Text style={{ flex: 1, fontSize: rf(15), fontWeight: '800', color: TEXT }}>Recent Sell Orders</Text>
                   <Pressable onPress={() => navigation.navigate('MyOrders', { initialTab: 'Sell' })} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 4 }}>
-                    <Text style={{ fontSize: rf(12.5), fontWeight: '800', color: ACCENT }}>See All</Text>
+                    <Text style={{ fontSize: rf(12.5), fontWeight: '800', color: ACCENT }}>View All</Text>
                     <ArrowRight size={15} color={ACCENT} style={{ marginLeft: 4 }} />
                   </Pressable>
                 </View>
-                {recent.map(({ so, p }) => {
-                  const open = !p.cancelled && !p.sold;
-                  const a = open && p.step === 2
-                    ? { t: 'View Offers', go: () => navigation.navigate('SellQuotesReceived', { sellOrderId: so.id }) }
-                    : { t: open && p.step >= 3 ? 'Track Order' : 'View Details', go: () => navigation.navigate('SellOrderTracking', { sellOrderId: so.id }) };
-                  const [bg, fg] = { red: ['#FEECEC', '#B91C1C'], green: ['#E3F6EE', '#01805A'], blue: ['#E8F0FE', '#1D4ED8'] }[p.tone] || ['#FFF4E5', '#C2410C'];
-                  const img = so.images?.front || null;
-                  return (
-                    <Pressable key={so.id} onPress={a.go} accessibilityRole="button" accessibilityLabel={so.modelName || 'Sell order'}
-                      style={{ marginHorizontal: padH, marginBottom: 8, flexDirection: 'row', alignItems: 'center', borderRadius: 14, borderWidth: 1, borderColor: BORDER, backgroundColor: '#FFFFFF', padding: 8, ...cardShadow }}>
-                      <View style={{ height: 52, width: 56, borderRadius: 10, backgroundColor: '#F4F5F7', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                        {img ? <Image source={{ uri: img }} style={{ width: '100%', height: '100%' }} resizeMode="cover" /> : <Smartphone size={24} color={ACCENT} />}
-                      </View>
-                      <View style={{ flex: 1, minWidth: 0, marginLeft: 10 }}>
-                        <Text numberOfLines={1} style={{ fontSize: rf(13.5), fontWeight: '800', color: TEXT }}>{so.modelName || 'Device'}</Text>
-                        <View style={{ alignSelf: 'flex-start', marginTop: 4, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, backgroundColor: bg }}>
-                          <Text numberOfLines={1} style={{ fontSize: rf(11), fontWeight: '800', color: fg }}>{p.label}</Text>
+                {recentState === 'loading' ? (
+                  <Text style={{ marginHorizontal: padH, fontSize: rf(12.5), color: '#6B7280' }}>Loading sell orders…</Text>
+                ) : recentState === 'error' ? (
+                  <Text style={{ marginHorizontal: padH, fontSize: rf(12.5), color: '#B91C1C' }}>Couldn't load sell orders. Reopen this tab to retry.</Text>
+                ) : !recent.length ? (
+                  <Text style={{ marginHorizontal: padH, fontSize: rf(12.5), color: '#6B7280' }}>No sold devices yet.</Text>
+                ) : null}
+                {/* Cards styled exactly like Buy Home's "Deal of the Day" card. */}
+                {recent.length ? (
+                  <ScrollView horizontal nestedScrollEnabled directionalLockEnabled decelerationRate="fast" keyboardShouldPersistTaps="handled" showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: padH, paddingBottom: 6 }}>
+                    {recent.map((r) => { const { so, p } = r;
+                      const cardW = Math.max(160, Math.round((Math.min(width, MAX_W) - padH - 10) / 2.1));
+                      const imgH = Math.round(cardW * 0.62);
+                      // Final selling price only (never a quote) and the sold date.
+                      const price = so.finalConfirmedPrice ?? so.finalPrice ?? p.price.final ?? null;
+                      const priceLabel = price != null ? 'Sold' : null;
+                      const soldRaw = so.soldAt || so.completedAt || so.payoutConfirmedAt || so.updatedAt || so.createdAt;
+                      const when = soldRaw ? new Date(soldRaw) : null;
+                      const date = when && !isNaN(when) ? when.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
+                      const [bg, fg] = { red: ['#FEECEC', '#B91C1C'], green: ['#E3F6EE', '#01805A'], blue: ['#E8F0FE', '#1D4ED8'] }[p.tone] || ['#FFF4E5', '#C2410C'];
+                      const img = r.img && !badImg[so.id] ? r.img : null;
+                      return (
+                        <View key={so.id} style={{ width: cardW, marginRight: 10, borderRadius: 14, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: BORDER, ...cardShadow }}>
+                          <Pressable onPress={() => navigation.navigate('SellOrderDetails', { sellOrderId: so.id })} accessibilityRole="button" accessibilityLabel={so.modelName || 'Sell order'} className="active:opacity-90" style={{ padding: 10 }}>
+                            <View style={{ height: 20, flexDirection: 'row', alignItems: 'center' }}>
+                              <View style={{ borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, backgroundColor: bg, maxWidth: '100%' }}>
+                                <Text numberOfLines={1} style={{ fontSize: rf(9.5), fontWeight: '800', color: fg }}>{p.label}</Text>
+                              </View>
+                            </View>
+                            <View style={{ height: imgH, marginTop: 4, alignItems: 'center', justifyContent: 'center' }}>
+                              {img ? <Image resizeMethod="resize" source={{ uri: img }} onError={() => setBadImg((m) => ({ ...m, [so.id]: true }))} style={{ width: '86%', height: '100%' }} resizeMode="contain" /> : (
+                                <View style={{ width: imgH * 0.7, height: imgH * 0.7, borderRadius: 16, backgroundColor: MINT, alignItems: 'center', justifyContent: 'center' }}>
+                                  <Smartphone size={30} color={ACCENT} />
+                                </View>
+                              )}
+                            </View>
+                            <Text numberOfLines={2} style={{ marginTop: 8, fontSize: rf(12.5), lineHeight: rf(16), minHeight: rf(32), fontWeight: '600', color: TEXT }}>{so.modelName || 'Device'}</Text>
+                            <View style={{ height: 20, marginTop: 4, flexDirection: 'row', alignItems: 'center' }}>
+                              {date ? <Text numberOfLines={1} style={{ fontSize: rf(10.5), color: MUTED }}>{date}</Text> : null}
+                            </View>
+                            <View style={{ flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', marginTop: 4 }}>
+                              <Text numberOfLines={1} style={{ fontSize: rf(15), fontWeight: '800', color: TEXT, marginRight: 6 }}>{price != null ? `₹${Math.round(Number(price)).toLocaleString('en-IN')}` : 'Price not recorded'}</Text>
+                              {priceLabel ? <Text style={{ fontSize: rf(11), fontWeight: '800', color: '#16A34A' }}>{priceLabel}</Text> : null}
+                            </View>
+                          </Pressable>
                         </View>
-                      </View>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', height: 32, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1.5, borderColor: ACCENT }}>
-                        <Text style={{ fontSize: rf(11.5), fontWeight: '800', color: ACCENT }}>{a.t}</Text>
-                        <ArrowRight size={13} color={ACCENT} style={{ marginLeft: 4 }} />
-                      </View>
-                    </Pressable>
-                  );
-                })}
+                      );
+                    })}
+                  </ScrollView>
+                ) : null}
               </>
-            ) : null}
+            )}
           </View>
         </ScrollView>
       )}

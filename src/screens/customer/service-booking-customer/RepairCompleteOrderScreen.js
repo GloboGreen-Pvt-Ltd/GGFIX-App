@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSelector } from 'react-redux';
 import { Smartphone, MapPin, Store, Calendar, Wrench, Tag, Phone, Camera, Video, User, Home, ReceiptText, Send, CircleCheck, Lock, Headphones, Mic, CalendarClock, Wallet, ChevronDown, Check } from 'lucide-react-native';
@@ -17,6 +17,23 @@ import { clearCartDevices, getCartDevices, removeCartDevice } from './bookingCar
 import { formatDate as fmtDay, formatTime as fmtClock } from './BookingTimeSection';
 import { BookingHeader, useHideStackHeader } from './FlowChrome';
 import { BookingSheet } from './DeviceSecurityLockSheet';
+import { verifyPickupAddress } from './pickupAddressCheck';
+
+// "98XXXXXX42" — only the first 2 / last 2 digits are ever shown.
+const maskPhone = (m) => {
+  const d = String(m || '').replace(/D/g, '').slice(-10);
+  return d.length >= 6 ? `${d.slice(0, 2)}${'X'.repeat(d.length - 4)}${d.slice(-2)}` : '';
+};
+const dial = (m) => { const d = String(m || '').replace(/[^d+]/g, ''); if (d) Linking.openURL(`tel:${d}`).catch(() => {}); };
+// IST "now" check: pickup slot must not have ended yet.
+const slotStillValid = (date, end) => {
+  if (!date || !end) return false;
+  const t = new Date(Date.now() + 330 * 60000);
+  const today = t.toISOString().slice(0, 10);
+  if (date !== today) return date > today;
+  const [h, m] = String(end).split(':').map(Number);
+  return (h || 0) * 60 + (m || 0) > t.getUTCHours() * 60 + t.getUTCMinutes();
+};
 
 // Device Security as written into issueSummary ("PIN 1234", "Pattern 1>2>3>5").
 const LOCK_NAMES = { PIN: 'PIN', PASSWORD: 'Password', PATTERN: 'Pattern', ACCOUNT: 'iCloud / Google Account' };
@@ -256,8 +273,17 @@ export default function RepairCompleteOrderScreen({ navigation, route }) {
   };
 
   const book = async () => {
+    // Final checks at submit: the slot must not have expired, and pickup must
+    // still be serviceable from the ACTUAL pickup address.
+    if (!slotStillValid(p.pickupDate, p.pickupSlotEnd || p.pickupSlotStart)) {
+      notify('Slot expired', 'This pickup slot has already passed. Please choose another time.');
+      navigation.navigate('RepairPickupSlot', { ...p });
+      return;
+    }
     setSaving(true);
     try {
+      const chk = await verifyPickupAddress(p.addressId, p.shopId);
+      if (!chk.ok) { notify(chk.title, chk.message); return; }
       // Devices added with "Add Another Device" first, then this one — same
       // shop, address and pickup slot. Each booked device leaves the list, so
       // a retry after a failure never books one twice.
@@ -346,13 +372,13 @@ export default function RepairCompleteOrderScreen({ navigation, route }) {
                   {customerPhone ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
                       <Phone size={11} color={MUTED} strokeWidth={2} />
-                      <Text style={{ fontSize: 11, color: MUTED, marginLeft: 4 }} numberOfLines={1}>{customerPhone}</Text>
+                      <Text style={{ fontSize: 11, color: MUTED, marginLeft: 4 }} numberOfLines={1}>{maskPhone(customerPhone) || customerPhone}</Text>
                     </View>
                   ) : null}
                   {customerAlt ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
                       <Phone size={11} color={MUTED} strokeWidth={2} />
-                      <Text style={{ fontSize: 11, color: MUTED, marginLeft: 4 }} numberOfLines={1}>Alternate: {customerAlt}</Text>
+                      <Text style={{ fontSize: 11, color: MUTED, marginLeft: 4 }} numberOfLines={1}>Alternate: {maskPhone(customerAlt) || customerAlt}</Text>
                     </View>
                   ) : null}
                   {customerPlace ? (
@@ -374,7 +400,7 @@ export default function RepairCompleteOrderScreen({ navigation, route }) {
           {/* Device details — one card: device head, then label/value rows. */}
           <SectionLabel
             Icon={ReceiptText}
-            label="DEVICE DETAILS"
+            label="DEVICE CONFIRMATION"
             right={(
               <View style={{ borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3, backgroundColor: MINT }}>
                 <Text style={{ fontSize: 10, fontWeight: '800', color: ACCENT }}>{deviceCount} Device{deviceCount === 1 ? '' : 's'}</Text>
@@ -392,6 +418,9 @@ export default function RepairCompleteOrderScreen({ navigation, route }) {
                 )}
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
+                {dev.categoryName ? (
+                  <Text style={{ fontSize: 10.5, fontWeight: '800', color: ACCENT }} numberOfLines={1}>{dev.categoryName}</Text>
+                ) : null}
                 <Text style={{ color: INK, fontSize: 13, fontWeight: '800' }} numberOfLines={2}>{deviceTitle}</Text>
                 {specLine ? (
                   <Text style={{ fontSize: 11, color: MUTED, marginTop: 1 }} numberOfLines={2}>{specLine}</Text>
@@ -469,7 +498,16 @@ export default function RepairCompleteOrderScreen({ navigation, route }) {
             <DetailRow Icon={MapPin} label="PICKUP ADDRESS">
               {addr ? (
                 <>
-                  <InfoLine Icon={User} bold first>{addr.fullName} · {addr.mobile}</InfoLine>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <InfoLine Icon={User} bold first>{[addr.fullName, maskPhone(addr.mobile)].filter(Boolean).join(' · ')}</InfoLine>
+                    </View>
+                    {addr.mobile ? (
+                      <Pressable onPress={() => dial(addr.mobile)} accessibilityLabel="Call pickup contact" hitSlop={8} style={{ height: 28, width: 28, borderRadius: 14, backgroundColor: MINT, alignItems: 'center', justifyContent: 'center', marginLeft: 8 }}>
+                        <Phone size={14} color={ACCENT} strokeWidth={2} />
+                      </Pressable>
+                    ) : null}
+                  </View>
                   {addr.addressLine ? <InfoLine Icon={Home}>{addr.addressLine}</InfoLine> : null}
                   {addrRest ? <InfoLine Icon={MapPin}>{addrRest}</InfoLine> : null}
                 </>

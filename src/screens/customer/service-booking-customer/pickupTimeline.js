@@ -1,6 +1,13 @@
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
-import { Check, ChevronRight, ChevronUp } from 'lucide-react-native';
+import { Linking, Pressable, Text, View } from 'react-native';
+import { Check, ChevronRight, ChevronUp, MessageSquare, Phone } from 'lucide-react-native';
+
+// "+91 97865XXXXX" — first 5 digits only; the full number is used only to dial / text.
+const maskMobile = (m) => {
+  const d = String(m || '').replace(/\D/g, '').slice(-10);
+  return d.length === 10 ? `+91 ${d.slice(0, 5)}XXXXX` : '';
+};
+const digits = (m) => String(m || '').replace(/[^\d+]/g, '');
 import { rf } from '../../../utils/responsive';
 
 // Pickup tracking for View Details. Built only from the booking's real
@@ -70,7 +77,8 @@ export function buildPickupTimeline(b) {
       state: i <= doneIdx ? 'done' : i === curIdx ? 'current' : 'pending',
       at: e?.createdAt || null,
       desc: e?.note || (i <= doneIdx || i === curIdx ? st.desc : null),
-      who: who ? [who, st.person && who === person ? personPhone : null].filter(Boolean).join(' · ') : null,
+      who: st.key === 'PICKUP_PERSON_ASSIGNED' && i <= doneIdx ? person : null,
+      phone: st.key === 'PICKUP_PERSON_ASSIGNED' && i <= doneIdx ? personPhone : null,
     };
   });
   return { rows, terminal, rescheduled, completed: doneIdx >= 7 };
@@ -95,7 +103,24 @@ export function PickupTimeline({ rows }) {
           <Text style={{ fontSize: rf(14), fontWeight: r.state === 'pending' ? '500' : '800', color: r.state === 'pending' ? MUTED : INK }}>{r.label}</Text>
           {r.at ? <Text style={{ fontSize: rf(11), color: MUTED, marginTop: 2 }}>{fmtStamp(r.at)}</Text> : null}
           {r.desc ? <Text style={{ fontSize: rf(12), color: INK, marginTop: 3, lineHeight: rf(16) }}>{r.desc}</Text> : null}
-          {r.who ? <Text style={{ fontSize: rf(11.5), color: TEAL, marginTop: 3, fontWeight: '700' }}>{r.who}</Text> : null}
+          {/* Assigned person: "Name · +91 97865XXXXX" with Call + Message on the right. */}
+          {r.who || r.phone ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+              <Text style={{ flex: 1, fontSize: rf(12), color: TEAL, fontWeight: '700' }} numberOfLines={1}>
+                {[r.who, maskMobile(r.phone)].filter(Boolean).join(' · ')}
+              </Text>
+              {r.phone ? (
+                <>
+                  <Pressable onPress={() => Linking.openURL(`tel:${digits(r.phone)}`).catch(() => {})} accessibilityLabel="Call" hitSlop={6} style={{ height: 30, width: 30, borderRadius: 15, backgroundColor: '#E5F3F5', alignItems: 'center', justifyContent: 'center', marginLeft: 8 }}>
+                    <Phone size={15} color={TEAL} strokeWidth={2.2} />
+                  </Pressable>
+                  <Pressable onPress={() => Linking.openURL(`sms:${digits(r.phone)}`).catch(() => {})} accessibilityLabel="Message" hitSlop={6} style={{ height: 30, width: 30, borderRadius: 15, backgroundColor: '#E5F3F5', alignItems: 'center', justifyContent: 'center', marginLeft: 8 }}>
+                    <MessageSquare size={15} color={TEAL} strokeWidth={2.2} />
+                  </Pressable>
+                </>
+              ) : null}
+            </View>
+          ) : null}
         </View>
       </View>
     );
@@ -140,7 +165,7 @@ export function buildRepairRows(b) {
     if (!REPAIR_LABEL[k] || !e?.createdAt) return;
     const row = {
       key: KEEP_ALL.includes(k) ? `R_${k}_${i}` : `R_${k}`, status: k, label: REPAIR_LABEL[k], state: 'done', at: e.createdAt,
-      desc: e.note || null, who: e.actorName || e.employeeName || e.performedByName || e.technicianName || null,
+      desc: e.note || null, who: null,
     };
     if (KEEP_ALL.includes(k)) { out.push(row); return; }
     if (seen[k] != null) out[seen[k]] = row; else { seen[k] = out.length; out.push(row); }
@@ -151,7 +176,7 @@ export function buildRepairRows(b) {
 const GREEN = '#16A34A';
 // "Service Progress": 4 milestones (Picked Up · Repair · Out for Delivery · Delivered)
 // + the full Service Timeline (pickup → repair → delivery) behind a toggle.
-export function PickupHorizontalCard({ b, delivery, expanded, onToggle }) {
+export function PickupHorizontalCard({ b, delivery, expanded, onToggle, shopPhone }) {
   const pt = buildPickupTimeline(b);
   // Pickup rows: real events only (plus the current status row the backend reports).
   const pDone = pt.rows.filter((r) => r.state === 'done');
@@ -265,17 +290,18 @@ export function buildDeliveryRows(data) {
   const rank = D_ORDER.indexOf(st);
   const evs = (d?.events || data.events || []).slice().sort((x, y) => time({ createdAt: x.at || x.createdAt }) - time({ createdAt: y.at || y.createdAt }));
   const evAt = (re) => { let a = null; evs.forEach((e) => { if (re.test(up(e.status || e.type))) a = e.at || e.createdAt; }); return a; };
-  const who = d?.employee?.name ? [d.employee.name, d.employee.phone].filter(Boolean).join(' · ') : null;
+  const who = d?.employee?.name || null;
+  const phone = d?.employee?.phone || null;
   const steps = [
     { key: 'D_READY', label: notRepaired ? 'Return Ready' : 'Delivery Ready', done: true, at: data.readyAt || evAt(/READY/) || d?.createdAt, desc: notRepaired ? 'Your device is ready to be returned.' : 'Your device is repaired and ready for delivery.' },
     { key: 'D_SCHEDULED', label: 'Delivery Scheduled', done: !!d?.scheduledDate || rank >= 1, at: evAt(/SCHEDULED/) || d?.scheduledAt },
-    { key: 'D_ASSIGNED', label: 'Delivery Person Assigned', done: !!d?.employee || rank >= 2, at: evAt(/ASSIGNED/) || d?.assignedAt, who },
-    { key: 'D_ACCEPTED', label: 'Delivery Accepted', done: rank >= 3, at: evAt(/ACCEPTED/) || d?.acceptedAt, who },
-    { key: 'D_COLLECTED', label: 'Collected from Shop', done: rank >= 4 || !!d?.releasedAt, at: evAt(/COLLECTED/) || d?.collectedAt || d?.releasedAt, who },
-    { key: 'D_OUT', label: 'Out for Delivery', done: rank >= 5, at: evAt(/OUT_FOR_DELIVERY/) || d?.outForDeliveryAt || d?.startedAt, who },
-    { key: 'D_ARRIVED', label: 'Arrived at Customer Location', done: rank >= 6, at: evAt(/ARRIVED/) || d?.arrivedAt, who },
-    { key: 'D_DELIVERED', label: notRepaired ? 'Returned' : 'Delivered to Customer', done: st === 'DELIVERED', at: d?.deliveredAt || evAt(/DELIVERED/), who },
+    { key: 'D_ASSIGNED', label: 'Delivery Person Assigned', done: !!d?.employee || rank >= 2, at: evAt(/ASSIGNED/) || d?.assignedAt, who, phone },
+    { key: 'D_ACCEPTED', label: 'Delivery Accepted', done: rank >= 3, at: evAt(/ACCEPTED/) || d?.acceptedAt },
+    { key: 'D_COLLECTED', label: 'Collected from Shop', done: rank >= 4 || !!d?.releasedAt, at: evAt(/COLLECTED/) || d?.collectedAt || d?.releasedAt },
+    { key: 'D_OUT', label: 'Out for Delivery', done: rank >= 5, at: evAt(/OUT_FOR_DELIVERY/) || d?.outForDeliveryAt || d?.startedAt },
+    { key: 'D_ARRIVED', label: 'Arrived at Customer Location', done: rank >= 6, at: evAt(/ARRIVED/) || d?.arrivedAt },
+    { key: 'D_DELIVERED', label: notRepaired ? 'Returned' : 'Delivered to Customer', done: st === 'DELIVERED', at: d?.deliveredAt || evAt(/DELIVERED/) },
   ];
   // Every step the backend status has passed, with its recorded time when available.
-  return steps.filter((s) => s.done).map((s) => ({ key: s.key, label: s.label, state: 'done', at: s.at || null, desc: s.desc || null, who: s.who || null }));
+  return steps.filter((s) => s.done).map((s) => ({ key: s.key, label: s.label, state: 'done', at: s.at || null, desc: s.desc || null, who: s.who || null, phone: s.phone || null }));
 }

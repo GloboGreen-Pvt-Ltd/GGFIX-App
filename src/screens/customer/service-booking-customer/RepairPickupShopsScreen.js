@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PanResponder, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, PanResponder, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import { useFocusEffect } from '@react-navigation/native';
@@ -38,7 +38,7 @@ import {
 } from '../../../components/rnr';
 import { listNearbyShops } from '../../../api/shops';
 import { verifiedCoords, haversineKm, eligiblePickupShops, createLatestGate } from '../../../utils/pickupDistance';
-import { resolvePinArea } from '../../../utils/pinGeocode';
+import { resolvePinArea, resolvePinDistrict } from '../../../utils/pinGeocode';
 import { useCustomerLocation } from '../../../hooks/useCustomerLocation';
 import { travelTimesFor } from '../../../utils/travelTimes';
 import { isShopOpen } from '../../../utils/shopHours';
@@ -198,6 +198,15 @@ export default function RepairPickupShopsScreen({ navigation, route }) {
     if (pickupAddr?.pincode && !pinTouched.current && !pin) setPin(String(pickupAddr.pincode).trim());
   }, [pickupAddr]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // District for the PIN in the search box — resolved live, never hardcoded.
+  const [pinDistrict, setPinDistrict] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    setPinDistrict(null);
+    if (/^\d{6}$/.test(pin)) resolvePinDistrict(pin).then((d) => { if (alive) setPinDistrict(d); });
+    return () => { alive = false; };
+  }, [pin]);
+
   // PIN → coordinates via the device geocoder. No guessing: unresolved = error.
   const checkPin = useCallback(async (p) => {
     const v = String(p || '').trim();
@@ -271,7 +280,17 @@ export default function RepairPickupShopsScreen({ navigation, route }) {
       });
       if (!gate.isLatest(seq)) return; // stale response for a previous address/PIN
       // Filter BEFORE rendering: verified coords, distance from the pickup address, <= 20 km.
-      setShops(eligiblePickupShops(list, eLat != null ? { lat: eLat, lng: eLng } : null, Math.min(radiusKm, MAX_RADIUS_KM)));
+      const max = Math.min(radiusKm, MAX_RADIUS_KM);
+      const origin = eLat != null ? { lat: eLat, lng: eLng } : null;
+      if (pinCenter) {
+        // PIN search: shops around the searched PIN; distance shown (and booking
+        // allowed) is still from the selected pickup address.
+        setShops(eligiblePickupShops(list, pinCenter, max).map((s) => ({
+          ...s, distanceKm: origin ? haversineKm(origin, verifiedCoords(s)) : null,
+        })));
+      } else {
+        setShops(eligiblePickupShops(list, origin, max));
+      }
     } catch (e) {
       if (!gate.isLatest(seq)) return;
       setShopError(e?.message || 'Could not load shops');
@@ -279,7 +298,7 @@ export default function RepairPickupShopsScreen({ navigation, route }) {
     } finally {
       if (gate.isLatest(seq)) setLoading(false);
     }
-  }, [lat, lng, eLat, eLng, radiusKm]);
+  }, [lat, lng, eLat, eLng, radiusKm, pinCenter]);
 
   useEffect(() => { if (center) fetchShops(); else { gate.invalidate(); setShops([]); setLoading(false); } }, [center, fetchShops]);
 
@@ -362,7 +381,7 @@ export default function RepairPickupShopsScreen({ navigation, route }) {
           </View>
         </LinearGradient>
 
-        {/* Pickup address + PIN check */}
+        {/* Pickup address */}
         <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: FLOW.border, padding: 12, ...cardShadow }}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: FLOW.deep, alignItems: 'center', justifyContent: 'center' }}>
@@ -373,19 +392,31 @@ export default function RepairPickupShopsScreen({ navigation, route }) {
               <Text style={{ fontSize: rf(13), fontWeight: '700', color: FLOW.ink, marginTop: 1 }} numberOfLines={2}>
                 {pickupAddr ? addrText(pickupAddr) : 'No pickup address selected'}
               </Text>
-              {pickupAddr?.pincode ? <Text style={{ fontSize: rf(11.5), color: '#035C6C', fontWeight: '700', marginTop: 2 }}>PIN Code: {String(pickupAddr.pincode).trim()}</Text> : null}
+              {pickupAddr?.pincode ? <Text style={{ fontSize: rf(11.5), color: '#035C6C', fontWeight: '700', marginTop: 2 }}>PIN Code: {String(pickupAddr.pincode).trim()}{pickupAddr.district ? ` · ${pickupAddr.district}` : ''}</Text> : null}
+              <Text style={{ fontSize: rf(11), color: FLOW.muted, marginTop: 2 }}>Used for pickup and final serviceability check</Text>
             </View>
             <Pressable onPress={openAddressPicker} hitSlop={8} className="active:opacity-70" style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 8 }}>
               <Pencil size={14} color={FLOW.deep} />
-              <Text style={{ fontSize: rf(13), fontWeight: '700', color: FLOW.deep, marginLeft: 4 }}>Change</Text>
+              <Text style={{ fontSize: rf(13), fontWeight: '700', color: FLOW.deep, marginLeft: 4 }}>Change Address</Text>
             </Pressable>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12 }}>
+        </View>
+
+        {/* PIN code search — its own card */}
+        <View style={{ marginHorizontal: 16, marginTop: 10, backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: FLOW.border, padding: 12, ...cardShadow }}>
+          <Text style={{ fontSize: rf(12.5), fontWeight: '800', color: FLOW.ink }}>Find Shops by Pincode</Text>
+          <Text style={{ fontSize: rf(11), color: FLOW.muted, marginTop: 2, lineHeight: rf(15) }}>Use this to explore shops in another area. Final pickup availability depends on your selected pickup address.</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
             <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', height: 46, borderRadius: 14, borderWidth: 1, borderColor: FLOW.border, paddingHorizontal: 12 }}>
               <Search size={18} color={FLOW.deep} />
               <TextInput
                 value={pin}
-                onChangeText={(t) => { pinTouched.current = true; setPin(t.replace(/\D/g, '').slice(0, 6)); }}
+                onChangeText={(t) => {
+                  pinTouched.current = true;
+                  const v = t.replace(/\D/g, '').slice(0, 6);
+                  setPin(v);
+                  if (v.length === 6 && v !== pin) checkPin(v); // refresh shops as soon as a full PIN is entered
+                }}
                 onSubmitEditing={() => checkPin(pin)}
                 placeholder="Enter 6-digit PIN code"
                 placeholderTextColor={BRAND.muted}
@@ -394,6 +425,7 @@ export default function RepairPickupShopsScreen({ navigation, route }) {
                 style={{ flex: 1, marginLeft: 8, fontSize: rf(13.5), color: FLOW.ink, paddingVertical: 0 }}
                 returnKeyType="search"
               />
+              {pinDistrict ? <Text style={{ fontSize: rf(12.5), fontWeight: '700', color: FLOW.deep, marginLeft: 4 }} numberOfLines={1}>· {pinDistrict}</Text> : null}
               {pin ? (
                 <Pressable onPress={() => { pinTouched.current = true; setPin(''); }} hitSlop={8} accessibilityLabel="Clear PIN">
                   <X size={16} color={FLOW.muted} />
@@ -402,7 +434,7 @@ export default function RepairPickupShopsScreen({ navigation, route }) {
             </View>
             <Pressable onPress={() => checkPin(pin)} disabled={checking} className="active:opacity-85" style={{ height: 46, marginLeft: 8, paddingHorizontal: 16, borderRadius: 14, backgroundColor: FLOW.deep, flexDirection: 'row', alignItems: 'center' }}>
               <Search size={16} color="#fff" />
-              <Text style={{ color: '#fff', fontWeight: '800', fontSize: rf(13.5), marginLeft: 6 }}>{checking ? 'Checking…' : 'Check'}</Text>
+              <Text style={{ color: '#fff', fontWeight: '800', fontSize: rf(13.5), marginLeft: 6 }}>{checking ? 'Checking…' : 'Check Shops'}</Text>
             </Pressable>
           </View>
           {pinMsg ? <Text style={{ fontSize: rf(11.5), color: BRAND.red, marginTop: 6 }}>{pinMsg}</Text> : null}
@@ -486,18 +518,11 @@ export default function RepairPickupShopsScreen({ navigation, route }) {
           </View>
         ) : null}
 
-        {/* Radius strip — tap to adjust (hidden when no eligible shops) */}
-        {lat != null && lng != null && (shops.length > 0 || showRadius) ? (
+        {/* Radius slider — only via the settings button (the "Showing shops within X km" banner is retired). */}
+        {lat != null && lng != null && showRadius ? (
           <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: '#EAF7EC', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 10 }}>
-            <Pressable onPress={() => setShowRadius((v) => !v)} style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Crosshair size={18} color="#1F8A3B" />
-              <Text style={{ flex: 1, marginLeft: 8, fontSize: rf(13), color: FLOW.ink }}>
-                Showing shops within <Text style={{ fontWeight: '900', color: '#1F8A3B', fontSize: rf(15) }}>{radiusKm} km</Text> of your address
-              </Text>
-              <Info size={18} color={FLOW.ink} />
-            </Pressable>
             {showRadius ? (
-              <View style={{ marginTop: 6 }}>
+              <View>
                 <RadiusSlider min={MIN_RADIUS_KM} max={MAX_RADIUS_KM} value={radiusKm} onChange={setRadiusKm} />
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                   <Text style={{ fontSize: rf(11), color: FLOW.muted }}>{MIN_RADIUS_KM} km</Text>
@@ -587,7 +612,18 @@ export default function RepairPickupShopsScreen({ navigation, route }) {
             filtered.map((s, idx) => (
               <Pressable
                 key={s.id}
-                onPress={() => navigation.navigate('RepairShopDetails', { ...params, shopId: s.id, shopImage: s.frontImageUrl || undefined, addressId: pickupAddr?.id })}
+                onPress={() => {
+                  // Final check is always against the selected pickup address.
+                  if (!(Number.isFinite(s.distanceKm) && s.distanceKm <= MAX_RADIUS_KM)) {
+                    Alert.alert('Pickup not available',
+                      Number.isFinite(s.distanceKm)
+                        ? `${s.name} is ${s.distanceKm.toFixed(1)} km from your pickup address. Pickup is available only within ${MAX_RADIUS_KM} km. Please change your pickup address.`
+                        : 'Verify your pickup address to book a pickup from this shop.',
+                      [{ text: 'Cancel', style: 'cancel' }, { text: 'Change Address', onPress: openAddressPicker }]);
+                    return;
+                  }
+                  navigation.navigate('RepairShopDetails', { ...params, shopId: s.id, shopImage: s.frontImageUrl || undefined, addressId: pickupAddr?.id });
+                }}
                 className="active:opacity-90"
                 style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 16, borderWidth: idx === 0 ? 1.5 : 1, borderColor: idx === 0 ? FLOW.deep : FLOW.border, padding: 10, marginBottom: 10, ...cardShadow }}
               >
@@ -615,7 +651,8 @@ export default function RepairPickupShopsScreen({ navigation, route }) {
                 </View>
                 <View style={{ alignItems: 'flex-end', marginLeft: 6 }}>
                   {/* Distance from the selected pickup address (computed, verified coords only). */}
-                  {Number.isFinite(s.distanceKm) ? (
+                  {/* < 50 m means identical/placeholder coords — not a real distance, so no "0.0 km". */}
+                  {Number.isFinite(s.distanceKm) && s.distanceKm >= 0.05 ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#035C6C', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 }}>
                       <MapPin size={12} color="#fff" />
                       <Text style={{ fontSize: rf(12.5), fontWeight: '800', color: '#fff', marginLeft: 4 }}>{(addrCenter ? '' : '~') + s.distanceKm.toFixed(1)} km</Text>
@@ -626,7 +663,11 @@ export default function RepairPickupShopsScreen({ navigation, route }) {
                       <Truck size={12} color="#1F8A3B" />
                       <Text style={{ fontSize: rf(10.5), fontWeight: '700', color: '#1F8A3B', marginLeft: 4 }}>Pickup Available</Text>
                     </View>
-                  ) : null}
+                  ) : (
+                    <View style={{ backgroundColor: '#FDECEC', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4, marginTop: 8 }}>
+                      <Text style={{ fontSize: rf(10.5), fontWeight: '700', color: BRAND.red }}>Beyond {MAX_RADIUS_KM} km</Text>
+                    </View>
+                  )}
                 </View>
               </Pressable>
             ))

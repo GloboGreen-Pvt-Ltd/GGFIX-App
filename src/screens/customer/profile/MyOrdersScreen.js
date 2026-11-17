@@ -30,7 +30,7 @@ import {
 import { BRAND } from '../../../theme/brand';
 
 const GREEN = BRAND.green;
-import { listMyOrders, getRepairBooking, getSellOrder, getSellOrderQuotations } from '../../../api/orders';
+import { listMyOrders, getRepairBooking, getSellOrder, getSellOrderQuotations, isDraftSellStatus } from '../../../api/orders';
 import { sellProgress, rowBucket } from '../../../utils/sellStatus';
 import { getShop } from '../../../api/shops';
 import { getProduct, listChats } from '../../../api/marketplace';
@@ -212,6 +212,32 @@ const COMMERCE_SCOPES = [
   { key: 'COMPLETED', label: 'Completed', icon: CheckCircle2, tone: '#609138' },
   { key: 'CANCELLED', label: 'Cancelled', icon: XCircle,      tone: '#F32C26' },
 ];
+// Selling Orders rail: no "Pending" — open orders split into Quotations
+// (no offer accepted yet), Awaiting Pickup (offer accepted, no pickup person
+// yet) and Active (pickup / inspection / payment under way). See sellScope.
+const SELL_SCOPES = [
+  { key: 'ALL',       label: 'All',       icon: FileText,     tone: '#035C6C' },
+  { key: 'QUOTATIONS', label: 'Quotations', icon: Receipt,    tone: '#035C6C' },
+  { key: 'AWAITING_PICKUP', label: 'Awaiting Pickup', icon: Truck, tone: '#B45309' },
+  { key: 'ACTIVE',    label: 'Active',    icon: Clock,        tone: '#0788C9' },
+  { key: 'COMPLETED', label: 'Completed', icon: CheckCircle2, tone: '#609138' },
+  { key: 'CANCELLED', label: 'Cancelled', icon: XCircle,      tone: '#F32C26' },
+];
+// The one classifier for a sell order's rail group (each order in exactly one).
+// Uses the live journey (sellProgress) once loaded, else the row status.
+function sellScope(o, sell) {
+  if (sell) {
+    if (sell.bucket === 'CANCELLED' || sell.bucket === 'COMPLETED') return sell.bucket;
+    if (sell.step < 3) return 'QUOTATIONS';
+    return sell.pickupAssigned ? 'ACTIVE' : 'AWAITING_PICKUP';
+  }
+  const s = String(o?.status || '').toUpperCase();
+  if (/CANCEL|REJECT|EXPIRED|WITHDRAWN|DECLINED/.test(s)) return 'CANCELLED';
+  if (/^(SOLD|COMPLETED|SELLING_COMPLETED|CLOSED)$/.test(s)) return 'COMPLETED';
+  if (!s || /DRAFT|PENDING|SUBMITTED|CREATED|OPEN|REQUEST|QUOT|EVALUAT|OFFER/.test(s)) return 'QUOTATIONS';
+  if (/^(ACCEPTED|SHOP_SELECTED|SELECTED|ORDER_CREATED|CONFIRMED|ORDER_CONFIRMED|PICKUP_SCHEDULED)$/.test(s)) return 'AWAITING_PICKUP';
+  return 'ACTIVE';
+}
 // Partner rail sizing (components/report/ReportRail railSizes).
 function jobRailSizes(w) {
   if (w < 360) return { font: 9.5, line: 12, disc: 30, icon: 14, badge: 9 };
@@ -360,6 +386,8 @@ export default function MyOrdersScreen({ navigation, route }) {
       if (!ok.length) throw settled[0]?.reason || new Error('Failed to load orders');
       const byId = {};
       ok.flatMap((r) => r.value || []).forEach((o) => { if (o && o.id) byId[o.id] = o; });
+      // Sell tab: only submitted orders — never an unsubmitted DRAFT record.
+      if (tab === 'Sell') Object.keys(byId).forEach((id) => { if (isDraftSellStatus(byId[id])) delete byId[id]; });
       // Service tab: a doorstep-pickup booking belongs to the Pickup tab until the
       // shop has received the device and opened a service ticket for it.
       if (tab === 'Service') {
@@ -494,6 +522,7 @@ export default function MyOrdersScreen({ navigation, route }) {
               // Amount on the card: confirmed final price, else the accepted offer, else the best quote.
               amount: prog.price.final ?? prog.price.quoted ?? prog.price.bestQuote,
               amountLabel: prog.price.final ? 'Final' : prog.price.quoted ? 'Offer' : prog.price.bestQuote ? 'Best quote' : null,
+              pickupAssigned: !!prog.pickup?.assigned,
               awaitingChoice: !prog.cancelled && quotes.length > 0 && prog.step < 3,
             },
             shopId: so.shopId || null,
@@ -571,18 +600,17 @@ export default function MyOrdersScreen({ navigation, route }) {
     return () => { cancelled = true; };
   }, [items, tab, detailsTick]);
 
-  const sellBucket = (o) => details[o.id]?.sell?.bucket || rowBucket(o.status);
   // My Orders (Buy / Sell): the left rail's status scope for an order — a sell
   // order's live journey, a buy order's row status.
   const commerceScope = (o) => {
-    if (tab === 'Sell') return sellBucket(o);
+    if (tab === 'Sell') return sellScope(o, details[o.id]?.sell);
     const s = String(o?.status || '').toUpperCase();
     if (/CANCEL|REJECT/.test(s)) return 'CANCELLED';
     if (/COMPLETE|DELIVERED\b|CLOSED/.test(s)) return 'COMPLETED';
     return 'PENDING';
   };
   const commerceCounts = !isRepairList
-    ? items.reduce((c, o) => { c[commerceScope(o)] += 1; return c; }, { ALL: items.length, PENDING: 0, COMPLETED: 0, CANCELLED: 0 })
+    ? items.reduce((c, o) => { c[commerceScope(o)] += 1; return c; }, (tab === 'Sell' ? { ALL: items.length, QUOTATIONS: 0, AWAITING_PICKUP: 0, ACTIVE: 0, COMPLETED: 0, CANCELLED: 0 } : { ALL: items.length, PENDING: 0, COMPLETED: 0, CANCELLED: 0 }))
     : null;
   const repairCounts = isRepairList
     ? items.reduce((c, o) => { c[repairScope(o)] += 1; return c; }, { ALL: items.length, ACTIVE: 0, COMPLETED: 0, CANCELLED: 0 })
@@ -1217,7 +1245,7 @@ export default function MyOrdersScreen({ navigation, route }) {
     const railW = screenW >= 680 ? 104 : screenW < 360 ? 70 : 78;
     const numCols = isRepairList && screenW - railW >= 680 ? 2 : 1;
     const rz = jobRailSizes(screenW);
-    const scopes = isRepairList ? REPAIR_SCOPES : COMMERCE_SCOPES;
+    const scopes = isRepairList ? REPAIR_SCOPES : tab === 'Sell' ? SELL_SCOPES : COMMERCE_SCOPES;
     const current = isRepairList ? scope : sellFilter;
     const setCurrent = isRepairList ? setScope : setSellFilter;
     const counts = isRepairList ? repairCounts : commerceCounts;

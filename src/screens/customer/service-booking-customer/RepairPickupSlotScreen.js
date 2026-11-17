@@ -28,18 +28,31 @@ const YELLOW_SOFT = '#FFF4D6';
 const RED_SOFT = '#FEEBEA';
 const cardShadow = { shadowColor: BRAND.ink, shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1 };
 
-function next7Days() {
-  const days = [];
-  const d0 = new Date();
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(d0);
-    d.setDate(d0.getDate() + i);
-    days.push(d);
-  }
-  return days;
+// Wall clock in Asia/Kolkata (IST, UTC+5:30, no DST), independent of the
+// device time zone. The returned Date's getUTC* fields read as IST.
+const IST_OFFSET_MS = 330 * 60 * 1000;
+const istNow = (ms = Date.now()) => new Date(ms + IST_OFFSET_MS);
+const dayKey = (d) => d.toISOString().slice(0, 10); // d is an IST-midnight UTC date
+const istToday = (ms) => { const t = istNow(ms); return new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate())); };
+
+// Today + next 6 days in IST; previous dates are never offered.
+function next7Days(nowMs) {
+  const base = istToday(nowMs).getTime();
+  return Array.from({ length: 7 }, (_, i) => new Date(base + i * 86400000));
+}
+
+// Expired = a past date, or today (IST) once the slot end time has passed.
+function slotExpired(dateKey, s, nowMs = Date.now()) {
+  const today = dayKey(istToday(nowMs));
+  if (dateKey < today) return true;
+  if (dateKey > today) return false;
+  const t = istNow(nowMs);
+  // Bookable until the slot ENDS (not when it starts).
+  return toMin(s?.endTime || s?.startTime) <= t.getUTCHours() * 60 + t.getUTCMinutes();
 }
 
 const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTH = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // Shop windows (e.g. 10:00–20:00) are offered as one-hour slots; a shorter
 // tail stays as it is. Times go to the server as "HH:mm".
@@ -80,8 +93,15 @@ export default function RepairPickupSlotScreen({ navigation, route }) {
   useHideStackHeader(navigation);
   const rescheduleBookingId = params.rescheduleBookingId;
   const isReschedule = !!rescheduleBookingId;
-  const days = next7Days();
+  // Ticks every 30 s so slots expire live and the dates roll over at midnight.
+  const [nowMs, setNowMs] = useState(Date.now());
+  useEffect(() => { const t = setInterval(() => setNowMs(Date.now()), 30000); return () => clearInterval(t); }, []);
+  const days = next7Days(nowMs);
   const [dayIdx, setDayIdx] = useState(1);
+  const todayKey = dayKey(days[0]);
+  const firstDay = React.useRef(todayKey);
+  // Midnight rollover: the list shifted by a day, so drop the stale selection.
+  useEffect(() => { if (firstDay.current !== todayKey) { firstDay.current = todayKey; setSlot(null); } }, [todayKey]);
   const [slot, setSlot] = useState(null);
   const [slots, setSlots] = useState([]);
   const [shop, setShop] = useState(null);
@@ -89,7 +109,13 @@ export default function RepairPickupSlotScreen({ navigation, route }) {
   const [saving, setSaving] = useState(false);
 
   const onConfirm = async () => {
-    const pickupDate = days[dayIdx].toISOString().slice(0, 10);
+    const pickupDate = dayKey(days[dayIdx]);
+    // Re-validate on continue — the slot may have expired meanwhile.
+    if (!slot || slotExpired(pickupDate, slot)) {
+      setSlot(null);
+      notify('Slot unavailable', 'This pickup slot has already passed. Please choose another time.');
+      return;
+    }
     if (isReschedule) {
       setSaving(true);
       try {
@@ -126,7 +152,7 @@ export default function RepairPickupSlotScreen({ navigation, route }) {
             sid = bk.shopId || null;
             if (bk.pickupDate) {
               const d0 = String(bk.pickupDate).slice(0, 10);
-              const idx = days.findIndex((d) => d.toISOString().slice(0, 10) === d0);
+              const idx = days.findIndex((d) => dayKey(d) === d0);
               if (idx >= 0) setDayIdx(idx);
             }
             if (bk.pickupSlotStart) setSlot({ startTime: bk.pickupSlotStart, endTime: bk.pickupSlotEnd });
@@ -156,7 +182,8 @@ export default function RepairPickupSlotScreen({ navigation, route }) {
 
   // Backend stores dayOfWeek as ISO 1..7 (Mon..Sun); null means any-day.
   // JS Date.getDay() is 0=Sun..6=Sat — convert to ISO before matching.
-  const isoDow = ((days[dayIdx].getDay() + 6) % 7) + 1;
+  const isoDow = ((days[dayIdx].getUTCDay() + 6) % 7) + 1;
+  const selKey = dayKey(days[dayIdx]);
   const slotsForDay = slots.filter((s) => s.dayOfWeek == null || s.dayOfWeek === isoDow);
   const slotsToShow = hourlySlots(pickupOff ? [] : (slotsForDay.length ? slotsForDay : (slots.length ? [] : [
     { startTime: '09:00', endTime: '11:00' },
@@ -222,13 +249,13 @@ export default function RepairPickupSlotScreen({ navigation, route }) {
                     <LinearGradient colors={[BRAND.green, '#035C6C']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
                   ) : null}
                   <Text style={{ fontSize: rf(10), fontWeight: '700', letterSpacing: 0.5, color: active ? 'rgba(255,255,255,0.9)' : FLOW.muted }}>
-                    {WEEKDAY[d.getDay()].toUpperCase()}
+                    {WEEKDAY[d.getUTCDay()].toUpperCase()}
                   </Text>
                   <Text style={{ fontSize: rf(17), fontWeight: '800', marginTop: 1, color: active ? '#fff' : FLOW.ink }}>
-                    {d.getDate()}
+                    {d.getUTCDate()}
                   </Text>
                   <Text style={{ fontSize: rf(10.5), marginTop: 0, color: active ? 'rgba(255,255,255,0.9)' : FLOW.muted }}>
-                    {d.toLocaleString('default', { month: 'short' })}
+                    {MONTH[d.getUTCMonth()]}
                   </Text>
                 </Pressable>
               );
@@ -253,11 +280,14 @@ export default function RepairPickupSlotScreen({ navigation, route }) {
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -3 }}>
             {slotsToShow.map((s, i) => {
               const label = slotLabel(s);
-              const active = sameSlot(slot, s);
+              const expired = slotExpired(selKey, s, nowMs);
+              const active = !expired && sameSlot(slot, s);
               return (
-                <View key={i} style={{ width: '50%', padding: 3 }}>
+                <View key={i} style={{ width: '50%', padding: 3, opacity: expired ? 0.4 : 1 }}>
                   <Pressable
-                    onPress={() => setSlot(s)}
+                    disabled={expired}
+                    accessibilityState={{ disabled: expired }}
+                    onPress={() => { if (!slotExpired(selKey, s)) setSlot(s); }}
                     className="active:opacity-85"
                     style={{
                       flexDirection: 'row', alignItems: 'center', height: 44, borderRadius: 12, paddingHorizontal: 9,
@@ -296,7 +326,7 @@ export default function RepairPickupSlotScreen({ navigation, route }) {
           title={isReschedule ? 'Confirm Re-Schedule' : 'Continue to Review'}
           onPress={onConfirm}
           loading={saving}
-          disabled={!slot || pickupOff}
+          disabled={!slot || pickupOff || slotExpired(selKey, slot, nowMs)}
           palette={BRAND_FLOW}
         />
       </BottomActionBar>

@@ -17,11 +17,9 @@ import { StaticTabBar } from '../../../navigation/CustomTabBar';
  * the pickup stages apply (buy orders are collected from the shop).
  */
 const TEAL = '#035C6C';
-const GREEN = '#01AC77';
 const INK = '#111111';
 const MUTED = '#606E87';
 const LINE = '#E8EAEE';
-const TINT = '#E6F4F2';
 const RED = '#F32C26';
 
 const up = (v) => String(v ?? '').trim().toUpperCase();
@@ -45,15 +43,6 @@ const RANK = {};
   [5, 'COMPLETED', 'CLOSED', 'FULFILLED'],
 ].forEach(([r, ...names]) => names.forEach((n) => { RANK[n] = r; }));
 const CANCELLED = /CANCEL|REJECT|DECLIN|EXPIRE/;
-
-// Status card copy for each stage.
-const HEAD = {
-  0: ['Order Placed', 'Waiting for the shop to confirm'],
-  2: ['In Progress', 'Your order is being processed'],
-  3: ['Ready for Pickup', 'Collect your device from the shop'],
-  4: ['Picked Up', 'You collected your device'],
-  5: ['Completed', 'Your order is complete'],
-};
 
 export default function BuyOrderDetailsScreen({ navigation, route }) {
   const id = route.params?.orderId;
@@ -112,65 +101,42 @@ export default function BuyOrderDetailsScreen({ navigation, route }) {
   const cancelled = CANCELLED.test(status);
   const rank = RANK[status] ?? 0;
   const p = order.payload || {};
-  const paidAt = p.paidAt || p.payment?.paidAt;
-  const paid = !!paidAt || /^(PAID|SUCCESS|CAPTURED)$/.test(up(p.paymentStatus || p.payment?.status));
+  // Pickup-only flow (this order type has no delivery stages). Payment is not shown as a step.
   const steps = [
-    { key: 'placed', label: 'Order Placed', done: true, at: order.createdAt },
-    ...(paid ? [{ key: 'paid', label: 'Payment Completed', done: true, at: paidAt }] : []),
-    { key: 'preparing', label: 'Preparing for Pickup', note: 'Your order will be ready soon', done: rank >= 3, active: rank === 2 },
-    { key: 'ready', label: 'Ready for Pickup', note: 'Collect it from the shop', done: rank >= 4, active: rank === 3 },
-    { key: 'picked', label: 'Picked Up from Shop', done: rank >= 4 },
-    { key: 'completed', label: 'Completed', done: rank >= 5 },
+    { key: 'placed', label: 'Placed', icon: 'cube-outline', done: true },
+    { key: 'confirmed', label: 'Confirmed', icon: 'storefront-outline', done: rank >= 2 },
+    { key: 'ready', label: 'Ready for Pickup', icon: 'bag-handle-outline', done: rank >= 3 },
+    { key: 'collected', label: 'Collected', icon: 'hand-left-outline', done: rank >= 4 },
   ];
-  // The latest status change is the order's updatedAt — put it on the furthest done step.
-  const lastDone = steps.reduce((n, s, i) => (s.done ? i : n), 0);
-  if (lastDone > 0 && !steps[lastDone].at) steps[lastDone].at = order.updatedAt;
+  const current = cancelled ? -1 : steps.findIndex((s) => !s.done);
   const lines = Array.isArray(p.items) ? p.items : [];
-  const [headTitle, headSub] = cancelled ? ['Cancelled', 'This order was cancelled'] : HEAD[rank] || HEAD[0];
   const shopPhone = shop?.phone || shop?.mobile;
+  const otp = order.handoverOtp || order.otp || p.otp || p.pickupOtp;
+  const payMethodRaw = up(p.paymentMethod || order.paymentMethod);
+  const payMethod = payMethodRaw === 'COD' ? 'Cash on delivery' : payMethodRaw && payMethodRaw !== 'PAY_AT_SHOP' ? payMethodRaw.replace(/_/g, ' ') : 'Pay at shop';
   const contactShop = () => {
     if (shopPhone) Linking.openURL(`tel:${String(shopPhone).replace(/\s+/g, '')}`);
     else if (shop?.id) navigation.navigate('ShopChat', { shopId: shop.id });
   };
+  const kv = (k, v) => (v ? (
+    <View key={k} style={[styles.row, { alignItems: 'flex-start', paddingVertical: 3 }]}>
+      <Text style={styles.kvKey}>{k}</Text><Text style={styles.kvColon}>:</Text><Text style={styles.kvVal}>{v}</Text>
+    </View>
+  ) : null);
 
   return (
     <View style={styles.page}>
       <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 20, width: '100%', maxWidth: 640, alignSelf: 'center' }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={TEAL} colors={[TEAL]} />}>
-        {/* Status */}
-        <View style={[styles.status, cancelled ? { backgroundColor: '#FEEBEA', borderColor: '#FBD0CE' } : null]}>
-          <View style={[styles.statusIcon, cancelled ? { backgroundColor: RED } : null]}>
-            <Ionicons name={cancelled ? 'close' : rank >= 5 ? 'checkmark-done' : 'bag-handle-outline'} size={22} color="#FFFFFF" />
-          </View>
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={[styles.statusTitle, cancelled ? { color: RED } : null]}>{headTitle}</Text>
-            <Text style={styles.muted}>{headSub}</Text>
-          </View>
-        </View>
+        {/* Order Summary */}
+        <Section icon="document-text-outline" title="Order Summary">
+          {kv('Order ID', order.orderNumber ? `#${String(order.orderNumber).replace(/^#/, '')}` : null)}
+          {kv('Placed on', when(order.createdAt))}
+          {kv('Payment', payMethod)}
+          {kv('Total', inr(order.totalAmount))}
+        </Section>
 
-        {/* Tracking timeline */}
-        <View style={{ marginTop: 14 }}>
-          {steps.map((s, i) => {
-            const last = i === steps.length - 1;
-            const current = !cancelled && s.active;
-            return (
-              <View key={s.key} style={{ flexDirection: 'row' }}>
-                <View style={{ alignItems: 'center', width: 30 }}>
-                  <View style={[styles.dot, s.done ? { backgroundColor: GREEN, borderColor: GREEN } : current ? { borderColor: TEAL, borderWidth: 3 } : null]}>
-                    {s.done ? <Ionicons name="checkmark" size={15} color="#FFFFFF" /> : current ? <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: TEAL }} /> : null}
-                  </View>
-                  {!last ? <View style={[styles.rail, { backgroundColor: s.done ? GREEN : '#D9DEE5' }]} /> : null}
-                </View>
-                <View style={[styles.stepBody, current ? styles.stepCurrent : null]}>
-                  <Text style={[styles.stepText, { color: s.done || current ? INK : '#8E97A9' }]}>{s.label}</Text>
-                  {s.done && when(s.at) ? <Text style={styles.muted}>{when(s.at)}</Text> : current && s.note ? <Text style={styles.muted}>{s.note}</Text> : null}
-                </View>
-              </View>
-            );
-          })}
-        </View>
-
-        {/* Order items */}
-        <View style={[styles.card, { marginTop: 14 }]}>
+        {/* Product details */}
+        <Section icon="phone-portrait-outline" title="Product Details">
           {lines.map((it, i) => {
             const prod = products[it.productId];
             const img = resolveDeviceImageSource({ url: prod?.imageUrl });
@@ -187,24 +153,54 @@ export default function BuyOrderDetailsScreen({ navigation, route }) {
               </Pressable>
             );
           })}
-          <View style={[styles.row, { marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: LINE }]}>
-            <Text style={[styles.title, { flex: 1 }]}>Total Amount</Text>
-            <Text style={[styles.title, { color: TEAL }]}>{inr(order.totalAmount)}</Text>
+        </Section>
+
+        {/* Pickup OTP — only when the backend provides one */}
+        {otp && !cancelled && rank < 4 ? (
+          <View style={[styles.card, { alignItems: 'center' }]}>
+            <Text style={styles.title}>Shop pickup OTP</Text>
+            <Text style={styles.otp}>{otp}</Text>
+            <Text style={[styles.muted, { textAlign: 'center' }]}>Share it only after you receive the product and pay {inr(order.totalAmount)}.</Text>
           </View>
-        </View>
+        ) : null}
+
+        {/* Order Status */}
+        <Section icon="cube-outline" title="Order Status">
+          {cancelled ? (
+            <Text style={{ fontSize: rf(13), fontWeight: '800', color: RED, textAlign: 'center' }}>Cancelled</Text>
+          ) : (
+            <View style={styles.row}>
+              {steps.map((s, i) => {
+                const isCur = i === current;
+                const on = s.done || isCur;
+                return (
+                  <View key={s.key} style={{ flex: 1, alignItems: 'center' }}>
+                    <View style={[styles.row, { width: '100%' }]}>
+                      <View style={{ flex: 1, height: 2, backgroundColor: i === 0 ? 'transparent' : on ? TEAL : LINE }} />
+                      <View style={[styles.dot, s.done ? { backgroundColor: TEAL, borderColor: TEAL } : isCur ? { backgroundColor: '#E5F3F5', borderColor: TEAL } : null]}>
+                        <Ionicons name={s.done ? 'checkmark' : s.icon} size={18} color={s.done ? '#FFFFFF' : isCur ? TEAL : '#7A8596'} />
+                      </View>
+                      <View style={{ flex: 1, height: 2, backgroundColor: i === steps.length - 1 ? 'transparent' : steps[i + 1].done || i + 1 === current ? TEAL : LINE }} />
+                    </View>
+                    <Text style={{ fontSize: rf(10.5), fontWeight: on ? '800' : '600', color: on ? INK : '#9AA4B2', marginTop: 6, textAlign: 'center' }} numberOfLines={2}>{s.label}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </Section>
 
         {/* Shop */}
         {shop ? (
-          <View style={styles.card}>
+          <Section icon="storefront-outline" title="Shop Details" right={(
+            <Pressable onPress={() => navigation.navigate('ShopChat', { shopId: shop.id })} hitSlop={8} accessibilityRole="button">
+              <Text style={{ fontSize: rf(12.5), fontWeight: '800', color: TEAL }}>Chat with shop</Text>
+            </Pressable>
+          )}>
             <Text style={styles.title}>{shop.name || products[lines[0]?.productId]?.shopName || 'Seller shop'}</Text>
             {shop.address || shop.city ? <Text style={styles.muted}>{[shop.address, shop.city].filter(Boolean).join(', ')}</Text> : null}
-            <View style={[styles.row, { marginTop: 6 }]}>
-              <Text style={[styles.muted, { flex: 1, marginTop: 0 }]}>Pickup from shop · pay on collection</Text>
-              <Pressable onPress={() => navigation.navigate('ShopChat', { shopId: shop.id })} hitSlop={8} accessibilityRole="button">
-                <Text style={{ fontSize: rf(12.5), fontWeight: '800', color: TEAL }}>Chat with shop</Text>
-              </Pressable>
-            </View>
-          </View>
+            <Text style={styles.muted}>Pickup from shop · pay on collection</Text>
+          </Section>
         ) : null}
       </ScrollView>
 
@@ -221,22 +217,33 @@ export default function BuyOrderDetailsScreen({ navigation, route }) {
   );
 }
 
+// Rounded white section: teal icon + title header (same as BuyFixedOrderScreen).
+function Section({ icon, title, right, children }) {
+  return (
+    <View style={[styles.card, { padding: 0, overflow: 'hidden' }]}>
+      <View style={[styles.row, { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 4 }]}>
+        <Ionicons name={icon} size={18} color={TEAL} />
+        <Text style={[styles.title, { flex: 1, marginLeft: 8, fontSize: rf(14.5) }]}>{title}</Text>
+        {right}
+      </View>
+      <View style={{ paddingHorizontal: 12, paddingBottom: 12, paddingTop: 6 }}>{children}</View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: '#FFFFFF' },
   card: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: LINE, borderRadius: 14, padding: 12, marginBottom: 8, shadowColor: INK, shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
   row: { flexDirection: 'row', alignItems: 'center' },
-  status: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 16, backgroundColor: TINT, borderWidth: 1, borderColor: '#CDE9E3' },
-  statusIcon: { width: 44, height: 44, borderRadius: 12, backgroundColor: TEAL, alignItems: 'center', justifyContent: 'center' },
-  statusTitle: { fontSize: rf(16), fontWeight: '800', color: TEAL },
   thumb: { width: 56, height: 56, borderRadius: 12, backgroundColor: '#F4F2FA', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   title: { fontSize: rf(14), fontWeight: '800', color: INK },
   muted: { fontSize: rf(12), color: MUTED, marginTop: 2 },
   price: { fontSize: rf(13.5), fontWeight: '800', color: TEAL, marginLeft: 8 },
-  dot: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: '#C5CBD3', backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
-  rail: { width: 3, flex: 1, minHeight: 18, marginVertical: 2, borderRadius: 2 },
-  stepBody: { flex: 1, marginLeft: 10, marginBottom: 10, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 12 },
-  stepCurrent: { backgroundColor: TINT, paddingVertical: 8 },
-  stepText: { fontSize: rf(14), fontWeight: '800' },
+  otp: { fontSize: rf(30), fontWeight: '800', color: TEAL, letterSpacing: 8, marginVertical: 6 },
+  kvKey: { width: 104, fontSize: rf(12.5), color: MUTED },
+  kvColon: { width: 14, fontSize: rf(12.5), color: MUTED, textAlign: 'center' },
+  kvVal: { flex: 1, fontSize: rf(12.5), fontWeight: '700', color: INK },
+  dot: { width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: '#C9D0DA', backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
   bar: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10, borderTopWidth: 1, borderTopColor: LINE, backgroundColor: '#FFFFFF' },
   outline: { height: 48, borderRadius: 999, borderWidth: 1.5, borderColor: TEAL, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FFFFFF' },
   outlineText: { fontSize: rf(15), fontWeight: '800', color: TEAL },
