@@ -32,7 +32,7 @@ export default function BuyFulfillmentScreen({ navigation, route }) {
   }, [items]);
 
   const canHome = !!fresh && fresh.every((p) => fulfilmentOf(p).home);
-  const canShop = !!fresh && fresh.every((p) => fulfilmentOf(p).shop);
+  const canShop = !!fresh && (fresh.every((p) => fulfilmentOf(p).shop) || !canHome); // server accepts VISIT_SHOP for any active listing
   useEffect(() => { if (fresh && !mode) setMode(canHome ? 'HOME_DELIVERY' : canShop ? 'VISIT_SHOP' : null); }, [fresh]);
 
   const options = [

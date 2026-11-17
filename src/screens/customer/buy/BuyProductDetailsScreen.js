@@ -1,6 +1,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { fulfilmentOf } from '../../../api/buyOrders';
-import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
+import { ActivityIndicator, Animated, AppState, Image, LayoutAnimation, Platform, UIManager, Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Card, Loader } from '../../../components/ui';
@@ -11,6 +12,7 @@ import { useCustomerLocation } from '../../../hooks/useCustomerLocation';
 import { rf } from '../../../utils/responsive';
 import { StaticTabBar } from '../../../navigation/CustomTabBar';
 import { BRAND } from '../../../theme/brand';
+import BuyNowSheet from './BuyNowSheet';
 
 // Brand palette (035C6C · 111111 · F3F4F6 · F3F4F6 · FAA700 · F32C26).
 const GREEN_TEXT = '#035C6C'; // #035C6C shaded for text on white
@@ -79,6 +81,24 @@ function Check() {
   return <Ionicons name="checkmark-circle" size={14} color={BRAND.green} style={{ marginTop: 1 }} />;
 }
 
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) UIManager.setLayoutAnimationEnabledExperimental(true);
+
+// Tappable section header with a rotating chevron (collapsed by default).
+function DropHead({ open, onToggle, children }) {
+  const rot = useRef(new Animated.Value(open ? 1 : 0)).current;
+  useEffect(() => { Animated.timing(rot, { toValue: open ? 1 : 0, duration: 200, useNativeDriver: true }).start(); }, [open, rot]);
+  const spin = rot.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
+  return (
+    <Pressable onPress={onToggle} accessibilityRole="button" accessibilityState={{ expanded: open }} hitSlop={6} style={{ flexDirection: 'row', alignItems: 'center', minHeight: 32 }}>
+      <View style={{ flex: 1 }}>{children}</View>
+      <Animated.View style={{ transform: [{ rotate: spin }] }}>
+        <Ionicons name="chevron-down" size={18} color={GREEN_TEXT} />
+      </Animated.View>
+    </Pressable>
+  );
+}
+const toggleWith = (set) => () => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); set((v) => !v); };
+
 function CardHead({ icon, title, tint = MINT, color = GREEN_TEXT }) {
   return (
     <View style={styles.cardHeadRow}>
@@ -102,6 +122,8 @@ export default function BuyProductDetailsScreen({ route, navigation }) {
   const [activeImage, setActiveImage] = useState(null);
   const [viewer, setViewer] = useState(null); // full-screen photo index
   const [heroW, setHeroW] = useState(0);
+  const [detailsOpen, setDetailsOpen] = useState(false); // Device Details dropdown
+  const [serviceOpen, setServiceOpen] = useState(false); // Service Information dropdown
   const heroRef = useRef(null);
   const viewerRef = useRef(null);
 
@@ -149,6 +171,27 @@ export default function BuyProductDetailsScreen({ route, navigation }) {
     return out;
   }, [p]);
 
+  // Auto-scrolling carousel: next photo every 3 s, loops; paused while the
+  // screen is unfocused, the app is in background, or full-screen is open.
+  const focused = useIsFocused();
+  const [appActive, setAppActive] = useState(AppState.currentState === 'active');
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (st) => setAppActive(st === 'active'));
+    return () => sub.remove();
+  }, []);
+  const idxRef = useRef(0);
+  const [restartKey, setRestartKey] = useState(0); // bump → interval restarts after a manual swipe
+  useEffect(() => {
+    const n = gallery.length;
+    if (n < 2 || !heroW || viewer != null || !focused || !appActive) return undefined;
+    const t = setInterval(() => {
+      idxRef.current = (idxRef.current + 1) % n;
+      heroRef.current?.scrollTo({ x: idxRef.current * heroW, animated: true });
+      setActiveImage(gallery[idxRef.current]);
+    }, 3000);
+    return () => clearInterval(t);
+  }, [gallery, heroW, viewer, focused, appActive, restartKey]);
+
   const add = async () => {
     setAdding(true);
     try {
@@ -159,8 +202,12 @@ export default function BuyProductDetailsScreen({ route, navigation }) {
   };
 
   // Buy Now: straight to Place Order with just this product (the cart is untouched).
-  const buyNow = () => {
-    navigation.navigate('BuyFulfillment', { items: [{ product: { ...p, id: p.id || productId, shopName: shop?.name || p.shopName }, quantity: 1 }] });
+  // Opens the Buy Now sheet (fulfilment + address); Continue → Place Order with BuyFulfillment's params.
+  const [buySheet, setBuySheet] = useState(false);
+  const buyNow = () => setBuySheet(true);
+  const continueBuy = ({ mode, addressId }) => {
+    setBuySheet(false);
+    navigation.navigate('BuyPlaceOrder', { items: [{ product: { ...p, id: p.id || productId, shopName: shop?.name || p.shopName }, quantity: 1 }], mode, addressId });
   };
 
   if (loading) return <Loader />;
@@ -218,7 +265,6 @@ export default function BuyProductDetailsScreen({ route, navigation }) {
   const rating = Number(shop?.rating) > 0 ? Number(shop.rating) : null;
   const distance = shop?.distanceKm != null ? `${Number(shop.distanceKm).toFixed(1)} km away` : null;
   const priced = Number(p.price) > 0;
-  const thumbW = Math.round(heroH / 3.4);
 
   return (
     <View style={styles.container}>
@@ -235,7 +281,8 @@ export default function BuyProductDetailsScreen({ route, navigation }) {
                   pagingEnabled
                   nestedScrollEnabled
                   showsHorizontalScrollIndicator={false}
-                  onMomentumScrollEnd={(e) => { const i = Math.round(e.nativeEvent.contentOffset.x / heroW); if (gallery[i]) setActiveImage(gallery[i]); }}
+                  onScrollBeginDrag={() => setRestartKey((k) => k + 1)}
+                  onMomentumScrollEnd={(e) => { const i = Math.round(e.nativeEvent.contentOffset.x / heroW); if (gallery[i]) { idxRef.current = i; setActiveImage(gallery[i]); } }}
                 >
                   {gallery.map((uri, i) => (
                     <Pressable key={uri} onPress={() => setViewer(i)} style={{ width: heroW, height: heroH }} accessibilityRole="imagebutton" accessibilityLabel="View photo full screen">
@@ -247,20 +294,13 @@ export default function BuyProductDetailsScreen({ route, navigation }) {
                 <Ionicons name="phone-portrait" size={46} color={GREEN_TEXT} />
               )}
               {gallery.length > 1 ? (
-                <View style={{ position: 'absolute', right: 10, bottom: 10, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: 'rgba(17,17,17,0.6)' }}>
-                  <Text style={{ color: '#FFFFFF', fontSize: rf(11), fontWeight: '700' }}>{activeIdx + 1}/{gallery.length}</Text>
+                <View pointerEvents="none" style={{ position: 'absolute', bottom: 8, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center' }}>
+                  {gallery.map((uri, i) => (
+                    <View key={uri} style={{ height: 6, width: i === activeIdx ? 14 : 6, borderRadius: 3, marginHorizontal: 2.5, backgroundColor: i === activeIdx ? GREEN_TEXT : 'rgba(17,17,17,0.25)' }} />
+                  ))}
                 </View>
               ) : null}
             </View>
-            {gallery.length > 1 ? (
-              <ScrollView style={{ width: thumbW, flexGrow: 0 }} nestedScrollEnabled showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                {gallery.map((uri, i) => (
-                  <Pressable key={uri} onPress={() => { setActiveImage(uri); heroRef.current?.scrollTo({ x: i * heroW, animated: true }); }} style={[styles.thumb, { width: thumbW, height: thumbW }, uri === activeImage && styles.thumbActive]} accessibilityRole="imagebutton">
-                    <Image source={{ uri }} style={styles.thumbImage} resizeMode="cover" />
-                  </Pressable>
-                ))}
-              </ScrollView>
-            ) : null}
           </View>
 
           <Text style={[styles.title, { marginTop: 12 }]}>{p.title}</Text>
@@ -273,14 +313,16 @@ export default function BuyProductDetailsScreen({ route, navigation }) {
 
           {DETAILS.length ? (
             <View style={styles.box}>
-              <Text style={styles.boxHead}>Device Details</Text>
-              {DETAILS.map((d) => (
+              <DropHead open={detailsOpen} onToggle={toggleWith(setDetailsOpen)}>
+                <Text style={[styles.boxHead, { marginBottom: 0 }]}>Device Details</Text>
+              </DropHead>
+              {detailsOpen ? <View style={{ marginTop: 8 }}>{DETAILS.map((d) => (
                 <View key={d.label} style={styles.detailRow}>
                   <Ionicons name={d.icon} size={16} color={MUTED} />
                   <Text style={styles.detailLabel}>{d.label}</Text>
                   <Text style={styles.detailVal} numberOfLines={2}>{d.value}</Text>
                 </View>
-              ))}
+              ))}</View> : null}
             </View>
           ) : null}
 
@@ -318,23 +360,12 @@ export default function BuyProductDetailsScreen({ route, navigation }) {
             ) : null}
           </View>
 
-          {BENEFITS.length ? (
-            <>
-              <Text style={[styles.boxHead, { marginTop: 14 }]}>Key Benefits</Text>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                {BENEFITS.map((b) => (
-                  <View key={b.label} style={styles.benefit}>
-                    <Ionicons name={b.icon} size={20} color={GREEN_TEXT} />
-                    <Text style={styles.benefitText}>{b.label}</Text>
-                  </View>
-                ))}
-              </View>
-            </>
-          ) : null}
-
           {hasSummary ? (
             <Card style={styles.card}>
-              <CardHead icon="clipboard-outline" title="Device Summary" tint={YELLOW_SOFT} color={BRAND.yellow} />
+              <DropHead open={serviceOpen} onToggle={toggleWith(setServiceOpen)}>
+                <CardHead icon="clipboard-outline" title="Service Information" tint={YELLOW_SOFT} color={BRAND.yellow} />
+              </DropHead>
+              {serviceOpen ? (<>
 
               {assessment.screeningAnswers?.length ? (
                 <>
@@ -385,6 +416,7 @@ export default function BuyProductDetailsScreen({ route, navigation }) {
                   </View>
                 </>
               ) : null}
+              </>) : null}
             </Card>
           ) : null}
 
@@ -413,17 +445,6 @@ export default function BuyProductDetailsScreen({ route, navigation }) {
               </>
             )}
           </Pressable>
-          {p.shopId ? (
-            <Pressable
-              onPress={() => navigation.navigate('ShopDetails', { shopId: p.shopId })}
-              accessibilityRole="button"
-              accessibilityLabel="Visit shop"
-              style={{ height: 50, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1.5, borderColor: BRAND.green, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}
-            >
-              <Ionicons name="storefront-outline" size={17} color={BRAND.green} />
-              <Text style={{ fontSize: rf(10.5), fontWeight: '800', color: BRAND.green }}>Visit Shop</Text>
-            </Pressable>
-          ) : null}
           <Pressable
             onPress={buyNow}
             disabled={adding || buying}
@@ -442,6 +463,8 @@ export default function BuyProductDetailsScreen({ route, navigation }) {
         </View>
       </View>
       <StaticTabBar navigation={navigation} active="Buy" />
+      <BuyNowSheet visible={buySheet} product={p} total={Number(p.price) || 0} onClose={() => setBuySheet(false)} onContinue={continueBuy}
+        onManageAddress={() => { setBuySheet(false); navigation.navigate('ManageAddress'); }} />
 
       {/* Full-screen photos — swipe between the listing's images. */}
       <Modal visible={viewer != null} transparent animationType="fade" onRequestClose={() => setViewer(null)}>

@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { verifyPickupAddress } from './pickupAddressCheck';
 import {
+  Alert,
   Image,
   Linking,
   Platform,
@@ -87,6 +89,7 @@ export default function RepairShopDetailsScreen({ navigation, route }) {
   const [shop, setShop] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState('PICKUP');
+  const [verifying, setVerifying] = useState(false);
   const [page, setPage] = useState(0);
   const [bookmarked, setBookmarked] = useState(false);
   // Banner / logo URLs that failed to load — dropped so the fallback shows.
@@ -164,9 +167,25 @@ export default function RepairShopDetailsScreen({ navigation, route }) {
     Linking.openURL(url).catch(() => {});
   };
 
-  const onContinue = () => {
-    if (selected === 'ENQUIRY') navigation.navigate('ShopChat', { ...params, shopId, mode: 'ENQUIRY' });
-    else navigation.navigate('RepairSelectAddress', { ...params, shopId });
+  // Pickup uses the address already chosen on Pickup Service Shop — no
+  // separate Select Address step. Only if it is missing/unserviceable do we
+  // send the customer back to pick one (the same picker, in pick mode).
+  const onContinue = async () => {
+    if (selected === 'ENQUIRY') { navigation.navigate('ShopChat', { ...params, shopId, mode: 'ENQUIRY' }); return; }
+    if (verifying) return;
+    setVerifying(true);
+    try {
+      const r = await verifyPickupAddress(params.addressId, shopId);
+      if (!r.ok) {
+        const pick = () => navigation.navigate('RepairSelectAddress', { ...params, pickMode: true, addressId: params.addressId });
+        if (Platform.OS === 'web') { window.alert(`${r.title}\n\n${r.message}`); pick(); }
+        else Alert.alert(r.title, r.message, [{ text: 'Cancel', style: 'cancel' }, { text: 'Change Address', onPress: pick }]);
+        return;
+      }
+      navigation.navigate('RepairPickupSlot', { ...params, shopId, addressId: r.address.id });
+    } catch (e) {
+      Platform.OS === 'web' ? window.alert(e?.message || 'Could not verify address') : Alert.alert('Could not verify address', e?.message || 'Please try again.');
+    } finally { setVerifying(false); }
   };
 
   // ---- presentation-only values ----

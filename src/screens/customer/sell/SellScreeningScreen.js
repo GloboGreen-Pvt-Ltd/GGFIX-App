@@ -10,6 +10,8 @@ import { FlowCta, useHideStackHeader } from '../service-booking-customer/FlowChr
 import ConditionArt, { artKind, artVariant, deviceShape } from './ConditionArt';
 import FunctionalArt from './FunctionalArt';
 import { SellStepHeader, SellCard, EditBanner, TickBadge, SellStepBar } from './SellStepChrome';
+import { useSellDraft, restoredState } from './sellDraft';
+import { categoryKey, issuesFor, pruneMap, pruneList } from './sellQuestionSets';
 
 // Sell step 1 — Device Condition: screening questions, the screen / body
 // condition groups and functional issues on one page (formerly three screens:
@@ -118,6 +120,8 @@ export default function SellScreeningScreen({ navigation, route }) {
   const [issues, setIssues] = useState([]);
   const [picked, setPicked] = useState([]); // functional issue ids
   const [loading, setLoading] = useState(true);
+  const [reopen, setReopen] = useState({}); // groupId -> true while a picked section is expanded via Change
+  useSellDraft(route, { answers, selected, picked });
 
   // Prior answers / conditions / issues, indexed for edit pre-selection.
   const prior = useMemo(() => {
@@ -139,6 +143,7 @@ export default function SellScreeningScreen({ navigation, route }) {
   }, [editHints]);
 
   // Screening questions (fallback set when the API has none).
+  let qIds = null; let gIds = null; let iIds = null; // loaded sets, for pruning a restored draft
   const loadQuestions = async () => {
     try {
       const list = await getScreeningQuestions(flow, device?.categoryId);
@@ -153,6 +158,7 @@ export default function SellScreeningScreen({ navigation, route }) {
       ];
       const finalList = list.length ? list : fallback;
       setQuestions(finalList);
+      qIds = finalList.map((q) => q.id);
       // Match prior answers by id, else by question text (admin re-keyed ids).
       if (isEditing) {
         const seed = {};
@@ -177,6 +183,7 @@ export default function SellScreeningScreen({ navigation, route }) {
       const list = await getConditionGroups(device?.categoryId);
       const sortedGroups = sortGroups(list.length ? list : FALLBACK_GROUPS);
       setGroups(sortedGroups);
+      gIds = sortedGroups.map((g) => g.id);
       const map = {};
       if (list.length) {
         const rows = await Promise.all(sortedGroups.map((g) => getConditionOptions(g.id).catch(() => [])));
@@ -202,15 +209,17 @@ export default function SellScreeningScreen({ navigation, route }) {
   };
 
   // Functional issues (optional, multi-select).
+  const catKey = categoryKey(device, params);
   const loadIssues = async () => {
     let finalList;
     try {
       const list = await getFunctionalIssues(device?.categoryId);
-      finalList = list.length ? list : FALLBACK_ISSUES.map((n, i) => ({ id: `f${i}`, name: n }));
+      finalList = issuesFor(list, catKey, FALLBACK_ISSUES);
     } catch (_) {
-      finalList = FALLBACK_ISSUES.map((n, i) => ({ id: `f${i}`, name: n }));
+      finalList = issuesFor([], catKey, FALLBACK_ISSUES);
     }
     setIssues(finalList);
+    iIds = finalList.map((it) => it.id);
     if (isEditing) {
       const seed = finalList
         .filter((it) => prior.issueIds.has(it.id)
@@ -222,7 +231,17 @@ export default function SellScreeningScreen({ navigation, route }) {
   };
 
   useEffect(() => {
-    Promise.all([loadQuestions(), loadGroups(), loadIssues()]).finally(() => setLoading(false));
+    Promise.all([loadQuestions(), loadGroups(), loadIssues()]).finally(() => {
+      // "Continue Selling": put back this step's saved picks.
+      const r = restoredState(route);
+      if (r) {
+        // Keep only answers that belong to this category's question set.
+        if (r.answers) setAnswers(pruneMap(r.answers, qIds));
+        if (r.selected) setSelected(pruneMap(r.selected, gIds));
+        if (r.picked) setPicked(pruneList(r.picked, iIds));
+      }
+      setLoading(false);
+    });
   }, [flow]);
 
   const header = <SellStepHeader step={1} onBack={() => navigation.goBack()} />;
@@ -295,7 +314,35 @@ export default function SellScreeningScreen({ navigation, route }) {
           const opts = groupOpts(g, optsByGroup);
           const kind = artKind(g);
           const cols = kind ? tileCols : colsFor(opts);
-          const pick = (o) => setSelected({ ...selected, [g.id]: { id: o.id, optionId: o.optionId, label: o.label, groupCode: g.code, groupName: g.name } });
+          // Tap the picked option again to clear it; a new pick collapses the section.
+          const pick = (o) => {
+            if (selected[g.id]?.id === o.id) {
+              setSelected((m) => { const n = { ...m }; delete n[g.id]; return n; });
+              return;
+            }
+            setSelected((m) => ({ ...m, [g.id]: { id: o.id, optionId: o.optionId, label: o.label, groupCode: g.code, groupName: g.name } }));
+            setReopen((m) => ({ ...m, [g.id]: false }));
+          };
+          if (selected[g.id] && !reopen[g.id]) {
+            return (
+              <View key={g.id} style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, paddingVertical: 9, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: '#E8EAEE', backgroundColor: '#FFFFFF' }}>
+                <View style={{ height: 18, width: 18, borderRadius: 9, backgroundColor: '#035C6C', alignItems: 'center', justifyContent: 'center' }}>
+                  <Check size={11} color="#fff" strokeWidth={3} />
+                </View>
+                <Text numberOfLines={2} style={{ flex: 1, marginLeft: 8, fontSize: rf(12.5), color: BRAND.ink }}>
+                  <Text style={{ fontWeight: '800' }}>{g.name}: </Text>{selected[g.id].label}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setReopen((m) => ({ ...m, [g.id]: true }))}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Change ${g.name}`}
+                  style={{ marginLeft: 8, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: '#035C6C' }}
+                >
+                  <Text style={{ fontSize: rf(11.5), fontWeight: '700', color: '#035C6C' }}>Change</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          }
           return (
             <SellCard key={g.id} Icon={groupIcon(g)} title={g.name}>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -3 }}>

@@ -10,6 +10,8 @@ import { rf, rlh } from '../../../utils/responsive';
 import { BRAND, BRAND_FLOW } from '../../../theme/brand';
 import { cardShadow, FlowCta, FlowDecor, FlowHeader, useHideStackHeader } from '../service-booking-customer/FlowChrome';
 import FunctionalArt from './FunctionalArt';
+import { useSellDraft, restoredState } from './sellDraft';
+import { categoryKey, issuesFor, pruneList } from './sellQuestionSets';
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
@@ -33,7 +35,8 @@ export default function SellFunctionalScreen({ navigation, route }) {
   const { editSellOrderId, editHints } = params;
   const isEditing = !!editSellOrderId;
   const [issues, setIssues] = useState([]);
-  const [selected, setSelected] = useState([]);
+  const [selected, setSelected] = useState(() => restoredState(route)?.selected || []);
+  useSellDraft(route, { selected });
   const [loading, setLoading] = useState(true);
 
   // Indices for quick lookup of previously-saved issues.
@@ -54,8 +57,9 @@ export default function SellFunctionalScreen({ navigation, route }) {
     (async () => {
       try {
         const list = await getFunctionalIssues(params.device?.categoryId);
-        const finalList = list.length ? list : FALLBACK.map((n, i) => ({ id: `f${i}`, name: n }));
+        const finalList = issuesFor(list, categoryKey(params.device, params), FALLBACK);
         setIssues(finalList);
+        setSelected((cur) => pruneList(cur, finalList.map((it) => it.id)));
 
         if (isEditing) {
           const seed = finalList
@@ -68,7 +72,7 @@ export default function SellFunctionalScreen({ navigation, route }) {
           if (seed.length) setSelected(seed);
         }
       } catch (_) {
-        setIssues(FALLBACK.map((n, i) => ({ id: `f${i}`, name: n })));
+        setIssues(issuesFor([], categoryKey(params.device, params), FALLBACK));
       }
       setLoading(false);
     })();

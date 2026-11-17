@@ -8,6 +8,7 @@ import { Card, PrimaryButton } from '../../../components/ui';
 import { rf, rlh } from '../../../utils/responsive';
 import { BRAND, BRAND_FLOW } from '../../../theme/brand';
 import { FLOW, cardShadow, FlowCta, FlowDecor, FlowHeader, useHideStackHeader } from '../service-booking-customer/FlowChrome';
+import { useSellDraft, restoredState } from './sellDraft';
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
@@ -76,8 +77,10 @@ export default function SellAccessoriesWarrantyScreen({ navigation, route }) {
 
   const initialWarranty = isEditing ? (editHints?.warrantyCode || null) : null;
 
-  const [accessories, setAccessories] = useState(initialAccessories);
-  const [warranty, setWarranty] = useState(initialWarranty);
+  const [restored] = useState(() => restoredState(route));
+  const [accessories, setAccessories] = useState(restored?.accessories || initialAccessories);
+  const [warranty, setWarranty] = useState(restored?.warranty ?? initialWarranty);
+  useSellDraft(route, { accessories, warranty });
 
   useEffect(() => {
     if (isLaptopLike) {

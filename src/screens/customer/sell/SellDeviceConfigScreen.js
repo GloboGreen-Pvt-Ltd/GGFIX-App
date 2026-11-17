@@ -7,12 +7,14 @@ import {
 import { tokens } from '../../../theme/colors';
 import { getConfigFields } from '../../../api/masterData';
 import { rf } from '../../../utils/responsive';
+import { useSellDraft, restoredState } from './sellDraft';
 
 export default function SellDeviceConfigScreen({ navigation, route }) {
   const params = route.params || {};
   const [fields, setFields] = useState([]);
   const [openId, setOpenId] = useState(null);
-  const [selected, setSelected] = useState({}); // { [fieldId]: { id, value } }
+  const [selected, setSelected] = useState(() => restoredState(route)?.selected || {}); // { [fieldId]: { id, value } }
+  useSellDraft(route, { selected });
   const [loading, setLoading] = useState(true);
   const insetBottom = useBottomBarInset();
 

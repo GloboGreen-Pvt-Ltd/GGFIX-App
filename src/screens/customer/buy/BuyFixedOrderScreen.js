@@ -8,6 +8,8 @@ import { BUY_STATUS_LABEL, CANCELLABLE, OTP_STATUSES, cancelBuyOrder, getBuyOrde
 import { resolveDeviceImageSource } from '../../../utils/images';
 import { rf } from '../../../utils/responsive';
 import { buildReceiptHtml, loadReceiptData, viewReceipt, shareReceipt, downloadReceipt } from './buyReceipt';
+import { getShop } from '../../../api/shops';
+import BuyStatusSteps, { receiptReady } from './BuyStatusSteps';
 
 /**
  * Fixed-price buy order — live status, timeline, payment, hand-over OTP and
@@ -26,15 +28,6 @@ const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 const when = (t) => (t ? new Date(t).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true }) : '');
 const DONE = ['DELIVERED', 'COMPLETED'];
 const CLOSED = ['REJECTED', 'CANCELLED', 'RETURNED'];
-// Home-delivery steps always shown in the timeline (done ones ticked).
-const STEPS = [
-  ['PLACED', 'Placed'],
-  ['CONFIRMED', 'Confirmed by shop'],
-  ['PICKED_UP', 'Picked from shop'],
-  ['OUT_FOR_DELIVERY', 'Out for delivery'],
-  ['DELIVERED', 'Delivered'],
-];
-const ORDER = ['PLACED', 'CONFIRMED', 'ASSIGNED', 'ACCEPTED', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'];
 
 export default function BuyFixedOrderScreen({ route }) {
   const id = route.params?.orderId;
@@ -51,6 +44,16 @@ export default function BuyFixedOrderScreen({ route }) {
   const [refreshing, setRefreshing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const lock = useRef(false);
+  const [shopInfo, setShopInfo] = useState(null);
+  const shopId = o?.shopId;
+  const needShop = !!o && (!(o.shopName || o.shop?.name) || !(o.shopAddress || o.shop?.address));
+  // Order lacks shop name/address → fetch the public shop once as a fallback.
+  React.useEffect(() => {
+    if (!shopId || !needShop || shopInfo) return undefined;
+    let on = true;
+    getShop(shopId).then((r) => { if (on && r) setShopInfo(r); }).catch(() => {});
+    return () => { on = false; };
+  }, [shopId, needShop, shopInfo]);
 
   const load = useCallback(async () => {
     try { setO(await getBuyOrder(id)); setError(''); }
@@ -94,12 +97,13 @@ export default function BuyFixedOrderScreen({ route }) {
   const home = o.fulfilmentType === 'HOME_DELIVERY';
   const img = resolveDeviceImageSource({ url: o.productImage });
   const events = o.events || [];
-  const reached = ORDER.indexOf(s === 'DELIVERY_FAILED' ? 'OUT_FOR_DELIVERY' : s);
-  const lat = o.shopLatitude ?? o.shopLat ?? o.shop?.latitude;
-  const lng = o.shopLongitude ?? o.shopLng ?? o.shop?.longitude;
+  const shopName = o.shopName || o.shop?.name || shopInfo?.name || shopInfo?.shopName;
+  const shopAddr = o.shopAddress || o.shop?.address || txtOrNull(shopInfo?.address || shopInfo?.fullAddress);
+  const lat = o.shopLatitude ?? o.shopLat ?? o.shop?.latitude ?? shopInfo?.latitude;
+  const lng = o.shopLongitude ?? o.shopLng ?? o.shop?.longitude ?? shopInfo?.longitude;
   const mapQuery = home && o.deliveryAddress ? txt(o.deliveryAddress)
     : lat != null && lng != null ? `${lat},${lng}`
-      : [o.shopName || o.shop?.name, o.shopAddress || o.shop?.address].filter(Boolean).join(', ');
+      : [shopName, shopAddr].filter(Boolean).join(', ');
   const openMap = () => {
     if (!mapQuery) { notify('No location', 'Location is not available for this order.', { preset: 'error' }); return; }
     Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`)
@@ -138,17 +142,8 @@ export default function BuyFixedOrderScreen({ route }) {
   // ── Order Details (reference design) — real order data only ──────────────
   const closed = CLOSED.includes(s);
   const done = DONE.includes(s);
-  const paidOk = o.paymentStatus === 'PAID' || done;
   const payMethod = o.paymentMethod === 'COD' ? 'Cash on delivery' : 'Pay at shop';
-  const statusTone = closed ? RED : done ? GREEN : TEAL;
-  const statusLabel = BUY_STATUS_LABEL[s] || s;
-  // Timeline rows: home delivery = fixed steps (ticked from real events / status);
-  // visit-shop or closed orders = the real events as they happened.
-  const evAt = (k) => [...events].reverse().find((e) => e.status === k || (k === 'DELIVERED' && e.status === 'COMPLETED'));
-  const tl = home && !closed
-    ? STEPS.map(([k, label]) => { const ev = evAt(k); return { k, label, at: ev?.at || null, note: ev?.note, done: !!ev || reached >= ORDER.indexOf(k) }; })
-    : events.map((e) => ({ k: e.status, label: BUY_STATUS_LABEL[e.status] || e.status, at: e.at, note: e.note, done: true }));
-  const lastDoneIdx = tl.reduce((n, r, i) => (r.done ? i : n), -1);
+  const showReceipt = receiptReady(o);
   const liveTrack = home ? ['PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERY_FAILED'].includes(s) : (!done && !closed);
 
   // Receipt (Amazon-style purchase receipt, NearGFix branded) — real order,
@@ -157,10 +152,14 @@ export default function BuyFixedOrderScreen({ route }) {
     if (receiptBusy) return;
     setReceiptBusy(kind);
     try {
-      const html = buildReceiptHtml(o, await loadReceiptData(o));
+      // Re-check the live status right before opening; never open before delivery.
+      const fresh = await getBuyOrder(id);
+      if (fresh) setO(fresh);
+      if (!receiptReady(fresh)) { notify('Receipt', 'Receipt will be available after the order is delivered.'); return; }
+      const html = buildReceiptHtml(fresh, await loadReceiptData(fresh));
       if (kind === 'view') await viewReceipt(html); // separate full-screen A4 preview (Back → Order Details)
-      else if (kind === 'share') { console.log('[Receipt] share tapped'); await shareReceipt(html, o); } // eslint-disable-line no-console
-      else { const msg = await downloadReceipt(html, o); if (msg) notify('Receipt downloaded', msg, { preset: 'done' }); }
+      else if (kind === 'share') { console.log('[Receipt] share tapped'); await shareReceipt(html, fresh); } // eslint-disable-line no-console
+      else { const msg = await downloadReceipt(html, fresh); if (msg) notify('Receipt downloaded', msg, { preset: 'done' }); }
     } catch (e) {
       console.error(`[Receipt] ${kind} failed:`, e?.message || e); // eslint-disable-line no-console
       if (kind === 'share') Alert.alert('Could not share receipt', e?.message || 'Please try again.');
@@ -182,16 +181,8 @@ export default function BuyFixedOrderScreen({ route }) {
         </View>
         <View style={{ flex: 1, marginLeft: 12, minWidth: 0 }}>
           <Text style={[styles.title, { marginTop: 4 }]} numberOfLines={2}>{o.productTitle || 'Product'}</Text>
-          <View style={[styles.row, { marginTop: 4 }]}>
-            <Text style={styles.price}>{inr(o.totalAmount)}</Text>
-            <View style={{ marginLeft: 8, marginTop: 4, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: TINT }}>
-              <Text style={{ fontSize: rf(11), fontWeight: '800', color: GREEN }}>Fixed Price</Text>
-            </View>
-          </View>
-        </View>
-        <View style={{ marginLeft: 6, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: statusTone, backgroundColor: closed ? '#FDECEC' : done ? TINT : '#E5F3F5' }}>
-          <Ionicons name={closed ? 'close-circle' : done ? 'checkmark-circle' : 'time'} size={14} color={statusTone} />
-          <Text style={{ marginLeft: 4, fontSize: rf(11), fontWeight: '800', color: statusTone }} numberOfLines={1}>{done ? (home ? 'Delivered' : 'Completed') : statusLabel}</Text>
+          <Text style={styles.price}>{inr(o.totalAmount)}</Text>
+          {o.orderNumber ? <Text style={styles.sub}>{`Order ${String(o.orderNumber).startsWith('#') ? '' : '#'}${o.orderNumber}`}</Text> : null}
         </View>
       </View>
 
@@ -207,67 +198,49 @@ export default function BuyFixedOrderScreen({ route }) {
             <KV k="Unit Price" v={inr(o.unitPrice ?? o.totalAmount)} />
             <KV k="Quantity" v={String(o.quantity || 1)} />
             <KV k="Placed on" v={when(o.createdAt)} />
-            <KV k="Shop" v={o.shopName || o.shop?.name} />
+            <KV k="Shop" v={shopName} />
+            {shopAddr ? <KV k="Shop Address" v={shopAddr} /> : null}
             <KV k="Fulfilment" v={home ? 'Home delivery' : 'Visit shop & buy'} />
-            <KV k="Payment" v={`${payMethod} · ${paidOk ? 'Paid' : 'Pending'}`} />
+            {home ? <KV k="Deliver to" v={o.deliveryAddress} /> : null}
+            <KV k="Payment" v={payMethod} />
+            {o.customerName || o.customerPhone ? <KV k="Contact" v={[o.customerName, o.customerPhone].filter(Boolean).join(' · ')} /> : null}
             <KV k="Total" v={inr(o.totalAmount)} bold />
           </>
         ) : null}
-        <View style={[styles.row, { marginTop: showItem ? 10 : 0, padding: 10, borderRadius: 12, backgroundColor: closed ? '#FDECEC' : done ? TINT : '#E5F3F5' }]}>
-          <Ionicons name="cube-outline" size={20} color={statusTone} />
-          <View style={{ marginLeft: 10 }}>
-            <Text style={styles.sub}>Order Status</Text>
-            <Text style={{ fontSize: rf(15), fontWeight: '800', color: statusTone }}>{statusLabel}</Text>
-            {s === 'DELIVERY_FAILED' ? <Text style={styles.sub}>The shop will contact you to reschedule.</Text> : null}
-          </View>
-        </View>
       </Section>
 
       {/* Handover OTP while it is still needed */}
       {OTP_STATUSES.includes(s) && o.handoverOtp ? (
-        <View style={[styles.card, { borderColor: '#BFE5DA', backgroundColor: TINT }]}>
+        <View style={styles.card}>
           <Text style={styles.optTitle}>{home ? 'Delivery OTP' : 'Shop pickup OTP'}</Text>
           <Text style={styles.otp}>{o.handoverOtp}</Text>
           <Text style={styles.sub}>Share it only after you receive the product and pay {inr(o.totalAmount)}.</Text>
         </View>
       ) : null}
 
-      {/* Delivery details (home delivery or visit shop) */}
-      <Section icon={home ? 'bus-outline' : 'storefront-outline'} title={home ? 'Delivery Details' : 'Visit Shop & Buy'}>
-        <IconRow icon="location-outline" k={home ? 'Delivery Address' : 'Shop'} v={home ? o.deliveryAddress : [o.shopName || o.shop?.name, o.shopAddress || o.shop?.address].filter(Boolean).join(', ')} />
-        <IconRow icon="card-outline" k="Payment Method" v={payMethod} />
-        <IconRow icon={paidOk ? 'checkmark-circle' : 'time-outline'} iconColor={paidOk ? GREEN : ORANGE} k="Payment Status" pill={paidOk ? 'Paid' : 'Pending'} pillTone={paidOk ? GREEN : ORANGE} last />
-      </Section>
+      {/* Order Status — same horizontal steps as Order Confirmed */}
+      <BuyStatusSteps status={s} visitShop={!home} style={{ borderRadius: 14, marginBottom: 8 }} />
+      {s === 'DELIVERY_FAILED' ? <Text style={[styles.sub, { marginTop: -4, marginBottom: 8, marginHorizontal: 4 }]}>The shop will contact you to reschedule.</Text> : null}
 
-      {/* Timeline — real timestamps only */}
-      <Section icon="time-outline" title="Order Timeline">
-        {tl.length ? tl.map((r, i) => {
-          const isCur = i === lastDoneIdx;
-          const last = i === tl.length - 1;
-          const bad = closed && isCur;
-          const dot = !r.done ? LINE : bad ? RED : GREEN;
-          return (
-            <View key={`${r.k}-${i}`} style={[styles.row, { alignItems: 'flex-start' }, isCur ? { backgroundColor: bad ? '#FDECEC' : TINT, borderRadius: 10, marginHorizontal: -6, paddingHorizontal: 6 } : null]}>
-              <View style={{ alignItems: 'center', width: 24 }}>
-                <Ionicons name={!r.done ? 'ellipse-outline' : bad ? 'close-circle' : 'checkmark-circle'} size={20} color={dot} style={{ marginTop: 6 }} />
-                {!last ? <View style={{ width: 2, flex: 1, minHeight: 14, backgroundColor: tl[i + 1].done ? GREEN : LINE }} /> : null}
+      {/* Detailed history (real events) — compact list */}
+      {events.length ? (
+        <Section icon="time-outline" title="Order Updates">
+          {events.map((e, i) => (
+            <View key={`${e.status}-${i}`} style={[styles.row, { alignItems: 'flex-start', paddingVertical: 4 }]}>
+              <Ionicons name="ellipse" size={7} color={TEAL} style={{ marginTop: 7, marginRight: 8 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: rf(12.5), fontWeight: '700', color: INK }}>{BUY_STATUS_LABEL[e.status] || e.status}</Text>
+                {e.note ? <Text style={styles.sub}>{e.note}</Text> : null}
               </View>
-              <View style={{ flex: 1, marginLeft: 8, paddingVertical: 6 }}>
-                <View style={styles.row}>
-                  <Text style={[styles.optTitle, { flex: 1 }, !r.done ? { color: MUTED, fontWeight: '500' } : isCur ? { color: bad ? RED : GREEN, fontWeight: '800' } : null]}>{r.label}</Text>
-                  {isCur && r.at ? <Text style={styles.sub}>{when(r.at)}</Text> : null}
-                </View>
-                {!isCur && r.at ? <Text style={styles.sub}>{when(r.at)}</Text> : null}
-                {r.note ? <Text style={styles.sub}>{r.note}</Text> : null}
-              </View>
+              {e.at ? <Text style={[styles.sub, { marginLeft: 8 }]}>{when(e.at)}</Text> : null}
             </View>
-          );
-        }) : <Text style={styles.sub}>No updates yet.</Text>}
-      </Section>
+          ))}
+        </Section>
+      ) : null}
 
-      {/* Receipt — delivered and active orders (payment shown as Pending until paid) */}
-      {!closed ? (
-        <Section icon="receipt-outline" iconBg={ORANGE} title="Receipt">
+      {/* Receipt — only once the backend says the order is delivered */}
+      {showReceipt ? (
+        <Section icon="receipt-outline" title="Receipt">
           {/* Order ID (left) · View / Download / Share icons (right), one row */}
           <View style={styles.row}>
             <View style={{ flex: 1, minWidth: 0 }}><Text style={styles.sub}>Receipt No</Text><Text style={styles.recVal} numberOfLines={1}>{o.orderNumber ? `RCPT-${String(o.orderNumber).replace(/^#/, '')}` : 'Receipt'}</Text></View>
@@ -283,12 +256,6 @@ export default function BuyFixedOrderScreen({ route }) {
 
       {/* Bottom actions */}
       <View style={[styles.row, { marginTop: 4 }]}>
-        {liveTrack ? (
-          <Pressable onPress={openMap} accessibilityRole="button" style={[styles.btn, styles.btnOutline, { flex: 1, marginRight: 8 }]}>
-            <Ionicons name="map-outline" size={17} color={TEAL} />
-            <Text style={[styles.btnText, { color: TEAL, marginLeft: 6 }]}>Track on Map</Text>
-          </Pressable>
-        ) : null}
         <Pressable onPress={() => navigation.navigate('CustomerSupport')} accessibilityRole="button" style={[styles.btn, { flex: 1, flexDirection: 'row' }]}>
           <Ionicons name="headset-outline" size={17} color="#FFFFFF" />
           <Text style={[styles.btnText, { marginLeft: 6 }]}>Contact Support</Text>
@@ -305,37 +272,23 @@ export default function BuyFixedOrderScreen({ route }) {
   );
 }
 
-// Rounded section: tinted header strip with an icon disc + title.
-function Section({ icon, iconBg = TEAL, title, right, children }) {
+// Rounded white section: teal icon + title header.
+function Section({ icon, title, right, children }) {
   return (
     <View style={[styles.card, { padding: 0, overflow: 'hidden' }]}>
-      <View style={[styles.row, { backgroundColor: '#F4F6F8', paddingHorizontal: 10, paddingVertical: 8 }]}>
-        <View style={{ height: 32, width: 32, borderRadius: 16, backgroundColor: iconBg, alignItems: 'center', justifyContent: 'center' }}>
-          <Ionicons name={icon} size={16} color="#FFFFFF" />
-        </View>
-        <Text style={[styles.title, { flex: 1, marginLeft: 10, fontSize: rf(15) }]}>{title}</Text>
+      <View style={[styles.row, { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 4 }]}>
+        <Ionicons name={icon} size={18} color={TEAL} />
+        <Text style={[styles.title, { flex: 1, marginLeft: 8, fontSize: rf(14.5) }]}>{title}</Text>
         {right}
       </View>
-      <View style={{ padding: 12 }}>{children}</View>
-    </View>
-  );
-}
-
-function IconRow({ icon, iconColor = TEAL, k, v, pill, pillTone, last }) {
-  return (
-    <View style={[styles.row, { paddingVertical: 8 }, last ? null : { borderBottomWidth: 1, borderBottomColor: LINE }]}>
-      <Ionicons name={icon} size={18} color={iconColor} />
-      <Text style={{ width: 120, marginLeft: 10, fontSize: rf(12.5), color: INK }}>{k}</Text>
-      {pill ? (
-        <View style={{ paddingHorizontal: 10, paddingVertical: 2, borderRadius: 999, backgroundColor: TINT }}>
-          <Text style={{ fontSize: rf(12), fontWeight: '800', color: pillTone }}>{pill}</Text>
-        </View>
-      ) : <Text style={{ flex: 1, fontSize: rf(12.5), fontWeight: '700', color: INK }}>{txt(v)}</Text>}
+      <View style={{ paddingHorizontal: 12, paddingBottom: 12, paddingTop: 6 }}>{children}</View>
     </View>
   );
 }
 
 const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+const txtOrNull = (v) => { const s = txt(v); return s === '—' ? null : s; };
 
 // Any API value → display text (objects like an address are joined, never rendered raw).
 const txt = (v) => {
@@ -361,7 +314,7 @@ function KV({ k, v, bold }) {
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: '#FFFFFF' },
-  card: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: LINE, borderRadius: 14, padding: 12, marginBottom: 8 },
+  card: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: LINE, borderRadius: 14, padding: 12, marginBottom: 8, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
   row: { flexDirection: 'row', alignItems: 'center' },
   thumb: { width: 72, height: 72, borderRadius: 12, backgroundColor: '#F4F2FA', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   title: { fontSize: rf(14), fontWeight: '800', color: INK },

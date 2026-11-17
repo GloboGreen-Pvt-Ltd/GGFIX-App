@@ -21,8 +21,17 @@ export async function createListing(payload) {
 export async function getCart() {
   return unwrap(await marketplaceApi.get('/customer/cart'));
 }
-export async function addToCart(productId, quantity = 1) {
-  return await marketplaceApi.post('/customer/cart', { body: { productId, quantity } });
+// Cart items are fixed at qty 1: re-adding an existing product is a no-op.
+export async function addToCart(productId) {
+  try {
+    const items = await getCart();
+    const hit = (items || []).find((x) => String(x.product?.id ?? x.productId) === String(productId));
+    if (hit) {
+      if ((hit.quantity || 1) !== 1) await updateCartItem(hit.id, 1);
+      return hit;
+    }
+  } catch (_) { /* fall through to add */ }
+  return await marketplaceApi.post('/customer/cart', { body: { productId, quantity: 1 } });
 }
 export async function updateCartItem(itemId, quantity) {
   return await marketplaceApi.put(`/customer/cart/${itemId}`, { body: { quantity } });

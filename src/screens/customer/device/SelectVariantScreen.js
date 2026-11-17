@@ -525,7 +525,7 @@ export default function SelectVariantScreen({ navigation, route }) {
       if (flow === 'SELL') {
         if (!noImei && !isValidImei(imei)) return;
         navigation.navigate('SellScreening', {
-          device: { ...buildCustomDevice(), imei: noImei ? undefined : imei },
+          device: { ...buildCustomDevice(), categoryName: route?.params?.categoryName || undefined, imei: noImei ? undefined : imei },
           workingCondition: condition,
           editSellOrderId: route?.params?.editSellOrderId,
           editHints: route?.params?.editHints,
@@ -591,7 +591,7 @@ export default function SelectVariantScreen({ navigation, route }) {
     }
     if (flow === 'SELL') {
       navigation.navigate('SellScreening', {
-        device: { ...payload, modelName, imei: noImei ? undefined : imei },
+        device: { ...payload, categoryName: route?.params?.categoryName || undefined, modelName, imei: noImei ? undefined : imei },
         workingCondition: condition,
         editSellOrderId: route?.params?.editSellOrderId,
         editHints: route?.params?.editHints,

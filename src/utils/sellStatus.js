@@ -24,9 +24,9 @@ const LAST = SELL_STEPS.length - 1;
 const STATUS_STEP = {};
 [
   [0, 'DRAFT'],
-  [1, 'PENDING', 'SUBMITTED', 'CREATED', 'OPEN', 'REQUESTED', 'PENDING_QUOTATION', 'AWAITING_QUOTATION', 'UNDER_EVALUATION', 'EVALUATION', 'EVALUATED'],
+  [1, 'PENDING', 'SUBMITTED', 'CREATED', 'OPEN', 'REQUESTED', 'PENDING_QUOTATION', 'AWAITING_QUOTATION', 'AWAITING_QUOTATIONS', 'AWAITING_QUOTE', 'AWAITING_QUOTES', 'UNDER_EVALUATION', 'EVALUATION', 'EVALUATED'],
   [2, 'QUOTED', 'QUOTATION_RECEIVED', 'QUOTATIONS_RECEIVED', 'QUOTES_RECEIVED', 'OFFER_RECEIVED', 'OFFERED'],
-  [3, 'ACCEPTED', 'OFFER_ACCEPTED', 'QUOTATION_ACCEPTED', 'QUOTE_ACCEPTED', 'SHOP_SELECTED', 'SELECTED'],
+  [3, 'ACCEPTED', 'OFFER_ACCEPTED', 'QUOTATION_ACCEPTED', 'QUOTE_ACCEPTED', 'SHOP_SELECTED', 'SELECTED', 'SELL_CONFIRMED'],
   [4, 'ORDER_CREATED', 'SELL_ORDER_CREATED', 'CONFIRMED', 'ORDER_CONFIRMED', 'PROCESSING', 'IN_PROGRESS'],
   [5, 'PICKUP_ASSIGNED', 'PICKUP_SCHEDULED', 'BUYER_ASSIGNED', 'OUT_FOR_PICKUP', 'PICKUP_IN_PROGRESS', 'PICKED_UP', 'DEVICE_PICKED_UP', 'DEVICE_RECEIVED', 'UNDER_INSPECTION', 'INSPECTION_PENDING'],
   [6, 'DEVICE_VERIFIED', 'VERIFIED', 'INSPECTED', 'INSPECTION_COMPLETED', 'INSPECTION_DONE', 'PRICE_REVISION_PENDING', 'REVISION_REJECTED'],
@@ -71,7 +71,8 @@ export function sellProgress(so, quotes = []) {
     slot: [so?.pickupSlotStart, so?.pickupSlotEnd].filter(Boolean).map(hm).join(' – ') || first(so?.pickupSlot),
   };
   const verifiedAt = first(so?.verifiedAt, so?.deviceVerifiedAt, so?.inspectedAt, so?.inspectionCompletedAt);
-  const verified = !!verifiedAt || so?.deviceVerified === true || /VERIFIED|PASSED|COMPLETED/.test(up(first(so?.verificationStatus, so?.inspectionStatus)));
+  // Exact words: a substring test counted 'NOT_VERIFIED' / 'UNVERIFIED' / 'INSPECTION_NOT_COMPLETED' as verified.
+  const verified = !!verifiedAt || so?.deviceVerified === true || /^(VERIFIED|PASSED|COMPLETED|INSPECTION_COMPLETED)$/.test(up(first(so?.verificationStatus, so?.inspectionStatus)));
   const confirmedAt = first(so?.finalPriceConfirmedAt, so?.priceConfirmedAt);
   const confirmedPrice = num(first(so?.confirmedPrice, so?.finalConfirmedPrice));
   const priceConfirmed = !!confirmedAt || !!confirmedPrice || so?.finalPriceConfirmed === true;
@@ -94,6 +95,9 @@ export function sellProgress(so, quotes = []) {
   step = Math.max(step, ev);
   // SOLD only after full completion: a buyer exists and payment isn't known-unpaid.
   if (step === LAST && (!(so?.shopId || chosen) || (payStatus && !paid))) step = Math.min(ev, LAST - 1);
+  // Nothing past quotations without a chosen shop: a status word alone can't
+  // skip ahead (the order is still Awaiting quotes / Quote received).
+  if (!cancelled && !(so?.shopId || chosen) && step > 2) step = q.length ? 2 : 1;
   const sold = !cancelled && step === LAST;
 
   // Inspection starts only on its own event (or once verified); being picked

@@ -704,7 +704,7 @@ export default function PickupDetailsScreen({ navigation, route }) {
           {(b.pickupDate || String(b.serviceMode || '').toUpperCase() === 'PICKUP')
             && (() => { const pt = buildPickupTimeline(b); return pt.terminal || pt.rescheduled || pt.rows.some((r) => r.state === 'done'); })() ? (
               <View style={{ marginTop: 12, borderWidth: 1, borderColor: BRAND.line, borderRadius: 14, padding: 12 }}>
-                <PickupHorizontalCard b={b} delivery={delivery} expanded={allPickupUpdates} onToggle={() => setAllPickupUpdates((v) => !v)} />
+                <PickupHorizontalCard b={b} delivery={delivery} shopPhone={shop?.mobile || shop?.phone || null} expanded={allPickupUpdates} onToggle={() => setAllPickupUpdates((v) => !v)} />
                 {syncError ? (
                   <TouchableOpacity onPress={reload} accessibilityRole='button' style={{ marginTop: 8 }}>
                     <Text style={{ fontSize: rf(11.5), color: '#B45309' }}>Couldn’t refresh — showing last known status. Tap to retry.</Text>

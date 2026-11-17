@@ -48,3 +48,26 @@ export async function checkAddressLocation(addr) {
   const trusted = !!coords && (!pinArea || haversineKm(coords, pinArea) <= PICKUP_MAX_KM);
   return { coords, trusted, pinArea };
 }
+
+// District for an Indian 6-digit PIN (India Post directory). Null when it
+// cannot be resolved — never a guessed name. Cached per PIN.
+const districtCache = new Map();
+export async function resolvePinDistrict(pin) {
+  const p = String(pin || '').trim();
+  if (!/^\d{6}$/.test(p)) return null;
+  if (districtCache.has(p)) return districtCache.get(p);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const res = await fetch(`https://api.postalpincode.in/pincode/${p}`, { signal: ctrl.signal });
+    if (!res.ok) return null;
+    const j = await res.json();
+    const d = j?.[0]?.Status === 'Success' ? String(j[0].PostOffice?.[0]?.District || '').trim() : '';
+    if (d) districtCache.set(p, d);
+    return d || null;
+  } catch (_) {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}

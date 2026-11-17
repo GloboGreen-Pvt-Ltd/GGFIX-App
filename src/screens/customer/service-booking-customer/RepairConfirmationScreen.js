@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import {
   CalendarClock,
@@ -18,6 +18,8 @@ import {
 import { rf } from '../../../utils/responsive';
 import { issueLabel } from './RepairIssueGroups';
 import { BRAND } from '../../../theme/brand';
+import { getModel } from '../../../api/masterData';
+import { normalizeDeviceImageUrl, resolveDeviceImageSource } from '../../../utils/images';
 import { SuccessHero, SuccessCard, StatusPill, InfoRow, SuccessActions, GREEN_TEXT, MINT, MUTED } from '../../../components/SuccessChrome';
 
 const hashed = (n) => (n ? (String(n).startsWith('#') ? String(n) : `#${n}`) : '');
@@ -57,9 +59,23 @@ function ProgressStrip() {
 export default function RepairConfirmationScreen({ navigation, route }) {
   const { booking = {}, device = {}, shop, address, services = [] } = route.params || {};
 
-  const deviceName = device.modelName || booking.modelName || device.brandName || booking.brandName || '-';
-  const ramStorage = [device.ramLabel, device.storageLabel].filter(Boolean).join(' / ');
-  const deviceSpecs = [device.brandName, device.color, ramStorage].filter(Boolean).join(' · ');
+  // Master-data model for whatever the passed device lacks (name / brand / image).
+  const modelId = device.modelId || booking.modelId;
+  const [model, setModel] = useState(null);
+  useEffect(() => {
+    if (!modelId || (device.modelName && device.imageUrl)) return undefined;
+    let alive = true;
+    getModel(modelId).then((m) => { if (alive) setModel(m || null); }).catch(() => {});
+    return () => { alive = false; };
+  }, [modelId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const modelName = device.modelName || booking.modelName || model?.name || '';
+  const brandName = device.brandName || booking.brandName || model?.brandName || model?.brand?.name || '';
+  const deviceName = modelName ? (brandName && !modelName.toLowerCase().startsWith(brandName.toLowerCase()) ? `${brandName} ${modelName}` : modelName) : (brandName || 'Your device');
+  const ramStorage = [device.ramLabel || booking.ramLabel, device.storageLabel || booking.storageLabel].filter(Boolean).join(' / ');
+  const deviceSpecs = [ramStorage, device.color || booking.color].filter(Boolean).join(' · ');
+  // Model photo (URL or base64), else the customer's own front photo.
+  const deviceImage = resolveDeviceImageSource({ url: device.imageUrl || model?.imageUrl, base64: model?.imageBase64 })
+    || normalizeDeviceImageUrl(booking.frontImageUrl) || device.media?.front?.uri || null;
   const addressText = address
     ? [address.addressLine, address.locality, address.city, address.state, address.pincode].filter(Boolean).join(', ')
     : '-';
@@ -88,9 +104,9 @@ export default function RepairConfirmationScreen({ navigation, route }) {
 
             {/* device block */}
             <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: BRAND.line }}>
-              <View style={{ height: 46, width: 42, borderRadius: 10, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: BRAND.line, alignItems: 'center', justifyContent: 'center', marginRight: 9, overflow: 'hidden' }}>
-                {device.imageUrl ? (
-                  <Image source={{ uri: device.imageUrl }} style={{ width: 38, height: 42 }} resizeMode="contain" />
+              <View style={{ height: 64, width: 56, borderRadius: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: BRAND.line, alignItems: 'center', justifyContent: 'center', marginRight: 10, overflow: 'hidden' }}>
+                {deviceImage ? (
+                  <Image source={{ uri: deviceImage }} style={{ width: 50, height: 58 }} resizeMode="contain" />
                 ) : (
                   <Smartphone size={20} color={GREEN_TEXT} />
                 )}

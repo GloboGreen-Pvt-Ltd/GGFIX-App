@@ -14,6 +14,7 @@ import { BRAND, BRAND_FLOW } from '../../../theme/brand';
 import { FlowCta, useHideStackHeader } from '../service-booking-customer/FlowChrome';
 import { SellStepHeader, SellCard, EditBanner, TickBadge, SellStepBar } from './SellStepChrome';
 import { MOBILE_ACCESSORIES, LAPTOP_ACCESSORIES, WARRANTY, NO_WARRANTY_KEYWORDS } from './SellAccessoriesWarrantyScreen';
+import { useSellDraft, restoredState } from './sellDraft';
 
 // Sell step 2 — Accessories & Photos: accessories + warranty (formerly their own
 // screen, same options and params) above the device photos and condition.
@@ -86,7 +87,8 @@ export default function SellImagesScreen({ navigation, route }) {
       return i > 0 ? routes[i - 1].key : null;
     } catch (_) { return null; }
   });
-  const [draft] = useState(() => (draftKey ? drafts.get(draftKey) : null));
+  // In-memory draft (Back → Next), else the saved one from "Continue Selling".
+  const [draft] = useState(() => (draftKey ? drafts.get(draftKey) : null) || restoredState(route));
 
   // The owner listing flow (Partner) skips accessories / warranty and prices next.
   let hasOwnerRoute = false;
@@ -133,6 +135,8 @@ export default function SellImagesScreen({ navigation, route }) {
     drafts.set(draftKey, { images, previews, condition, accessories, warranty });
     if (drafts.size > 10) drafts.delete(drafts.keys().next().value);
   }, [draftKey, images, previews, condition, accessories, warranty]);
+  // Saved draft keeps the uploaded URLs (local previews may not survive a restart).
+  useSellDraft(route, { images, previews: {}, condition, accessories, warranty });
 
   const upload = async (key, photo) => {
     setUploading(key);
@@ -334,40 +338,18 @@ export default function SellImagesScreen({ navigation, route }) {
         <SellCard
           Icon={ImageIcon}
           title="Upload for Device Images"
-          subtitle="5 photos required, 1 video optional. Maximum file size: 5 MB."
+          subtitle="5 photos required, 1 damage video optional. Maximum file size: 5 MB."
           right={(
             <View style={{ borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: filled === SLOTS.length ? BRAND.greenSoft : BRAND.yellowSoft }}>
               <Text style={{ fontSize: rf(12.5), fontWeight: '800', color: filled === SLOTS.length ? BRAND.green : BRAND.ink }}>{filled}/{SLOTS.length}</Text>
             </View>
           )}
         >
-          {/* Camera · Gallery (fill the empty slots) · Video */}
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            {[
-              { key: 'camera', label: 'Camera', icon: 'photo-camera', disabled: !!uploading || !freeSlots.length, onPress: () => pickBulk('camera') },
-              { key: 'gallery', label: 'Gallery', icon: 'photo-library', disabled: !!uploading || !freeSlots.length, onPress: () => pickBulk('library') },
-              { key: 'video', label: 'Video', icon: 'videocam', disabled: !!uploading || !!(images.video || pending.video), onPress: () => setSheet({ type: 'video' }) },
-            ].map((b) => (
-              <Pressable
-                key={b.key}
-                onPress={b.onPress}
-                disabled={b.disabled}
-                accessibilityRole="button"
-                accessibilityLabel={`Add ${b.label.toLowerCase()}`}
-                accessibilityState={{ disabled: b.disabled }}
-                style={{ flex: 1, height: 46, borderRadius: 12, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderColor: b.disabled ? '#E8EAEE' : BRAND.greenLine, backgroundColor: b.disabled ? BRAND.bg : BRAND.greenSoft, opacity: b.disabled ? 0.6 : 1 }}
-              >
-                <MaterialIcons name={b.icon} size={rf(19)} color={b.disabled ? BRAND.muted : BRAND.green} />
-                <Text numberOfLines={1} style={{ marginLeft: 6, fontSize: rf(13), fontWeight: '700', color: b.disabled ? BRAND.muted : BRAND.green }}>{b.label}</Text>
-              </Pressable>
-            ))}
-          </View>
-
-          <Text style={{ marginTop: 8, fontSize: rf(11.5), color: BRAND.muted }}>Photos fill the empty slots in order — tap a slot to move, replace or remove its photo.</Text>
+          <Text style={{ fontSize: rf(11.5), color: BRAND.muted }}>Tap a slot to add, move, replace or remove its photo.</Text>
 
           {/* The 5 labeled slots (+ the video once added). */}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap, marginTop: 10 }}>
-            {[...SLOTS, ...(previews.video || images.video || pending.video || uploading === VIDEO_SLOT.key ? [VIDEO_SLOT] : [])].map((s) => {
+            {SLOTS.map((s) => {
               // The local JPEG first (what was just picked), else the saved url.
               const shown = previews[s.key] || images[s.key];
               const uri = VALID_URI.test(shown || '') ? shown : null;
@@ -432,6 +414,48 @@ export default function SellImagesScreen({ navigation, route }) {
                 </TouchableOpacity>
               );
             })}
+            {/* Damage / Scratches video (optional) — beside the damage photo; record or pick, up to 15 sec, sent as images.video. */}
+            {(() => {
+              const has = !!(images.video || previews.video);
+              const busy = uploading === VIDEO_SLOT.key;
+              const failed = !!pending.video && !busy;
+              return (
+                <TouchableOpacity
+                  key="video"
+                  onPress={() => (failed ? upload('video', pending.video) : !has && !busy ? setSheet({ type: 'video' }) : null)}
+                  disabled={busy || (!!uploading && !failed)}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Damage video${has ? '' : ', optional, empty'}`}
+                  style={{
+                    width: tileW, height: tileH, borderRadius: 12, overflow: 'hidden',
+                    borderWidth: has ? 1 : 1.5, borderStyle: has ? 'solid' : 'dashed', borderColor: failed ? BRAND.red : has ? BRAND.line : BRAND.greenLine,
+                    backgroundColor: BRAND.bg, alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  {busy ? <ActivityIndicator color={BRAND.green} /> : has || failed ? (
+                    <>
+                      <View style={[styles.slotImg, { bottom: 22, backgroundColor: failed ? 'rgba(255,255,255,0.6)' : BRAND.ink, alignItems: 'center', justifyContent: 'center' }]}>
+                        {failed ? <Text style={{ fontSize: rf(10.5), fontWeight: '700', color: BRAND.red, textAlign: 'center', paddingHorizontal: 6 }}>Upload failed · Tap to retry</Text>
+                          : <MaterialIcons name="play-circle-filled" size={rf(34)} color="#FFFFFF" />}
+                      </View>
+                      <TouchableOpacity style={styles.removeBtn} onPress={() => remove('video')} accessibilityLabel="Remove video">
+                        <Ionicons name="close" size={13} color="#fff" />
+                      </TouchableOpacity>
+                      <Text style={styles.slotLabelOverlay} numberOfLines={1}>Damage Video</Text>
+                    </>
+                  ) : (
+                    <>
+                      <View style={{ height: 34, width: 34, borderRadius: 17, backgroundColor: BRAND.greenSoft, alignItems: 'center', justifyContent: 'center', marginBottom: 5 }}>
+                        <MaterialIcons name="videocam" size={rf(17)} color={BRAND.green} />
+                      </View>
+                      <Text style={{ fontSize: rf(11), fontWeight: '700', color: BRAND.ink, textAlign: 'center', paddingHorizontal: 4 }} numberOfLines={2}>Damage Video</Text>
+                      <Text style={{ fontSize: rf(10), color: BRAND.muted }}>Optional · 15 sec</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              );
+            })()}
           </View>
           {missingCount ? (
             <Text style={{ fontSize: rf(11), fontWeight: '600', color: BRAND.red, marginTop: 8 }}>

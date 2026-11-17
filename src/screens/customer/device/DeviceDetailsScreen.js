@@ -19,6 +19,7 @@ import useDeviceSpecForm from '../../../lib/hooks/useDeviceSpecForm';
 import { SPEC_ATTRIBUTE_KEYS, formatSpecValue, resolveSpecCategory, specDisplayParts, usesCategorySpecs } from '../../../utils/deviceSpecs';
 import { useHideStackHeader } from '../service-booking-customer/FlowChrome';
 import { DevicePickerHeader, DPNextBar } from './DevicePickerChrome';
+import SellDraftCards from '../sell/SellDraftCards';
 import { imeiApplies, cleanImei, isValidImei } from '../../../utils/imeiPolicy';
 
 /**
@@ -375,6 +376,8 @@ export default function DeviceDetailsScreen({ navigation, route }) {
           keyboardShouldPersistTaps="handled"
         >
           <View style={{ width: '100%', maxWidth: 760 }}>
+            {/* Unfinished sell bookings — shown only here (sell flow), above Category. */}
+            {isSell && !params.editSellOrderId ? <SellDraftCards navigation={navigation} style={{ marginBottom: 12 }} /> : null}
             {/* ── Category — tiles with the admin Category Menu art. ── */}
             <Field label="Category">
               {category && !catListOpen ? (
@@ -599,11 +602,11 @@ export default function DeviceDetailsScreen({ navigation, route }) {
                     <>
                       {(() => {
                         const cc = String(category?.code || category?.name || '').toUpperCase();
-                        const lbl = cc.includes('LAPTOP') ? 'Laptop' : cc.includes('WATCH') ? 'Smart Watch'
+                        const lbl = cc.includes('LAPTOP') ? 'Laptop' : cc.includes('TABLET') || cc.includes('IPAD') ? 'Tablet' : cc.includes('WATCH') ? 'Smart Watch'
                           : (cc.includes('AUDIO') || cc.includes('HEADPHONE') || cc.includes('EARBUD')) ? 'Audio Device' : 'Mobile';
                         const opts = [
                           { key: 'WORKING', label: `Working ${lbl}`, sub: 'Turns on · No major issues', icon: Smartphone, color: BRAND.green, soft: BRAND.greenSoft },
-                          { key: 'DEAD', label: `${lbl} Dead / Unknown`, sub: "Won't turn on · Not sure", icon: Skull, color: BRAND.red, soft: BRAND.redSoft },
+                          { key: 'DEAD', label: `Dead ${lbl}`, sub: "Won't turn on · Not sure", icon: Skull, color: BRAND.red, soft: BRAND.redSoft },
                         ];
                         return (
                           <Field label={`${lbl} Condition`} required>
@@ -861,15 +864,11 @@ function ManualInput({ value, onChangeText, placeholder, caps = false }) {
 }
 
 // Exact condition card from the former Sell "Your Device" page (SelectVariantScreen).
+// Compact condition card: icon left, title + one-line hint right; whole card tappable.
 function ConditionCard({ o, active, onPress }) {
   const { width } = useWindowDimensions();
   const tab = width >= 600;
-  const s = {
-    pad: tab ? rs(16) : rs(12), disc: tab ? rs(40) : rs(34), icon: tab ? rs(20) : rs(17),
-    tick: tab ? rs(24) : rs(20), title: tab ? rf(13) : rf(12), sub: tab ? rf(11) : rf(10),
-  };
-  const titleLH = Math.round(s.title * 1.3);
-  const subLH = Math.round(s.sub * 1.35);
+  const s = { disc: tab ? rs(32) : rs(28), icon: tab ? rs(17) : rs(15), tick: rs(16), title: tab ? rf(13) : rf(12), sub: tab ? rf(10.5) : rf(9.5) };
   const Icon = o.icon;
   return (
     <Pressable
@@ -877,29 +876,23 @@ function ConditionCard({ o, active, onPress }) {
       accessibilityRole="radio"
       accessibilityState={{ checked: active }}
       accessibilityLabel={`${o.label}, ${o.sub}`}
+      hitSlop={4}
       className="active:opacity-85"
       style={{
-        flex: 1, alignItems: 'center', paddingTop: s.pad + rs(4), paddingBottom: s.pad, paddingHorizontal: rs(6),
-        borderRadius: rs(14), borderWidth: active ? 1.5 : 1, borderColor: active ? ACCENT : BORDER, backgroundColor: active ? MINT : '#FFFFFF',
+        flex: 1, minHeight: 52, flexDirection: 'row', alignItems: 'center', paddingVertical: rs(8), paddingLeft: rs(8), paddingRight: rs(22),
+        borderRadius: rs(12), borderWidth: active ? 1.5 : 1, borderColor: active ? ACCENT : BORDER, backgroundColor: active ? MINT : '#FFFFFF',
       }}
     >
-      <View style={{ position: 'absolute', top: rs(7), right: rs(7), height: s.tick, width: s.tick, borderRadius: s.tick / 2, borderWidth: active ? 0 : 1.5, borderColor: '#D1D5DB', backgroundColor: active ? ACCENT : '#FFFFFF', alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ position: 'absolute', top: rs(6), right: rs(6), height: s.tick, width: s.tick, borderRadius: s.tick / 2, borderWidth: active ? 0 : 1.5, borderColor: '#D1D5DB', backgroundColor: active ? ACCENT : '#FFFFFF', alignItems: 'center', justifyContent: 'center' }}>
         {active ? <Check size={Math.round(s.tick * 0.6)} color="#FFFFFF" strokeWidth={3} /> : null}
       </View>
       <View style={{ height: s.disc, width: s.disc, borderRadius: s.disc / 2, backgroundColor: o.color, alignItems: 'center', justifyContent: 'center' }}>
         <Icon size={s.icon} color="#FFFFFF" />
       </View>
-      <Text
-        style={{ marginTop: rs(8), minHeight: titleLH * 2, fontSize: s.title, lineHeight: titleLH, fontWeight: '800', color: INK, textAlign: 'center' }}
-        numberOfLines={2}
-        adjustsFontSizeToFit
-        minimumFontScale={0.85}
-      >
-        {o.label}
-      </Text>
-      <Text style={{ minHeight: subLH * 2, fontSize: s.sub, lineHeight: subLH, color: MUTED, textAlign: 'center' }} numberOfLines={2}>
-        {o.sub}
-      </Text>
+      <View style={{ flex: 1, minWidth: 0, marginLeft: rs(8) }}>
+        <Text style={{ fontSize: s.title, fontWeight: '800', color: INK }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{o.label}</Text>
+        <Text style={{ fontSize: s.sub, color: MUTED, marginTop: 1 }} numberOfLines={1}>{o.sub}</Text>
+      </View>
     </Pressable>
   );
 }

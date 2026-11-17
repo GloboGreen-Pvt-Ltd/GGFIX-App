@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { Eye, Trash2, ShoppingCart, ShieldCheck, Truck, Minus, Plus, Smartphone, ChevronRight } from 'lucide-react-native';
+import { Eye, Trash2, ShoppingCart, Smartphone, ChevronRight } from 'lucide-react-native';
 import {
   Loader,
   EmptyState,
@@ -10,7 +10,7 @@ import {
   useBottomBarInset,
 } from '../../../components/rnr';
 import { confirm, notify } from '../../../components/confirm';
-import { getCart, removeCartItem, updateCartItem } from '../../../api/marketplace';
+import { getCart, removeCartItem } from '../../../api/marketplace';
 import { goToTab } from '../../../navigation/goToTab';
 import { resolveDeviceImageSource } from '../../../utils/images';
 import { BRAND } from '../../../theme/brand';
@@ -26,22 +26,6 @@ function Chip({ label }) {
     <View style={{ backgroundColor: BRAND.bg, borderWidth: 1, borderColor: BRAND.line, borderRadius: 7, paddingHorizontal: 7, paddingVertical: 2, marginRight: 5, marginTop: 4 }}>
       <Text numberOfLines={1} style={{ fontSize: rf(10), color: BRAND.body, fontWeight: '600' }}>{label}</Text>
     </View>
-  );
-}
-
-// NOTE: Pressables take plain style objects only — NativeWind's cssInterop
-// drops function-form `style={({ pressed }) => ...}` on native.
-function StepButton({ icon: Icon, onPress, disabled }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      hitSlop={6}
-      className={disabled ? '' : 'active:opacity-70'}
-      style={{ height: 26, width: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: LINE, opacity: disabled ? 0.4 : 1 }}
-    >
-      <Icon size={13} color={BRAND.ink} />
-    </Pressable>
   );
 }
 
@@ -62,19 +46,11 @@ export default function MyCartScreen({ navigation }) {
     try { await removeCartItem(id); load(); } catch (e) { notify('Error', e.message); }
   };
 
-  // Optimistically bump quantity, then persist (min 1).
-  const onQty = async (it, delta) => {
-    const next = Math.max(1, (it.quantity || 1) + delta);
-    if (next === (it.quantity || 1)) return;
-    setItems((prev) => prev.map((x) => (x.id === it.id ? { ...x, quantity: next } : x)));
-    try { await updateCartItem(it.id, next); } catch (e) { notify('Error', e.message || 'Could not update quantity'); load(); }
-  };
-
   // Checkout → Place Order (pickup choice + price details); it places the
   // order, messages the shop and clears the cart.
   const onCheckout = () => {
     if (placing || !items.length) return;
-    navigation.navigate('BuyPlaceOrder', { items, fromCart: true });
+    navigation.navigate('BuyPlaceOrder', { items: items.map((x) => ({ ...x, quantity: 1 })), fromCart: true });
   };
 
   if (loading) return <Loader label="Loading your cart..." />;
@@ -94,7 +70,7 @@ export default function MyCartScreen({ navigation }) {
     );
   }
 
-  const subtotal = items.reduce((sum, it) => sum + (Number(it.product?.price) || 0) * (it.quantity || 1), 0);
+  const subtotal = items.reduce((sum, it) => sum + (Number(it.product?.price) || 0) , 0);
   const shipping = 0;
   const total = subtotal + shipping;
   const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
@@ -105,7 +81,6 @@ export default function MyCartScreen({ navigation }) {
         {items.map((it) => {
           const p = it.product || {};
           const img = resolveDeviceImageSource({ url: p.imageUrl });
-          const qty = it.quantity || 1;
           return (
             <View key={it.id} style={{ backgroundColor: '#FFFFFF', borderRadius: 16, borderWidth: 1, borderColor: LINE, padding: 10, marginBottom: 10, ...cardShadow }}>
               <Pressable
@@ -133,11 +108,8 @@ export default function MyCartScreen({ navigation }) {
                 <ChevronRight size={16} color={BRAND.muted} />
               </Pressable>
 
-              {/* Quantity stepper · View · Remove */}
+              {/* View · Remove */}
               <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: BRAND.line }}>
-                <StepButton icon={Minus} onPress={() => onQty(it, -1)} disabled={qty <= 1} />
-                <Text style={{ minWidth: 28, textAlign: 'center', fontSize: rf(13), fontWeight: '800', color: BRAND.ink }}>{qty}</Text>
-                <StepButton icon={Plus} onPress={() => onQty(it, 1)} />
                 <View style={{ flex: 1 }} />
                 <Pressable
                   onPress={() => navigation.navigate('BuyProductDetails', { productId: p.id })}
@@ -177,23 +149,6 @@ export default function MyCartScreen({ navigation }) {
             <Text style={{ fontSize: rf(13.5), color: BRAND.ink, fontWeight: '800' }}>Total</Text>
             <Text style={{ fontSize: rf(13.5), color: BRAND.ink, fontWeight: '800' }}>{inr(total)}</Text>
           </View>
-        </View>
-
-        <View style={{ flexDirection: 'row' }}>
-          {[
-            { icon: ShieldCheck, label: '6-month warranty', color: BRAND.green, bg: '#E5F3F5' },
-            { icon: Truck, label: 'Free delivery', color: BRAND.yellow, bg: '#FFF4D6' },
-          ].map((t, i) => {
-            const Icon = t.icon;
-            return (
-              <View key={t.label} style={{ flex: 1, marginLeft: i ? 8 : 0, flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1, borderColor: LINE, padding: 9 }}>
-                <View style={{ height: 26, width: 26, borderRadius: 13, backgroundColor: t.bg, alignItems: 'center', justifyContent: 'center', marginRight: 7 }}>
-                  <Icon size={14} color={t.color} />
-                </View>
-                <Text numberOfLines={1} style={{ flex: 1, fontSize: rf(11), fontWeight: '700', color: BRAND.ink }}>{t.label}</Text>
-              </View>
-            );
-          })}
         </View>
       </ScrollView>
 

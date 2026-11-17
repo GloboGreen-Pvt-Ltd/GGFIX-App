@@ -8,6 +8,7 @@ import { listAddresses } from '../../../api/customer';
 import { rf } from '../../../utils/responsive';
 import { BRAND, BRAND_FLOW } from '../../../theme/brand';
 import { FlowCta, FlowDecor, FlowHeader, useHideStackHeader } from '../service-booking-customer/FlowChrome';
+import { useSellDraft, restoredState } from './sellDraft';
 
 export default function SellAddressScreen({ navigation, route }) {
   const bottomSpace = useBottomBarInset(96);
@@ -15,13 +16,14 @@ export default function SellAddressScreen({ navigation, route }) {
   useHideStackHeader(navigation);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedId, setSelectedId] = useState(null);
+  const [selectedId, setSelectedId] = useState(() => restoredState(route)?.addressId || null);
+  useSellDraft(route, { addressId: selectedId });
 
   const load = useCallback(async () => {
     try {
       const list = await listAddresses();
       setItems(list);
-      if (list[0]) setSelectedId(list.find((a) => a.isDefault)?.id || list[0].id);
+      if (list[0]) setSelectedId((cur) => (cur && list.some((a) => a.id === cur) ? cur : list.find((a) => a.isDefault)?.id || list[0].id));
     } finally { setLoading(false); }
   }, []);
   useFocusEffect(useCallback(() => { load(); }, [load]));

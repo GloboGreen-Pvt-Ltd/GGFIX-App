@@ -4,7 +4,9 @@ import { useFocusEffect } from '@react-navigation/native';
 import {
   Search, ShoppingCart, History, Bell, ChevronRight, X, Plus, SlidersHorizontal,
   LayoutGrid, Tag, BadgeCheck, TrendingUp, Smartphone, ClipboardList, Store, ArrowRight, User, MapPin, Package,
-  CheckCircle2, Cpu, Percent, Star, Zap,
+  CheckCircle2, Cpu, Star, Zap,
+  Percent,
+  Truck,
 } from 'lucide-react-native';
 import { EmptyState, Loader } from '../../../components/rnr';
 import { notify } from '../../../components/confirm';
@@ -13,6 +15,7 @@ import { listProducts, getCart, addToCart } from '../../../api/marketplace';
 import { getUnreadCount } from '../../../api/notifications';
 import { resolveDeviceImageSource } from '../../../utils/images';
 import { rf } from '../../../utils/responsive';
+import BuyNearbyShops from '../../../components/BuyNearbyShops';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Partner app Buy palette — green #035C6C, ink #111111, neutrals #F3F4F6 / #F3F4F6.
@@ -315,11 +318,9 @@ export default function BuyHomeScreen({ navigation }) {
       <View style={[centered, { flexDirection: 'row', alignItems: 'center', paddingHorizontal: PAD, paddingTop: 8, paddingBottom: 6 }]}>
         <Image source={require('../../../../assets/logo.png')} style={{ width: 42, height: 42 }} resizeMode="contain" />
         <View style={{ flex: 1, marginLeft: 8 }}>
-          <Text style={{ fontSize: rf(20), fontWeight: '800', color: GREEN }}>NearGFix</Text>
-          <Text style={{ fontSize: rf(11.5), color: INK, marginTop: -1 }}>Buy • Sell • Repair</Text>
+          <Text style={{ fontSize: rf(20), fontWeight: '800', color: GREEN }}>Buy</Text>
         </View>
-        <HeaderBadgeIcon Icon={Bell} label="Notifications" dot={unread > 0} onPress={() => navigation.navigate('Notifications')} />
-        <HeaderBadgeIcon Icon={History} label="Order History" onPress={() => navigation.navigate('MyOrders', { initialTab: 'Buy' })} />
+        <HeaderBadgeIcon Icon={Package} label="My Orders" onPress={() => navigation.navigate('MyOrders', { initialTab: 'Buy' })} />
         <HeaderBadgeIcon Icon={ShoppingCart} label="My Cart" count={cartCount} onPress={() => navigation.navigate('MyCart')} />
       </View>
 
@@ -415,15 +416,13 @@ export default function BuyHomeScreen({ navigation }) {
             </ScrollView>
           )}
 
-          {/* Quick actions */}
+          {/* Promotional cards — Deals + Free Delivery only (display cards, no navigation). */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 14 }} contentContainerStyle={{ gap: 8, paddingHorizontal: PAD, paddingBottom: 4 }}>
             {[
-              { key: 'deals', title: 'Deals', sub: 'Best offers', Icon: Percent, fg: '#B45309', bg: '#FEF3C7', onPress: () => navigation.navigate('BuyListing', { sort: 'price_asc', title: 'Deals & Offers' }) },
-              { key: 'shops', title: 'Nearby Shops', sub: 'Buy from local shops', Icon: Store, fg: GREEN, bg: GREEN_LIGHT, onPress: () => navigation.navigate('NearbyShops') },
-              { key: 'orders', title: 'My Orders', sub: 'Track & manage', Icon: Package, fg: '#2563EB', bg: '#E0ECFF', onPress: () => navigation.navigate('MyOrders', { initialTab: 'Buy', view: 'buy' }) },
-              { key: 'cart', title: 'My Cart', sub: `${cartCount} ${cartCount === 1 ? 'item' : 'items'}`, Icon: ShoppingCart, fg: '#16A34A', bg: '#DCFCE7', onPress: () => navigation.navigate('MyCart') },
-            ].map(({ key, title, sub, Icon, fg, bg, onPress }) => (
-              <Pressable key={key} onPress={onPress} accessibilityRole="button" accessibilityLabel={title}
+              { key: 'deals', title: 'Deals', sub: 'Best offers daily', Icon: Percent, fg: '#F59E0B', bg: '#FEF3C7' },
+              { key: 'delivery', title: 'Free Delivery', sub: 'On eligible orders', Icon: Truck, fg: GREEN, bg: GREEN_LIGHT },
+            ].map(({ key, title, sub, Icon, fg, bg }) => (
+              <View key={key} accessibilityLabel={`${title}, ${sub}`}
                 style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 10, borderRadius: 14, borderWidth: 1, borderColor: LINE, backgroundColor: '#FFFFFF', ...cardShadow }}>
                 <View style={{ height: 38, width: 38, borderRadius: 19, backgroundColor: bg, alignItems: 'center', justifyContent: 'center' }}>
                   <Icon size={19} color={fg} strokeWidth={2.4} />
@@ -432,7 +431,7 @@ export default function BuyHomeScreen({ navigation }) {
                   <Text style={{ fontSize: rf(13), fontWeight: '800', color: INK }}>{title}</Text>
                   <Text style={{ fontSize: rf(11), color: MUTED, marginTop: 1 }}>{sub}</Text>
                 </View>
-              </Pressable>
+              </View>
             ))}
           </ScrollView>
 
@@ -457,6 +456,9 @@ export default function BuyHomeScreen({ navigation }) {
               </ScrollView>
             </>
           ) : null}
+
+          {/* Nearby shops — real shops near the customer's saved address */}
+          <BuyNearbyShops navigation={navigation} pad={PAD} />
         </View>
       </ScrollView>
 

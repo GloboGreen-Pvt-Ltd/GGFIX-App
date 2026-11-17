@@ -10,6 +10,8 @@ import { rf, rlh } from '../../../utils/responsive';
 import { BRAND, BRAND_FLOW } from '../../../theme/brand';
 import { FLOW, cardShadow, FlowCta, FlowDecor, FlowHeader, useHideStackHeader } from '../service-booking-customer/FlowChrome';
 import ConditionArt, { artKind, artVariant, deviceShape } from './ConditionArt';
+import { useSellDraft, restoredState } from './sellDraft';
+import { pruneMap } from './sellQuestionSets';
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
@@ -50,8 +52,10 @@ export default function SellScreenConditionScreen({ navigation, route }) {
   const isEditing = !!editSellOrderId;
   const [groups, setGroups] = useState([]);
   const [optsByGroup, setOptsByGroup] = useState({});
-  const [selected, setSelected] = useState({}); // groupId -> {id, label}
+  const [selected, setSelected] = useState(() => restoredState(route)?.selected || {}); // groupId -> {id, label}
   const [loading, setLoading] = useState(true);
+  const [reopen, setReopen] = useState({}); // groupId -> true while a picked section is expanded via Change
+  useSellDraft(route, { selected });
 
   // Index previously-saved options by groupCode (canonical) and groupName
   // (best-effort) so we can resolve them against whichever groups come back.
@@ -78,6 +82,7 @@ export default function SellScreenConditionScreen({ navigation, route }) {
           ? sortGroups(FALLBACK_GROUPS)
           : sortGroups(list);
         setGroups(sortedGroups);
+        setSelected((cur) => pruneMap(cur, sortedGroups.map((g) => g.id))); // drop answers of another category
 
         const map = {};
         if (list.length !== 0) {
@@ -158,6 +163,21 @@ export default function SellScreenConditionScreen({ navigation, route }) {
           const GIcon = groupIcon(g);
           const cols = colsFor(opts);
           const kind = artKind(g);
+          if (selected[g.id] && !reopen[g.id]) {
+            return (
+              <View key={g.id} style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, paddingVertical: 9, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: '#E8EAEE', backgroundColor: '#fff' }}>
+                <View style={{ height: 18, width: 18, borderRadius: 9, backgroundColor: '#035C6C', alignItems: 'center', justifyContent: 'center' }}>
+                  <Check size={11} color="#fff" strokeWidth={3} />
+                </View>
+                <Text numberOfLines={2} style={{ flex: 1, marginLeft: 8, fontSize: rf(12.5), color: BRAND.ink }}>
+                  <Text style={{ fontWeight: '800' }}>{g.name}: </Text>{selected[g.id].label}
+                </Text>
+                <TouchableOpacity onPress={() => setReopen((m) => ({ ...m, [g.id]: true }))} accessibilityRole="button" accessibilityLabel={`Change ${g.name}`} style={{ marginLeft: 8, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: '#035C6C' }}>
+                  <Text style={{ fontSize: rf(11.5), fontWeight: '700', color: '#035C6C' }}>Change</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          }
           return (
             <View key={g.id} style={{ backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#E8EAEE', padding: 11, marginTop: 8, ...cardShadow }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 7 }}>
@@ -169,7 +189,12 @@ export default function SellScreenConditionScreen({ navigation, route }) {
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -3 }}>
                 {opts.map((o) => {
                   const active = selected[g.id]?.id === o.id;
-                  const pick = () => setSelected({ ...selected, [g.id]: { id: o.id, label: o.label, groupCode: g.code, groupName: g.name } });
+                  // Tap the picked option again to clear it; a new pick collapses the section.
+                  const pick = () => {
+                    if (active) { setSelected((m) => { const n = { ...m }; delete n[g.id]; return n; }); return; }
+                    setSelected((m) => ({ ...m, [g.id]: { id: o.id, label: o.label, groupCode: g.code, groupName: g.name } }));
+                    setReopen((m) => ({ ...m, [g.id]: false }));
+                  };
                   if (kind) {
                     const tileBg = active ? BRAND.greenSoft : '#F7F8FB';
                     return (
