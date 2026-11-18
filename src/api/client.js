@@ -10,7 +10,8 @@ import {
   ORDER_BASE,
   USER_BASE,
 } from './config';
-import { getToken, clearSession, notifyAuthExpired, isTokenExpired } from '../auth/session';
+import { getToken, getSession, clearSession, notifyAuthExpired, isTokenExpired } from '../auth/session';
+import { refreshDeviceSession, jwtExpiresSoon } from '../security/deviceTokens';
 import { Platform } from 'react-native';
 import { File, UploadType } from 'expo-file-system';
 
@@ -21,7 +22,7 @@ import { File, UploadType } from 'expo-file-system';
 const REQUEST_TIMEOUT_MS = 20000;
 const UPLOAD_TIMEOUT_MS = 60000;
 
-// Behind the TLS edge a base carries a routing prefix (`https://api.ggfix.in/auth`).
+// Behind the TLS edge a base carries a routing prefix (`https://api.neargfix.com/auth`).
 // `new URL(path, base)` would treat a leading-"/" path as root-relative and throw
 // that prefix away, so join the two by CONCATENATION instead. Bases are stored
 // without a trailing slash (see config.js); normalise here so a stray one from a
@@ -46,7 +47,12 @@ async function request(baseUrlOrNull, method, path, { query, body, headers, skip
     });
   }
 
-  const token = await getToken();
+  let token = await getToken();
+  // Device-bound session (migration 116): renew the 15-min token instead of logging out.
+  if (token && !skipAuthExpiry && jwtExpiresSoon(token) && (await getSession())?.deviceSessionId) {
+    const r = await refreshDeviceSession();
+    if (r.token) token = r.token;
+  }
   if (token && !skipAuthExpiry && isTokenExpired(token)) {
     await clearSession();
     notifyAuthExpired();

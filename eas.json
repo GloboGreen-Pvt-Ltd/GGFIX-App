@@ -42,7 +42,8 @@
         "EXPO_PUBLIC_SUBSCRIPTION_BASE": "https://api.ggfix.in/subscription",
         "EXPO_PUBLIC_ORDER_BASE": "https://api.ggfix.in/order",
         "EXPO_PUBLIC_MASTER_DATA_BASE": "https://api.ggfix.in"
-      }
+      },
+      "channel": "preview"
     },
     "production": {
       "autoIncrement": true,

@@ -11,7 +11,7 @@ import ForgotPasswordOtpScreen from '../screens/ForgotPasswordOtpScreen';
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 import CustomerNavigator from './CustomerNavigator';
 import { setBootProgress, finishBoot } from '../boot/bootProgress';
-import AppLockGate from '../components/AppLockGate';
+import SecurityGate from '../security/SecurityGate';
 
 const Stack = createNativeStackNavigator();
 
@@ -77,8 +77,8 @@ export default function RootNavigator() {
   }
 
   return (
-    <AppLockGate onLogout={handleLogout}>
+    <SecurityGate onLogout={handleLogout}>
       <CustomerNavigator session={session} onLogout={handleLogout} />
-    </AppLockGate>
+    </SecurityGate>
   );
 }

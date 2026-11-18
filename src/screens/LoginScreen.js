@@ -18,6 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Defs, Ellipse, LinearGradient as SvgGradient, Path, Stop } from 'react-native-svg';
 import { ArrowRight, CalendarClock, Phone, ShieldCheck, ShoppingCart } from 'lucide-react-native';
 import { customerLogin, requestOtp } from '../api/auth';
+import { formatMmSs, otpCooldownLeft } from '../api/otpCooldown';
 import { AUTH_BASE } from '../api/config';
 
 /**
@@ -70,6 +71,20 @@ export default function LoginScreen({ onLogin, navigation }) {
   const [note, setNote] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  // HTTP 429 cooldown (server Retry-After), live MM:SS; restored from storage
+  // so it survives navigation and app restarts.
+  const [otpWait, setOtpWait] = useState(0);
+  useEffect(() => {
+    if (otpWait <= 0) return undefined;
+    const t = setTimeout(() => setOtpWait((w) => Math.max(0, w - 1)), 1000);
+    return () => clearTimeout(t);
+  }, [otpWait]);
+  useEffect(() => {
+    let alive = true;
+    if (String(mobile).replace(/\D/g, '').length >= 10) otpCooldownLeft(mobile).then((l) => { if (alive) setOtpWait(l); });
+    return () => { alive = false; };
+  }, [mobile]);
+  const shownError = otpWait > 0 ? `Too many OTP requests. Try again in ${formatMmSs(otpWait)}.` : error;
   const otpRef = useRef(null);
   // Guards the auto-submit that fires when the 6th digit lands, so a slow
   // request can't be double-sent by another keystroke (or by paste + tap).
@@ -105,6 +120,7 @@ export default function LoginScreen({ onLogin, navigation }) {
   };
 
   const sendOtp = async ({ resend = false } = {}) => {
+    if (otpWait > 0) return;
     setError(null);
     setNote(null);
     if (mobile.length !== MOBILE_DIGITS) {
@@ -116,6 +132,7 @@ export default function LoginScreen({ onLogin, navigation }) {
       try {
         await requestOtp(mobile);
       } catch (e) {
+        if (e?.retryAfterSeconds) { setOtpWait(e.retryAfterSeconds); setSeconds(e.retryAfterSeconds); }
         // A 400 is the issuer saying the number isn't a customer. Reword it:
         // the server's copy talks about "email or mobile", but this form only
         // takes a mobile, and the useful next step is signing up.
@@ -222,7 +239,7 @@ export default function LoginScreen({ onLogin, navigation }) {
               mobile={mobile}
               setMobile={setMobile}
               loading={loading}
-              error={error}
+              error={shownError}
               onSubmit={sendOtp}
               onCreateAccount={() => navigation?.navigate('CreateAccount')}
             />
@@ -238,7 +255,7 @@ export default function LoginScreen({ onLogin, navigation }) {
               onResend={() => sendOtp({ resend: true })}
               seconds={seconds}
               loading={loading}
-              error={error}
+              error={shownError}
               note={note}
             />
           )}
