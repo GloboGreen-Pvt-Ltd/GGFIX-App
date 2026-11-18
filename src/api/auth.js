@@ -1,4 +1,5 @@
 import { authApi } from './client';
+import { guardOtp } from './otpCooldown';
 import { saveSession, clearSession, getSession } from '../auth/session';
 
 export async function login(email, { password, otp, shopSlug } = {}) {
@@ -26,7 +27,7 @@ export async function register(shopName, shopSlug, email, password, name) {
  * This endpoint is the mirror image: it 409s when the number IS already taken,
  * which is how the Create Account screen detects a duplicate.
  */
-export async function requestSignupOtp(mobile) {
+async function _requestSignupOtp(mobile) {
   return await authApi.post('/auth/customer/signup/otp/send', { body: { mobile } });
 }
 
@@ -83,7 +84,7 @@ export async function customerLogin({ mobile, email, password, otp }) {
  * 123456. The code is stored on the customer row and verified by customer-login
  * and the reset endpoint. Returns { channel, sent, target, ttlMinutes?, devOtp?, defaultOtp?, email }.
  */
-export async function requestOtp(identifier) {
+async function _requestOtp(identifier) {
   const isEmail = String(identifier || '').includes('@');
   const body = isEmail ? { email: identifier } : { mobile: identifier };
   return await authApi.post('/auth/customer/otp/send', { body });
@@ -128,7 +129,7 @@ export async function shopLogin({ mobile, password, otp }) {
 }
 
 /** Request the dev OTP for a shop mobile (returns it in `devOtp` until a real SMS gateway is wired up). */
-export async function requestShopLoginOtp(mobile) {
+async function _requestShopLoginOtp(mobile) {
   return await authApi.post('/auth/shop-login/request-otp', { body: { mobile } });
 }
 
@@ -197,6 +198,10 @@ export async function fetchMe() {
 }
 
 export async function logout() {
+  try {
+    if ((await getSession())?.deviceSessionId) await authApi.post('/auth/security/session/logout', { skipAuthExpiry: true });
+  } catch (_) {}
+  try { await require('../security/deviceTokens').setDeviceRefreshToken(null); } catch (_) {}
   await clearSession();
 }
 
@@ -208,3 +213,8 @@ export async function logout() {
 export async function updateOwnerShop(ownerId, shopId, patch) {
   return await authApi.patch(`/auth/shop-owners/${ownerId}/locations/${shopId}`, { body: patch });
 }
+
+// OTP sends go through the cooldown / in-flight guard (see otpCooldown.js).
+export const requestSignupOtp = (mobile) => guardOtp(mobile, () => _requestSignupOtp(mobile));
+export const requestOtp = (identifier) => guardOtp(identifier, () => _requestOtp(identifier));
+export const requestShopLoginOtp = (mobile) => guardOtp(mobile, () => _requestShopLoginOtp(mobile));
