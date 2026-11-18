@@ -10,7 +10,8 @@ import {
   ORDER_BASE,
   USER_BASE,
 } from './config';
-import { getToken, clearSession, notifyAuthExpired, isTokenExpired } from '../auth/session';
+import { getToken, getSession, clearSession, notifyAuthExpired, isTokenExpired } from '../auth/session';
+import { refreshDeviceSession, jwtExpiresSoon } from '../security/deviceTokens';
 import { Platform } from 'react-native';
 import { File, UploadType } from 'expo-file-system';
 
@@ -46,7 +47,12 @@ async function request(baseUrlOrNull, method, path, { query, body, headers, skip
     });
   }
 
-  const token = await getToken();
+  let token = await getToken();
+  // Device-bound session (migration 116): renew the 15-min token instead of logging out.
+  if (token && !skipAuthExpiry && jwtExpiresSoon(token) && (await getSession())?.deviceSessionId) {
+    const r = await refreshDeviceSession();
+    if (r.token) token = r.token;
+  }
   if (token && !skipAuthExpiry && isTokenExpired(token)) {
     await clearSession();
     notifyAuthExpired();

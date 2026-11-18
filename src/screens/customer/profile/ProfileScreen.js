@@ -15,6 +15,8 @@ import { clearSession as clearAuth, selectSession } from '../../../store/authSli
 import { clearSession } from '../../../auth/session';
 import { isAppLockEnabled, setAppLockEnabled, isDeviceSecure, authenticate } from '../../../auth/appLock';
 import { rf, rs } from '../../../utils/responsive';
+import SecuritySettings from '../../../security/SecuritySettings';
+import { useSecurity } from '../../../security/SecurityGate';
 
 // Same palette and tile tones as the Partner app's My Account screen.
 const G = '#035C6C';        // primary teal (header, key actions)
@@ -117,6 +119,12 @@ function Row({ item, onPress, last }) {
 // App Lock toggle row — matches the menu-row shape. Requires the device
 // fingerprint / pattern / PIN to open the app. Fails OPEN when the device has
 // no lock (we tell the user to set one first).
+// Device-bound sessions show MPIN / biometric settings; legacy servers keep App Lock.
+function SecurityBlock() {
+  const { secure } = useSecurity();
+  return secure ? <SecuritySettings /> : <View style={LIST_STYLE}><AppLockRow /></View>;
+}
+
 function AppLockRow() {
   const [on, setOn] = useState(false);
   const [ready, setReady] = useState(false);
@@ -302,9 +310,7 @@ export default function ProfileScreen({ navigation, onLogout: parentLogout }) {
           </View>
 
           <SectionLabel subtitle="Keep your account safe and secure">Security</SectionLabel>
-          <View style={LIST_STYLE}>
-            <AppLockRow />
-          </View>
+          <SecurityBlock />
 
           <SectionLabel subtitle="Help, legal and other information">Support</SectionLabel>
           <View style={LIST_STYLE}>

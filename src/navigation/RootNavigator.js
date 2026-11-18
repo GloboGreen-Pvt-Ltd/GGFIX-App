@@ -11,7 +11,7 @@ import ForgotPasswordOtpScreen from '../screens/ForgotPasswordOtpScreen';
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 import CustomerNavigator from './CustomerNavigator';
 import { setBootProgress, finishBoot } from '../boot/bootProgress';
-import AppLockGate from '../components/AppLockGate';
+import SecurityGate from '../security/SecurityGate';
 import LegalDocumentScreen from '../legal/LegalDocumentScreen';
 import LegalConsentGate from '../legal/LegalConsentGate';
 
@@ -81,10 +81,10 @@ export default function RootNavigator() {
   }
 
   return (
-    <AppLockGate onLogout={handleLogout}>
+    <SecurityGate onLogout={handleLogout}>
       <LegalConsentGate accountId={session.userId} onLogout={handleLogout}>
         <CustomerNavigator session={session} onLogout={handleLogout} />
       </LegalConsentGate>
-    </AppLockGate>
+    </SecurityGate>
   );
 }
